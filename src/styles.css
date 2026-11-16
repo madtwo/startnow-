@@ -4000,3 +4000,337 @@ button {
   line-height: 1;
   cursor: pointer;
 }
+
+/* ---------- 首页双标签：下一步 / 论坛 ---------- */
+
+.home-tabs {
+  display: flex;
+  gap: 4px;
+  width: max-content;
+  margin: 0 0 18px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--sand-soft);
+}
+
+.home-tabs button {
+  padding: 7px 22px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--tertiary);
+  font-family: var(--serif);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.home-tabs button.on {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 2px 8px rgba(20, 20, 19, 0.05);
+}
+
+/* ---------- 下一步标签页 ---------- */
+
+.step-board {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.step-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.step-head p {
+  margin: 5px 0 0;
+  color: var(--tertiary);
+  font-size: 12.5px;
+}
+
+.step-hero {
+  position: relative;
+  padding: 22px 24px 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: calc(var(--radius-card) + 2px);
+  background: linear-gradient(160deg, #fdf5ed, #faf5e8 65%);
+  box-shadow:
+    0 10px 30px rgba(80, 60, 40, 0.06),
+    inset 0 0 0 1px rgba(255, 253, 245, 0.6);
+  animation: rise calc(var(--ease) * 1.4) ease both;
+}
+
+.step-hero::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: 18px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  opacity: 0.65;
+}
+
+.step-kicker {
+  margin: 0;
+  color: var(--accent-ink);
+  font-size: 10.5px;
+  letter-spacing: 0.2em;
+}
+
+.step-line {
+  margin: 12px 0 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: calc(22px * var(--site-type, 1));
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.step-hero h3 {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.step-from {
+  margin: 10px 0 0;
+  color: var(--tertiary);
+  font-size: 11.5px;
+}
+
+.step-empty-text {
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.step-hero.is-waiting {
+  background: linear-gradient(160deg, #f7f3e9, #faf5e8 70%);
+}
+
+.step-hero.is-empty h3 {
+  margin-top: 0;
+}
+
+.step-hero.is-done {
+  background: linear-gradient(160deg, #f1f4ea, #faf5e8 70%);
+}
+
+.step-hero.is-done::before {
+  background: var(--moss);
+}
+
+.step-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tertiary);
+  font-size: 11.5px;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  cursor: pointer;
+}
+
+.step-link:hover {
+  color: var(--accent-ink);
+}
+
+.step-shelf {
+  margin-top: 6px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.step-shelf-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.step-shelf-head h3 {
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.step-shelf-head span {
+  color: var(--tertiary);
+  font-size: 11px;
+}
+
+.step-add {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+
+.step-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.step-add input:focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 16%, transparent);
+}
+
+.step-todo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  border-bottom: 1px dashed var(--border-soft);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.step-todo:last-child {
+  border-bottom: 0;
+}
+
+.step-todo.is-done span:not(.todo-check) {
+  color: var(--tertiary);
+  text-decoration: line-through;
+}
+
+.step-todo .link {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.step-done {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.step-done-title {
+  margin: 0 0 4px;
+  color: var(--tertiary);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+}
+
+.step-browse {
+  display: block;
+  width: 100%;
+  padding: 14px 18px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: var(--radius-card);
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.step-browse:hover {
+  background: var(--accent-wash);
+}
+
+.step-others {
+  margin-top: 4px;
+}
+
+.step-others-title {
+  margin: 0 0 4px;
+  color: var(--tertiary);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+}
+
+.step-others-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-others-row span:not(.step-others-dot) {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.step-others-row em {
+  margin-left: auto;
+  color: var(--tertiary);
+  font-size: 10.5px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.step-others-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warm-silver);
+}
+
+.advice-hint {
+  color: var(--tertiary);
+  font-size: 10.5px;
+}
+
+@media (max-width: 640px) {
+  .home-tabs button {
+    padding: 6px 18px;
+  }
+
+  .step-hero {
+    padding: 18px 18px 16px;
+  }
+
+  .step-line {
+    font-size: calc(19px * var(--site-type, 1));
+  }
+
+  .step-shelf {
+    padding: 16px;
+  }
+}

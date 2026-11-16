@@ -1,25 +1,51 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type View = 'home' | 'post' | 'mine' | 'profile';
 
 interface Step {
   view: View;
+  tab?: 'step' | 'forum';
   selector?: string;
   title: string;
   body: string;
+  openGuide?: boolean;
 }
 
 const STEPS: Step[] = [
   {
     view: 'home',
+    tab: 'step',
     title: 'StartNow 不保证长期',
-    body: '它只负责此刻你能做的那一件小事：做了就算数，做一半也算数，不做也没关系。你会遇到几位 AI 同伴，他们是谁、过得怎么样，要慢慢聊才知道。',
+    body: '它只负责此刻你能做的那一件小事：做了算数，做一半也算，不做也没关系。先从这里开始——下一步该做什么。',
   },
   {
     view: 'home',
-    selector: '.tab:nth-child(2)',
-    title: '先从「发一张」开始',
-    body: '卡住了就放一张卡。点这里。',
+    tab: 'step',
+    selector: '[data-tour="step"]',
+    title: '没有下一步，也没关系',
+    body: '是不是也没有灵感？我们先去论坛看看别人卡在哪。',
+  },
+  {
+    view: 'home',
+    tab: 'forum',
+    selector: '.guide-card',
+    title: '这里是论坛',
+    body: '谁卡住了就放一张卡。先读一下置顶的说明，知道这里怎么玩。',
+  },
+  {
+    view: 'home',
+    tab: 'forum',
+    openGuide: true,
+    selector: '.page-text',
+    title: '卡不用讲清前因后果',
+    body: '只写此刻卡在哪，一两句就够。会有人陆续来——可能慢，也可能今天没人来，那不是你的问题。',
+  },
+  {
+    view: 'home',
+    tab: 'step',
+    selector: '[data-tour="step"]',
+    title: '会有人给一个很小的下一步',
+    body: '不用是彻底的解决，只是一件现在能做的小事。做不到就再小一级；贴到便签，做完勾掉。',
   },
   {
     view: 'post',
@@ -41,42 +67,36 @@ const STEPS: Step[] = [
   },
   {
     view: 'home',
-    selector: '.tab:nth-child(1)',
-    title: '回来这里看卡',
-    body: '列表按时间排，今天在上面，更早在下面。',
-  },
-  {
-    view: 'home',
-    selector: '.mode-switch',
-    title: '卡片或列表，随时切换',
-    body: '卡片一次看一张；列表像普通论坛。内容一样，顺手哪个用哪个。',
-  },
-  {
-    view: 'home',
-    selector: '.drawer-tab',
-    title: '右边是便签',
-    body: '别人给的办法、你自己加的小事都在这儿。勾掉之后，可以发一篇炫耀帖。',
-  },
-  {
-    view: 'home',
+    tab: 'forum',
     selector: '.deck-card, .thread-card',
     title: '点开一张卡',
-    body: '点进去才有完整的正文、按人分开的对话。点谁的评论，就算回复谁。',
+    body: '正文、按人分开的对话、下一步都在里面。点谁的评论，下面的回复栏就会变成「给 XX 回复」。',
+  },
+  {
+    view: 'home',
+    tab: 'forum',
+    selector: '.drawer-tab',
+    title: '便签在右边',
+    body: '别人给的下一步、你自己加的小事都在这儿。勾掉之后，可以发一篇炫耀帖。',
   },
 ];
 
 interface Props {
-  onNavigate: (view: View) => void;
+  onNavigate: (view: View, tab?: 'step' | 'forum') => void;
+  onOpenGuide: () => void;
   onClose: () => void;
 }
 
-export default function Tour({ onNavigate, onClose }: Props) {
+export default function Tour({ onNavigate, onOpenGuide, onClose }: Props) {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const step = STEPS[i];
+  const actions = useRef({ onNavigate, onOpenGuide });
+  actions.current = { onNavigate, onOpenGuide };
 
   useEffect(() => {
-    onNavigate(step.view);
+    if (step.openGuide) actions.current.onOpenGuide();
+    else actions.current.onNavigate(step.view, step.tab);
     setRect(null);
     let el: Element | null = null;
     const measure = () => {
@@ -101,7 +121,7 @@ export default function Tour({ onNavigate, onClose }: Props) {
       window.clearTimeout(t2);
       window.removeEventListener('resize', measure);
     };
-  }, [i, step.selector, step.view, onNavigate]);
+  }, [i, step]);
 
   const pad = 6;
   const TIP_H = 200;

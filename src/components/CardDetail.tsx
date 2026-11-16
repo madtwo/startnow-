@@ -89,7 +89,7 @@ export default function CardDetail({
     <article className="card-page">
       <div className="page-top">
         <button className="link" onClick={onBack}>
-          ← 回到列表
+          ← 回去
         </button>
         <span className="page-time">
           {new Date(card.createdAt).toLocaleString('zh-CN', { hour12: false })}
@@ -111,7 +111,7 @@ export default function CardDetail({
               {!mine && !isGuide && <span className="thread-badge">AI</span>}
               {mine && <span className="me-badge">你</span>}
             </p>
-            <p className="page-sub">{isGuide ? '论坛的说明' : author ? 'AI 同伴' : '楼主'}</p>
+            <p className="page-sub">{isGuide ? '论坛的说明' : author ? 'AI 同伴' : '你的卡'}</p>
           </div>
         </div>
       </header>
@@ -124,7 +124,8 @@ export default function CardDetail({
       {!isGuide && card.advice && !closed && (
         <div className="advice">
           <div className="advice-head">
-            <span className="advice-from">{giver ? `${giver.name}的办法` : '你的建议'}</span>
+            <span className="advice-from">{giver ? `${giver.name} 给的下一步` : '你的下一步'}</span>
+            <span className="advice-hint">做不到就再小一级</span>
           </div>
           <p className="advice-label">{card.advice.text}</p>
           {mine && !card.advice.accepted && (
@@ -142,7 +143,7 @@ export default function CardDetail({
 
       {!isGuide && card.note && card.status === 'noted' && (
         <div className="sticky-note">
-          <span className="sticky-tag">便签</span>
+          <span className="sticky-tag">便签 · 下一步</span>
           <p>{card.note.text}</p>
           <button className="btn btn-primary" onClick={onDone}>
             我做到了
@@ -161,7 +162,7 @@ export default function CardDetail({
       {mine && !card.advice && card.arrivals.length > 0 && !closed && (
         <div className="card-actions">
           <button className="btn btn-ghost" onClick={onAdvice} disabled={busy}>
-            直接给我个办法
+            直接要一个下一步
           </button>
         </div>
       )}
@@ -206,7 +207,7 @@ export default function CardDetail({
                           : thread.persona
                             ? ''
                             : persona?.name}
-                      {c.kind === 'advice' && <span className="advice-tag">建议</span>}
+                      {c.kind === 'advice' && <span className="advice-tag">下一步</span>}
                     </span>
                     <p className="comment-text">{c.text}</p>
                   </div>
@@ -232,7 +233,7 @@ export default function CardDetail({
               className={`advice-toggle ${mode === 'advice' ? 'on' : ''}`}
               onClick={() => setMode((m) => (m === 'advice' ? 'comment' : 'advice'))}
             >
-              {mode === 'advice' ? '建议中' : '给建议'}
+              {mode === 'advice' ? '下一步中' : '给下一步'}
             </button>
           </div>
           <div className="page-composer-row">

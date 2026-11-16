@@ -1,5 +1,6 @@
 import type { Card, Persona } from '../types';
 import { BASELINE } from './baseline';
+import { mindPrompt } from './mind';
 import { buildPersonaPrompt } from './personas';
 
 export const COMMENT_RULES = `这是同伴之间的互相帮忙，不是客服，不是心理咨询，也不是导师。评论 40–100 字，1–3 句，允许短到四个字。
@@ -11,6 +12,7 @@ export const COMMENT_RULES = `这是同伴之间的互相帮忙，不是客服�
 - 不用「你应该」「你可以」「试试」「建议」「不如先」「至少……」「会好的」「时间会治愈」「加油」「你已经很棒了」。
 - 不要用人生建议的口气。可以给一个具体的小办法，也可以不给。
 - 不要一次把自己的背景全说了，一次只透露一点，像真的在认识。
+- 如果已经有别的同伴发过言，可以接他/她一句，也可以不接；不要只对着卡主说，像论坛里几个人一起聊。
 - 不用表情符号，不列清单，不加标题。
 - 不主动提自己是 AI。`;
 
@@ -38,7 +40,14 @@ export const DONE_RULES = `你照着一个主意做了。说一句结果，30 �
 可以是普通、甚至没用的结果，不要都写成「真有效」。不用「棒」「厉害」这类词。`;
 
 export const systemFor = (persona: Persona, memory: string, rules: string, extra = '') =>
-  [BASELINE, extra ? `【作者追加的底线】\n${extra}` : '', buildPersonaPrompt(persona), memory, rules]
+  [
+    BASELINE,
+    extra ? `【作者追加的底线】\n${extra}` : '',
+    buildPersonaPrompt(persona),
+    persona.mind ? mindPrompt(persona.mind) : '',
+    memory,
+    rules,
+  ]
     .filter(Boolean)
     .join('\n\n');
 

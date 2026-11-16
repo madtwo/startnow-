@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Gender, Identity, MemoryEntry, Persona, World, WorldSettings } from '../types';
 import { AVATAR_KEYS, AVATAR_LABELS, AvatarMark } from '../lib/avatars';
 import { BASELINE } from '../lib/baseline';
+import { ensureMind, MOOD_LABEL } from '../lib/mind';
 import Avatar from './Avatar';
 
 const COLORS = ['#5f7f66', '#b06a45', '#97784a', '#80667a', '#4f6b8a', '#8a5a4a', '#6b7a4f', '#9a6b7a'];
@@ -61,6 +62,7 @@ export default function AdminPanel(props: Props) {
   const [selected, setSelected] = useState(personas[0]?.id ?? '');
   const [raw, setRaw] = useState('');
   const persona = personas.find((p) => p.id === selected) ?? personas[0];
+  const mind = persona ? ensureMind(persona) : null;
 
   const patch = (part: Partial<Persona>) => {
     if (!persona) return;
@@ -315,6 +317,33 @@ export default function AdminPanel(props: Props) {
                 ))}
               </div>
             </div>
+
+            {mind && (
+              <div className="adm-memory">
+                <p className="field-label">此刻心智 · 独立状态（只影响语气，不直接给玩家看）</p>
+                <div className="mem-row">
+                  <span className="mem-tag">{MOOD_LABEL[mind.mood]}</span>
+                  <span className="mem-text">
+                    <b>在想</b> {mind.thought}
+                  </span>
+                </div>
+                <div className="mem-row">
+                  <span className="mem-tag">惦记</span>
+                  <span className="mem-text">{mind.focus}</span>
+                </div>
+                {mind.movedBy && (
+                  <div className="mem-row">
+                    <span className="mem-tag">刚被</span>
+                    <span className="mem-text">
+                      <b>{mind.movedBy.by}</b> {mind.movedBy.what}
+                    </span>
+                  </div>
+                )}
+                <p className="adm-hint">
+                  发卡、回帖、被别的同伴接话，都会改这里；它也会进入下一次生成的提示词。
+                </p>
+              </div>
+            )}
 
             <label className="field">
               <span className="field-label">上下文压缩</span>

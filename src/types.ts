@@ -36,6 +36,17 @@ export interface WeekFact {
   text: string;
 }
 
+export type Mood = 'calm' | 'low' | 'tense' | 'warm' | 'restless';
+
+export interface PersonaMind {
+  mood: Mood;
+  thought: string;
+  focus: string;
+  lastAct: 'lurk' | 'post' | 'reply' | 'brag' | 'rest' | 'step';
+  lastActAt: number;
+  movedBy?: { by: string; what: string; at: number };
+}
+
 export interface Persona {
   id: string;
   name: string;
@@ -62,6 +73,7 @@ export interface Persona {
   memory: MemoryEntry[];
   lastDistillAt: number;
   weekLog: WeekFact[];
+  mind?: PersonaMind;
 }
 
 export interface Identity {

@@ -7,6 +7,7 @@ import CardDeck from './components/CardDeck';
 import GuideCard from './components/GuideCard';
 import NoteDrawer from './components/NoteDrawer';
 import PostForm from './components/PostForm';
+import StepBoard from './components/StepBoard';
 import Tour from './components/Tour';
 import CrisisCard from './components/CrisisCard';
 import SettingsDialog from './components/SettingsDialog';
@@ -28,6 +29,7 @@ import {
   tickCards,
 } from './lib/cards';
 import { buildGuideCard, buildSeedCards, seedMemories } from './lib/seed';
+import { ensureMinds } from './lib/mind';
 import { defaultPersonas } from './lib/personas';
 import {
   clearAll,
@@ -86,16 +88,19 @@ export default function App() {
       );
     };
     if (isFirstRun()) {
-      return { cards: buildSeedCards(), personas: seedMemories(defaultPersonas()) };
+      return {
+        cards: buildSeedCards(),
+        personas: ensureMinds(seedMemories(defaultPersonas())),
+      };
     }
     if (needsUpgrade()) {
       const personas = loadPersonas();
       const seeded = personas.every((p) => p.memory.length === 0)
         ? seedMemories(personas)
         : personas;
-      return { cards: withGuide(loadCards()), personas: seeded };
+      return { cards: withGuide(loadCards()), personas: ensureMinds(seeded) };
     }
-    return { cards: withGuide(loadCards()), personas: loadPersonas() };
+    return { cards: withGuide(loadCards()), personas: ensureMinds(loadPersonas()) };
   });
   const [config, setConfig] = useState<LlmConfig>(() => loadConfig());
   const [cards, setCards] = useState<Card[]>(boot.cards);
@@ -115,6 +120,9 @@ export default function App() {
   const [mode, setMode] = useState<'card' | 'list'>(
     () => (localStorage.getItem('startnow.mode') === 'list' ? 'list' : 'card'),
   );
+  const [homeTab, setHomeTab] = useState<'step' | 'forum'>(
+    () => (localStorage.getItem('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
+  );
   const [deckIndex, setDeckIndex] = useState(0);
   const [timeMenu, setTimeMenu] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
@@ -127,7 +135,7 @@ export default function App() {
   const [crisis, setCrisis] = useState('');
   const [todos, setTodos] = useState<Todo[]>(() => loadTodos());
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [bragTodo, setBragTodo] = useState<Todo | null>(null);
+  const [brag, setBrag] = useState<{ id?: string; text: string } | null>(null);
   const [bragText, setBragText] = useState('');
   const [bragTitle, setBragTitle] = useState('');
   const brandClicks = useRef<number[]>([]);
@@ -140,6 +148,7 @@ export default function App() {
   useEffect(() => saveIdentity(identity), [identity]);
   useEffect(() => saveTodos(todos), [todos]);
   useEffect(() => localStorage.setItem('startnow.mode', mode), [mode]);
+  useEffect(() => localStorage.setItem('startnow.homeTab', homeTab), [homeTab]);
 
   const ready = isReady(config);
   const latest = useRef({ cards, personas, world, settings, config, working });
@@ -245,13 +254,20 @@ export default function App() {
 
   const openBrag = (todo: Todo) => {
     setDrawerOpen(false);
-    setBragTodo(todo);
+    setBrag({ id: todo.id, text: todo.text });
     setBragText(`做到了：${todo.text}`);
     setBragTitle('');
   };
 
+  const openCardBrag = (text: string) => {
+    setDrawerOpen(false);
+    setBrag({ text });
+    setBragText(`做到了：${text}`);
+    setBragTitle('');
+  };
+
   const submitBrag = () => {
-    if (!bragTodo || !bragText.trim()) return;
+    if (!brag || !bragText.trim()) return;
     const card = createPlayerCard(
       bragText.trim(),
       identity.name,
@@ -262,10 +278,12 @@ export default function App() {
       'brag',
     );
     setCards((prev) => [card, ...prev]);
-    setTodos((prev) =>
-      prev.map((t) => (t.id === bragTodo.id ? { ...t, doneAt: t.doneAt ?? Date.now() } : t)),
-    );
-    setBragTodo(null);
+    if (brag.id) {
+      setTodos((prev) =>
+        prev.map((t) => (t.id === brag.id ? { ...t, doneAt: t.doneAt ?? Date.now() } : t)),
+      );
+    }
+    setBrag(null);
     setDrawerOpen(false);
     setView('home');
     setToast('炫耀帖发出去了');
@@ -347,6 +365,7 @@ export default function App() {
         cardId: card.id,
       });
       setCards(out.cards);
+      setPersonas(out.personas);
       if (out.calls) {
         const day = dayKey(Date.now());
         setWorld((w) => ({
@@ -450,7 +469,7 @@ export default function App() {
     setCards(
       bundle.cards.some((c) => c.kind === 'guide') ? bundle.cards : [buildGuideCard(), ...bundle.cards],
     );
-    setPersonas(bundle.personas);
+    setPersonas(ensureMinds(bundle.personas));
     setWorld(bundle.world);
     setSettings(bundle.settings);
     setIdentity(bundle.identity);
@@ -460,7 +479,7 @@ export default function App() {
   const doClear = () => {
     clearAll();
     setCards([buildGuideCard()]);
-    setPersonas(defaultPersonas());
+    setPersonas(ensureMinds(defaultPersonas()));
     setWorld(emptyWorld());
     setSettings({ ...defaultSettings });
     setIdentity(loadIdentity());
@@ -470,7 +489,7 @@ export default function App() {
 
   const doReseed = () => {
     setCards(buildSeedCards());
-    setPersonas((prev) => seedMemories(prev));
+    setPersonas((prev) => ensureMinds(seedMemories(prev)));
     setWorld(emptyWorld());
   };
 
@@ -489,7 +508,6 @@ export default function App() {
     () => cards.filter((c) => c.authorId === 'me').sort((a, b) => b.createdAt - a.createdAt),
     [cards],
   );
-  const activeMine = myCards.find((c) => c.status !== 'done' && c.status !== 'handled');
   const helped = cards
     .filter((c) => c.advice?.accepted && c.advice.fromPersonaId === 'me')
     .sort((a, b) => b.createdAt - a.createdAt);
@@ -610,105 +628,140 @@ export default function App() {
 
       {view === 'home' && (
         <main className="feed">
-          <div className="masthead">
-            <p className="masthead-title">卡住了没关系，先动一下</p>
-            <span className="masthead-date">
-              {personas.length} 位同伴 · 今天 {todays.length} 张卡
-            </span>
-            <span className="masthead-sub">这里不保证长期，只负责此刻能做的那一件小事。</span>
-            <div className="masthead-tools">
-              <div className="mode-switch">
-                <button className={mode === 'card' ? 'on' : ''} onClick={() => setMode('card')}>
-                  卡片
-                </button>
-                <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')}>
-                  列表
-                </button>
-              </div>
-              <div className="time-wrap">
-                <button
-                  className="time-chip"
-                  onClick={() => void advance(1)}
-                  title="点一下：过 1 小时"
-                >
-                  {justAdvanced || '下 1 小时后'}
-                </button>
-                <button className="time-caret" onClick={() => setTimeMenu((v) => !v)}>
-                  ▾
-                </button>
-                {timeMenu && (
-                  <div className="time-menu">
-                    {[1, 3, 12].map((h) => (
-                      <button key={h} onClick={() => advance(h)}>
-                        下 {h} 小时
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {activeMine && (
-            <button className="mine-strip" onClick={() => setView('mine')}>
-              <Avatar avatarKey={identity.avatarKey} className="me" size="xs" />
-              <span className="mine-strip-text">我的卡 · {activeMine.text.slice(0, 18)}…</span>
-              <span className="mine-strip-meta">
-                {activeMine.arrivals.length ? `${activeMine.arrivals.length} 人来过` : '等一会儿'}
-              </span>
+          <div className="home-tabs" role="tablist" aria-label="首页">
+            <button
+              role="tab"
+              aria-selected={homeTab === 'step'}
+              className={homeTab === 'step' ? 'on' : ''}
+              onClick={() => setHomeTab('step')}
+            >
+              下一步
             </button>
-          )}
+            <button
+              role="tab"
+              aria-selected={homeTab === 'forum'}
+              className={homeTab === 'forum' ? 'on' : ''}
+              onClick={() => setHomeTab('forum')}
+            >
+              论坛
+            </button>
+          </div>
 
           {crisis && <CrisisCard onClose={() => setCrisis('')} />}
 
-          {guide && <GuideCard card={guide} onOpen={() => openCard(guide)} />}
-
-          {feed.length === 0 && (
-            <div className="empty">
-              <h2>还没有人卡住</h2>
-              <p>去「发一张」写一句，四位同伴会陆续过来。</p>
-            </div>
-          )}
-
-          {mode === 'card' && feed.length > 0 && (
-            <CardDeck
-              cards={feed}
+          {homeTab === 'step' && (
+            <StepBoard
+              cards={cards}
+              todos={todos}
               personas={personas}
-              index={deckIndex}
-              onIndex={setDeckIndex}
-              onOpen={openCard}
-              onLike={like}
+              busy={working}
+              onOpenCard={openCard}
+              onAccept={(card) => patch(card.id, (c) => acceptAdvice(c))}
+              onDone={(card) => patch(card.id, (c) => completeCard(c, Date.now(), settings.speed))}
+              onAdvice={(card) => void advice(card)}
+              onWrite={() => setView('post')}
+              onForum={() => setHomeTab('forum')}
+              onAddTodo={addTodo}
+              onToggleTodo={toggleTodo}
+              onBrag={openBrag}
+              onBragCard={openCardBrag}
+              onOpenMine={() => setView('mine')}
             />
           )}
 
-          {mode === 'list' && todays.length > 0 && (
-            <section className="board">
-              <h2 className="board-title">今天</h2>
-              {todays.map((card) => (
-                <CardRow
-                  key={card.id}
-                  card={card}
-                  personas={personas}
-                  onClick={() => openCard(card)}
-                  onLike={() => like(card)}
-                />
-              ))}
-            </section>
-          )}
+          {homeTab === 'forum' && (
+            <>
+              <div className="masthead">
+                <p className="masthead-title">卡住了没关系，先动一下</p>
+                <span className="masthead-date">
+                  {personas.length} 位同伴 · 今天 {todays.length} 张卡
+                </span>
+                <span className="masthead-sub">
+                  这里不保证长期，只负责此刻能做的那一件小事。
+                </span>
+                <div className="masthead-tools">
+                  <div className="mode-switch">
+                    <button className={mode === 'card' ? 'on' : ''} onClick={() => setMode('card')}>
+                      卡片
+                    </button>
+                    <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')}>
+                      列表
+                    </button>
+                  </div>
+                  <div className="time-wrap">
+                    <button
+                      className="time-chip"
+                      onClick={() => void advance(1)}
+                      title="点一下：过 1 小时"
+                    >
+                      {justAdvanced || '下 1 小时后'}
+                    </button>
+                    <button className="time-caret" onClick={() => setTimeMenu((v) => !v)}>
+                      ▾
+                    </button>
+                    {timeMenu && (
+                      <div className="time-menu">
+                        {[1, 3, 12].map((h) => (
+                          <button key={h} onClick={() => advance(h)}>
+                            下 {h} 小时
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-          {mode === 'list' && earlier.length > 0 && (
-            <section className="board">
-              <h2 className="board-title">更早</h2>
-              {earlier.map((card) => (
-                <CardRow
-                  key={card.id}
-                  card={card}
+              {guide && <GuideCard card={guide} onOpen={() => openCard(guide)} />}
+
+              {feed.length === 0 && (
+                <div className="empty">
+                  <h2>还没有人卡住</h2>
+                  <p>去「发一张」写一句，四位同伴会陆续过来。</p>
+                </div>
+              )}
+
+              {mode === 'card' && feed.length > 0 && (
+                <CardDeck
+                  cards={feed}
                   personas={personas}
-                  onClick={() => openCard(card)}
-                  onLike={() => like(card)}
+                  index={deckIndex}
+                  onIndex={setDeckIndex}
+                  onOpen={openCard}
+                  onLike={like}
                 />
-              ))}
-            </section>
+              )}
+
+              {mode === 'list' && todays.length > 0 && (
+                <section className="board">
+                  <h2 className="board-title">今天</h2>
+                  {todays.map((card) => (
+                    <CardRow
+                      key={card.id}
+                      card={card}
+                      personas={personas}
+                      onClick={() => openCard(card)}
+                      onLike={() => like(card)}
+                    />
+                  ))}
+                </section>
+              )}
+
+              {mode === 'list' && earlier.length > 0 && (
+                <section className="board">
+                  <h2 className="board-title">更早</h2>
+                  {earlier.map((card) => (
+                    <CardRow
+                      key={card.id}
+                      card={card}
+                      personas={personas}
+                      onClick={() => openCard(card)}
+                      onLike={() => like(card)}
+                    />
+                  ))}
+                </section>
+              )}
+            </>
           )}
         </main>
       )}
@@ -755,8 +808,14 @@ export default function App() {
       {view === 'mine' && (
         <main className="feed">
           <div className="view-head">
-            <button className="link" onClick={() => setView('home')}>
-              ← 回去看卡
+            <button
+              className="link"
+              onClick={() => {
+                setHomeTab('step');
+                setView('home');
+              }}
+            >
+              ← 回到下一步
             </button>
             <h2>我的卡</h2>
           </div>
@@ -778,7 +837,7 @@ export default function App() {
         <main className="feed">
           <div className="view-head">
             <button className="link" onClick={() => setView('home')}>
-              ← 回去看卡
+              ← 回去
             </button>
             <h2>我的</h2>
           </div>
@@ -818,7 +877,7 @@ export default function App() {
             {helped.map((c) => (
               <div className="helped-row" key={c.id}>
                 <b>{c.authorName}</b>
-                <span>你建议：{c.advice?.text}</span>
+                <span>你给的下一步：{c.advice?.text}</span>
               </div>
             ))}
           </section>
@@ -868,6 +927,7 @@ export default function App() {
           onAdd={addTodo}
           onToggle={toggleTodo}
           onBrag={openBrag}
+          onBragNote={openCardBrag}
           onOpenCard={(card) => {
             setDrawerOpen(false);
             openCard(card);
@@ -876,20 +936,20 @@ export default function App() {
         />
       )}
 
-      {bragTodo && (
+      {brag && (
         <div
           className="scrim"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setBragTodo(null);
+            if (e.target === e.currentTarget) setBrag(null);
           }}
         >
           <div className="sheet brag-sheet" role="dialog" aria-modal="true" aria-label="发个炫耀">
             <div className="sheet-head">
               <div>
                 <h2>发个炫耀</h2>
-                <p>做到了「{bragTodo.text}」。要不要让店里的人看见？</p>
+                <p>做到了「{brag.text}」。要不要让论坛的人看见？</p>
               </div>
-              <button className="icon-btn" onClick={() => setBragTodo(null)} aria-label="关闭">
+              <button className="icon-btn" onClick={() => setBrag(null)} aria-label="关闭">
                 ×
               </button>
             </div>
@@ -902,7 +962,7 @@ export default function App() {
               <textarea rows={3} value={bragText} onChange={(e) => setBragText(e.target.value)} />
             </label>
             <div className="sheet-actions">
-              <button className="btn btn-ghost" onClick={() => setBragTodo(null)}>
+              <button className="btn btn-ghost" onClick={() => setBrag(null)}>
                 算了
               </button>
               <button className="btn btn-primary" onClick={submitBrag} disabled={!bragText.trim()}>
@@ -916,16 +976,32 @@ export default function App() {
       <nav className="tabbar">
         {(
           [
-            ['home', '看卡'],
+            ['step', '下一步'],
+            ['forum', '论坛'],
             ['post', '发一张'],
-            ['mine', '我的卡'],
             ['profile', '我的'],
-          ] as [View, string][]
+          ] as [string, string][]
         ).map(([id, label]) => (
           <button
             key={id}
-            className={`tab ${view === id ? 'on' : ''}`}
-            onClick={() => setView(id)}
+            className={`tab ${
+              (id === 'step' && view === 'home' && homeTab === 'step') ||
+              (id === 'forum' && view === 'home' && homeTab === 'forum') ||
+              (id !== 'step' && id !== 'forum' && view === id)
+                ? 'on'
+                : ''
+            }`}
+            onClick={() => {
+              if (id === 'step') {
+                setHomeTab('step');
+                setView('home');
+              } else if (id === 'forum') {
+                setHomeTab('forum');
+                setView('home');
+              } else {
+                setView(id as View);
+              }
+            }}
           >
             {label}
           </button>
@@ -934,7 +1010,13 @@ export default function App() {
 
       {onboardOpen && (
         <Tour
-          onNavigate={(next) => setView(next)}
+          onNavigate={(next, tab) => {
+            if (tab) setHomeTab(tab);
+            setView(next);
+          }}
+          onOpenGuide={() => {
+            if (guide) openCard(guide);
+          }}
           onClose={() => {
             localStorage.setItem('startnow.onboarded', '1');
             setOnboardOpen(false);

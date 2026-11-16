@@ -1,10 +1,25 @@
-import type { Card, LlmConfig, Persona, PendingReply, WorldSettings } from '../types';
+import type {
+  Card,
+  LlmConfig,
+  Persona,
+  PersonaMind,
+  PendingReply,
+  TroubleKind,
+  WorldSettings,
+} from '../types';
 import { isMock } from '../config/providers';
 import { auditTone } from './baseline';
+import {
+  ensureMind,
+  mindAfterPeer,
+  mindAfterPost,
+  mindAfterReply,
+  mindAfterStep,
+} from './mind';
 import { findCrisis, isHeavyShare } from './safety';
 import { addMemory, inferWeight, renderMemory } from './memory';
 import { streamChat } from './llm';
-import { actionLabel, pickActions, smallerAction } from './actions';
+import { actionLabel, inferTrouble, pickActions, smallerAction } from './actions';
 import { mockCardText } from './personas';
 import {
   ADVICE_DECIDE_RULES,
@@ -26,6 +41,36 @@ const scale = (settings: WorldSettings) => Math.max(1, settings.speed);
 
 const allowedWeight = (intimacy: number): 1 | 2 | 3 =>
   intimacy < 30 ? 1 : intimacy < 60 ? 2 : 3;
+
+const setMind = (personas: Persona[], id: string, mind: PersonaMind): Persona[] =>
+  personas.map((p) => (p.id === id ? { ...p, mind } : p));
+
+const rememberAbout = (
+  personas: Persona[],
+  id: string,
+  about: string,
+  what: string,
+  postId: string,
+  now: number,
+): Persona[] =>
+  personas.map((p) =>
+    p.id === id
+      ? {
+          ...p,
+          memory: addMemory(
+            p.memory,
+            {
+              at: now,
+              about,
+              what: what.replace(/\s+/g, ' ').slice(0, 34),
+              weight: inferWeight(what),
+              postId,
+            },
+            now,
+          ),
+        }
+      : p,
+  );
 
 export function notePlayerShare(personas: Persona[], text: string): Persona[] {
   if (!isHeavyShare(text)) return personas;
@@ -220,47 +265,156 @@ interface Ctx {
   logs: string[];
 }
 
-function mockComment(persona: Persona, _card: Card, phase: 'arrival' | 'reply'): string {
-  const pool: Record<string, { arrival: string[]; reply: string[] }> = {
+type MockTopic = 'study' | 'future' | 'people' | 'self';
+
+const pick = <T,>(rows: T[]): T => rows[Math.floor(Math.random() * rows.length)];
+
+const topicGroup = (trouble: TroubleKind): MockTopic =>
+  trouble === 'study' || trouble === 'future' ? trouble : trouble === 'self' ? 'self' : 'people';
+
+const TOPIC_WORD: Record<MockTopic, string> = {
+  study: '考试',
+  future: '找工作',
+  people: '跟人有关',
+  self: '最近的状态',
+};
+
+const TENTATIVE: Record<string, (word: string) => string> = {
+  shenmo: (word) => `呃……${word}的事啊。我也刚来，不太会接，但我在听。`,
+  weini: (word) => `嗯……${word}，我可能也说不好。你想从哪讲起？`,
+  miaoze: (word) => `我也刚来，不太会回。${word}的话，先说是哪一件？`,
+  yanggao: (word) => `哎，${word}啊。我其实也不太懂，不过你说，我听着。`,
+};
+
+const MOCK_LINES: Record<MockTopic, Record<string, { arrival: string[]; reply: string[] }>> = {
+  study: {
     shenmo: {
-      arrival: ['怎么了？你说，我听着。呃……要不要先吃饭？', '在的。我刚好背完一页，你说。'],
-      reply: ['我也这样，等一条消息能等一晚上。', '我懂那种，明明没多大事，就是放不下。'],
+      arrival: ['小测啊。我考前也这样，书翻两页就开始刷手机。', '是哪一科？先说说，不急着看。'],
+      reply: [
+        '我复习不进去的时候，会先只翻到要考的那一章，别的不看。',
+        '嗯，越想着考不好越看不进去。先看一页也行。',
+      ],
     },
     weini: {
-      arrival: ['嗯……我在。你要讲的话，我可以听。不会往外说的。', '那个……你先说，我不急。'],
-      reply: ['我也有点怕说错话。', '嗯……听起来你不是不在意，是不知道怎么开口。'],
+      arrival: ['嗯……考试前一晚，我脑子也会一直转。你是哪一科？', '我可能也说不好，但我可以听。'],
+      reply: [
+        '我复习不进去的时候，会把书翻到最简单的那一页，先看一行。',
+        '嗯……听起来你不是不想学，是太怕考不好了。',
+      ],
+    },
+    miaoze: {
+      arrival: ['是哪一科？要是能缩到一章，可能就没那么吓人。', '先说说考试范围，别急着看全书。'],
+      reply: ['先把范围缩到一章，再挑一道例题。', '我复习不进去就做一道最简单的题，做完就停。'],
+    },
+    yanggao: {
+      arrival: ['高数真的烦！你是哪一科？', '哎，考试周啊。先别想整本，挑一页看。'],
+      reply: ['我考前也刷手机，刷完更慌。要不先把手机扣过去？', '别想三章了，先看一页，看完就休息。'],
+    },
+  },
+  future: {
+    shenmo: {
+      arrival: ['找工作和考试一样，越看别人越慌。你先说卡在哪一步。', '简历还是面试？先说一个。'],
+      reply: ['我会先把收藏的岗位关掉一半，只留一个。', '嗯，收藏不等于要投。先挑一个看看就行。'],
+    },
+    weini: {
+      arrival: ['校招群我都不太敢点开……你是卡在简历，还是投？', '嗯……找工作的事，我听着。'],
+      reply: ['我可能会先把简历打开，只改一行。', '嗯……别人发面经的时候，我也会觉得自己差很多。'],
+    },
+    miaoze: {
+      arrival: ['校招群我也不敢点开。你是卡在投，还是卡在写简历？', '先说是哪一步，简历、投递还是面试。'],
+      reply: ['我会先把收藏的岗位描述打开，只读第一段。', '简历先改第一行就行，不用整份重写。'],
+    },
+    yanggao: {
+      arrival: ['找工作听着就头大。你是卡在哪一步？', '校招群我也看不懂，先说说。'],
+      reply: ['要不去投一个最不重要的，练练手？', '简历先打开看一眼，别改，先看。'],
+    },
+  },
+  people: {
+    shenmo: {
+      arrival: ['跟人有关的事，最难说清。你先讲。', '是室友还是朋友？我听着。'],
+      reply: ['我一般会先把想说的话写在备忘录里，不急着发。', '嗯，那种话当场说不出来很正常。'],
+    },
+    weini: {
+      arrival: ['嗯……跟人有关的话，我可能也说不清。你先讲。', '我在。不会往外说的。'],
+      reply: ['我也有点怕说错话。你要不要先打出来，不发也行。', '嗯……听起来你不是不在意，是不知道怎么开口。'],
+    },
+    miaoze: {
+      arrival: ['跟人有关的事，信息太少容易想多。先说发生了什么。', '是室友、朋友还是家里？'],
+      reply: [
+        '这种事我会先把想说的话写下来，再决定发不发。',
+        '先把事实和你的感受分开写，可能会清楚一点。',
+      ],
+    },
+    yanggao: {
+      arrival: ['谁惹你了？先说说。', '哎，人际的事最烦。你说。'],
+      reply: ['走，先下楼买瓶喝的，边走边说。', '别闷着，先给那个人发个表情也行。'],
+    },
+  },
+  self: {
+    shenmo: {
+      arrival: ['怎么了？你说，我听着。', '在的。我刚好背完一页，你说。'],
+      reply: ['我也这样，坐着坐着就烦。先起来接杯水也行。', '嗯，不用急着讲清楚，坐一会儿。'],
+    },
+    weini: {
+      arrival: ['嗯……我在。你要讲的话，我可以听。', '那个……你先说，我不急。'],
+      reply: ['我有时候也会这样，什么也不想做。', '嗯……先不用逼自己好起来。'],
     },
     miaoze: {
       arrival: ['什么方面？要是能说清楚是哪一件，可能就好处理点。', '在的。先说说，不急着解决。'],
-      reply: ['我这两天也这样，越想越乱。', '要不先拆成两件事看看？'],
+      reply: ['我这两天也这样，越想越乱。先挑一件最小的。', '要不先拆成两件事看看？'],
     },
     yanggao: {
       arrival: ['哎你来了！谁惹你了？', '在在在，怎么了。'],
-      reply: ['走，先下楼买瓶喝的，边走边说。', '别闷着，你说，我听着呢。'],
+      reply: ['走，先下楼买瓶喝的。', '别闷着，你说，我听着呢。'],
     },
-  };
-  const rows = pool[persona.id] ?? { arrival: ['我看到了。'], reply: ['嗯，我在听。'] };
-  const list = rows[phase];
-  return list[Math.floor(Math.random() * list.length)];
-}
-
-const tentative: Record<string, string[]> = {
-  shenmo: ['呃……我也刚来，不太会回这个。你这是卡在什么事上？'],
-  weini: ['嗯……我可能也不太会说话。你先说说？'],
-  miaoze: ['我也说不准该怎么接……大概是哪件事卡住了？'],
-  yanggao: ['哎，我其实也不太懂这儿怎么玩。不过你说，我听着。'],
+  },
 };
 
-function reactionLine(persona: Persona, label: string): string {
-  const pool: Record<string, string[]> = {
-    shenmo: [`${label}？可以啊。我这边还一个字没背。`, `${label}，那今晚能睡踏实点了。`],
-    weini: [`${label}……挺好的。`, `嗯，${label}，我也想做点自己的事了。`],
-    miaoze: [`${label}？真做了？那你今晚赢了。`, `可以啊${label}，我都替你高兴。`],
-    yanggao: [`${label}？行啊你！走，庆祝一下。`, `我就说你能行。${label}，漂亮。`],
-  };
-  const list = pool[persona.id] ?? [`${label}，挺好啊。`];
-  return list[Math.floor(Math.random() * list.length)];
+const PEER_LINES: Record<string, string[]> = {
+  shenmo: ['我倒没这么觉得，不过也可能是我没看懂。', '嗯，你说的这句我也想过。', '先别急着下结论吧。'],
+  weini: ['我也说不好……但我理解你的意思。', '嗯，刚才那句我也有同感。', '你们两个说的我都听进去了。'],
+  miaoze: ['我倒觉得可以先拆开看。', '你这个说法有点绝对。', '那得看具体是哪一步卡住。'],
+  yanggao: ['哎你别吓她。', '哈哈，也没那么严重吧。', '我站她这边。'],
+};
+
+function mockComment(persona: Persona, card: Card, phase: 'arrival' | 'reply'): string {
+  if (phase === 'reply') {
+    const lastPeer = [...card.comments]
+      .reverse()
+      .find((c) => c.authorKind === 'persona' && c.authorId !== persona.id);
+    if (lastPeer && Math.random() < 0.35) {
+      return pick(PEER_LINES[persona.id] ?? ['嗯，我听着。']);
+    }
+  }
+  const rows = MOCK_LINES[topicGroup(inferTrouble(card.text))][persona.id];
+  const list = rows?.[phase];
+  if (list?.length) return pick(list);
+  return phase === 'arrival' ? '我看到了。你说。' : '嗯，我在听。';
 }
+
+function reactionLine(persona: Persona): string {
+  const pool: Record<string, string[]> = {
+    shenmo: ['真做了啊。挺好的，今晚别再逼自己了。', '行，那这一步算数。我这边也去背一页。'],
+    weini: ['嗯……你做了。那就先这样，别再要求更多了。', '挺好的。做到这一点已经很不容易。'],
+    miaoze: ['可以，动作虽小但算数。', '行，那今晚就先到这儿。'],
+    yanggao: ['行啊你！这一步就算数了。', '漂亮，做一点是一点。'],
+  };
+  return pick(pool[persona.id] ?? ['这一步算数。']);
+}
+
+const FOLLOW_LINES: Record<string, string[]> = {
+  shenmo: ['你说的那一步我做了。没想象中那么难。', '照你说的做了。至少今晚能睡踏实点。'],
+  weini: ['嗯……我按你说的做了。好像可以。', '你说的那一步我试了，没有想的那么可怕。'],
+  miaoze: ['你说的那一步我做了，确实比整块想容易。', '按你说的试了一下，能做。'],
+  yanggao: ['你说的那招我用了，还真行。', '按你说的做了，没那么难嘛。'],
+};
+
+const ACCEPT_LINES = ['行，我试试。', '好，这个我能做。', '嗯，那我先做这一步。'];
+const REFUSE_LINES = [
+  '这个我可能做不到。',
+  '今晚可能不行，我状态太差。',
+  '我连打开都不想，但可以试试。',
+];
 
 async function callOnce(ctx: Ctx, system: string, user: string, maxTokens: number) {
   ctx.calls++;
@@ -286,8 +440,8 @@ async function generateComment(
 ): Promise<string> {
   if (isMock(ctx.config)) {
     if (persona.intimacy < 22 && card.comments.length === 0) {
-      const pool = tentative[persona.id];
-      if (pool) return pool[Math.floor(Math.random() * pool.length)];
+      const line = TENTATIVE[persona.id];
+      if (line) return line(TOPIC_WORD[topicGroup(inferTrouble(card.text))]);
     }
     return mockComment(persona, card, phase);
   }
@@ -374,15 +528,17 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     return { cards: input.cards, personas: input.personas, calls: 0, logs: [] };
   }
   const ctx: Ctx = { config: input.config, settings: input.settings, calls: 0, logs: [] };
-  let personas = input.personas.map((p) => ({
+  let personas: Persona[] = input.personas.map((p) => ({
     ...p,
     memory: [...p.memory],
     weekLog: [...p.weekLog],
+    mind: ensureMind(p, now),
   }));
   const limit = isMock(input.config) ? 6 : Math.max(1, input.settings.maxCallsPerTick);
   const speed = scale(input.settings);
 
   const cards: Card[] = [];
+  let peerScheduled = false;
   for (const original of input.cards) {
     let card: Card = {
       ...original,
@@ -391,6 +547,30 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       plan: [...original.plan],
       pending: [...original.pending],
     };
+
+    if (
+      !peerScheduled &&
+      card.authorKind === 'persona' &&
+      card.status !== 'done' &&
+      card.status !== 'handled' &&
+      card.pending.length === 0 &&
+      card.comments.length < 3 &&
+      now - card.createdAt > 10 * MIN &&
+      Math.random() < 0.12
+    ) {
+      const candidates = personas.filter(
+        (p) => p.id !== card.authorId && !card.arrivals.includes(p.id),
+      );
+      const responder = pickArrivals(candidates, 1)[0];
+      if (responder) {
+        card.pending.push({
+          personaId: responder.id,
+          at: now + (rand(6, 20) * 1000) / speed,
+          phase: 'reply',
+        });
+        peerScheduled = true;
+      }
+    }
 
     if (
       card.helperAt &&
@@ -442,25 +622,16 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       card.arrivals.push(persona.id);
       if (card.status === 'stuck') card.status = 'arrived';
       else if (card.status === 'arrived') card.status = 'talking';
+      personas = setMind(personas, persona.id, mindAfterReply(persona, card.authorName, now));
       if (card.authorId === 'me') {
-        personas = personas.map((p) =>
-          p.id === persona.id
-            ? {
-                ...p,
-                memory: addMemory(
-                  p.memory,
-                  {
-                    at: item.at,
-                    about: '你',
-                    what: card.text.slice(0, 34),
-                    weight: inferWeight(card.text),
-                    postId: card.id,
-                  },
-                  now,
-                ),
-              }
-            : p,
-        );
+        personas = rememberAbout(personas, persona.id, '你', card.text, card.id, now);
+      } else if (card.authorKind === 'persona' && card.authorId !== persona.id) {
+        const author = personas.find((p) => p.id === card.authorId);
+        if (author) {
+          personas = setMind(personas, author.id, mindAfterPeer(author, persona.name, text, now));
+          personas = rememberAbout(personas, author.id, persona.name, text, card.id, now);
+        }
+        personas = rememberAbout(personas, persona.id, card.authorName, card.text, card.id, now);
       }
     }
 
@@ -469,22 +640,23 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       const persona = personas.find((p) => p.id === ready.personaId);
       card.pending = card.pending.filter((p) => p !== ready);
       if (persona) {
+        let said = '';
+        let accepted: boolean | undefined;
+        let adviceText = '';
         if (ready.phase === 'reaction') {
-          const label = card.note?.text ?? '那件小事';
+          said = reactionLine(persona);
           card.comments.push({
             id: uid(),
             authorId: persona.id,
             authorKind: 'persona',
-            text: reactionLine(persona, label),
+            text: said,
             at: ready.at,
           });
         } else if (ready.phase === 'decide') {
           const adviceComment = [...card.comments].reverse().find((c) => c.kind === 'advice');
-          const adviceText = adviceComment?.text ?? '';
+          adviceText = adviceComment?.text ?? '';
           let accept = Math.random() < 0.7;
-          let reply = accept
-            ? '行，我试试。'
-            : '这个我可能做不到，我连门都不想出。';
+          let reply = accept ? pick(ACCEPT_LINES) : pick(REFUSE_LINES);
           if (!isMock(ctx.config) && adviceText) {
             try {
               const raw = await callOnce(
@@ -511,11 +683,13 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
               ctx.logs.push(`${persona.name} 没接住这句建议`);
             }
           }
+          said = reply;
+          accepted = accept;
           card.comments.push({
             id: uid(),
             authorId: persona.id,
             authorKind: 'persona',
-            text: reply,
+            text: said,
             at: ready.at,
           });
           if (accept) {
@@ -534,14 +708,46 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
             }
           }
         } else {
-          const text = await generateComment(ctx, persona, card, 'reply');
+          said = await generateComment(ctx, persona, card, 'reply');
           card.comments.push({
             id: uid(),
             authorId: persona.id,
             authorKind: 'persona',
-            text,
+            text: said,
             at: ready.at,
           });
+        }
+
+        if (said) {
+          personas = setMind(personas, persona.id, mindAfterReply(persona, card.authorName, now));
+          if (card.authorId === 'me') {
+            personas = rememberAbout(personas, persona.id, '你', card.text, card.id, now);
+          } else if (card.authorKind === 'persona' && card.authorId !== persona.id) {
+            const author = personas.find((p) => p.id === card.authorId);
+            if (author) {
+              personas = setMind(personas, author.id, mindAfterPeer(author, persona.name, said, now));
+              personas = rememberAbout(personas, author.id, persona.name, said, card.id, now);
+            }
+            personas = rememberAbout(personas, persona.id, card.authorName, card.text, card.id, now);
+          }
+        }
+
+        if (accepted !== undefined) {
+          const self = personas.find((p) => p.id === persona.id);
+          if (self) {
+            personas = setMind(personas, persona.id, {
+              ...ensureMind(self, now),
+              mood: accepted ? 'warm' : 'tense',
+              thought: accepted
+                ? '有人给了我一个能做的办法，也许可以试试。'
+                : '那个办法我暂时做不到。',
+              lastActAt: now,
+              lastAct: 'reply',
+            });
+          }
+          if (accepted) {
+            personas = rememberAbout(personas, persona.id, '你', adviceText, card.id, now);
+          }
         }
       }
     }
@@ -553,7 +759,6 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       now - card.advice.at > 90_000 / speed
     ) {
       const label = card.advice.text;
-      const outcome = isMock(input.config) ? '做了，感觉一般。' : '做了，比想的容易一点。';
       card = {
         ...card,
         status: 'done',
@@ -564,7 +769,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
             id: uid(),
             authorId: card.authorId,
             authorKind: 'persona',
-            text: `${label}。我做了。${outcome}`,
+            text: pick(FOLLOW_LINES[card.authorId] ?? ['你说的那一步我做了。']),
             at: now,
           },
         ],
@@ -573,12 +778,21 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
         p.id === card.authorId
           ? {
               ...p,
+              mind: mindAfterStep(p, now),
               weekLog: [
                 ...p.weekLog,
-                { at: now, text: `照着别人说的「${label}」做了一次，${outcome}` },
+                { at: now, text: `照着别人给的小步「${label}」做了一次` },
               ].slice(-8),
             }
           : p,
+      );
+      personas = rememberAbout(
+        personas,
+        card.authorId,
+        '你',
+        `照着「${label}」做了一次`,
+        card.id,
+        now,
       );
       ctx.logs.push(`${card.authorName} 做到了「${label}」`);
     }
@@ -599,7 +813,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     const weight = Math.min(3, allowedWeight(persona.intimacy) + boost) as 1 | 2 | 3;
     const made = await generateAiCard(ctx, persona, recent, now, weight);
     if (made) {
-      cards.push({
+      const nextCard: Card = {
         id: uid(),
         authorId: persona.id,
         authorName: persona.name,
@@ -613,11 +827,24 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
         pending: [],
         comments: [],
         topic: made.text.slice(0, 12),
+      };
+      const responders = pickArrivals(
+        personas.filter((p) => p.id !== persona.id),
+        1 + (Math.random() < 0.6 ? 1 : 0),
+      );
+      responders.forEach((p, i) => {
+        nextCard.pending.push({
+          personaId: p.id,
+          at: now + ((i === 0 ? rand(10, 30) : rand(30, 70)) * 1000) / speed,
+          phase: 'reply',
+        });
       });
+      cards.push(nextCard);
       personas = personas.map((p) =>
         p.id === persona.id
           ? {
               ...p,
+              mind: mindAfterPost(p, made.text, now),
               shareBoost: undefined,
               weekLog: made.fact
                 ? [...p.weekLog, { at: now, text: made.fact }].slice(-8)
@@ -633,14 +860,15 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
 
 export async function askForAdvice(
   input: TickInput & { cardId: string },
-): Promise<{ cards: Card[]; calls: number; logs: string[] }> {
+): Promise<{ cards: Card[]; personas: Persona[]; calls: number; logs: string[] }> {
   const now = input.now ?? Date.now();
   const card = input.cards.find((c) => c.id === input.cardId);
-  if (!card) return { cards: input.cards, calls: 0, logs: [] };
+  if (!card) return { cards: input.cards, personas: input.personas, calls: 0, logs: [] };
   const persona = input.personas.find((p) => card.arrivals.includes(p.id)) ?? input.personas[0];
-  if (!persona) return { cards: input.cards, calls: 0, logs: [] };
+  if (!persona) return { cards: input.cards, personas: input.personas, calls: 0, logs: [] };
 
-  const options = pickActions(new Date(now).getHours(), 3);
+  const trouble = inferTrouble(card.text);
+  const options = pickActions(new Date(now).getHours(), 3, trouble);
   const action = options[0];
   let text = action.line;
   let calls = 0;
@@ -656,7 +884,7 @@ export async function askForAdvice(
             content: systemFor(
               persona,
               renderMemory(persona.memory, now),
-              '从下面三个办法里挑一个，用「我卡住的时候一般会……」的口气说出来，不超过 30 字。只输出一行：编号|你说的话',
+              '从下面三个小步里挑一个最适合这张卡的，用「我卡住的时候一般会……」的口气说出来，不超过 30 字。优先选跟卡片内容最相关的。只输出一行：编号|你说的话',
               input.settings.baselineExtra,
             ),
           },
@@ -688,10 +916,15 @@ export async function askForAdvice(
       { id: uid(), authorId: persona.id, authorKind: 'persona' as const, text, at: now },
     ],
   };
+  let personas = input.personas.map((p) =>
+    p.id === persona.id ? { ...p, mind: mindAfterReply(p, card.authorName, now) } : p,
+  );
+  personas = rememberAbout(personas, persona.id, '你', card.text, card.id, now);
   return {
     cards: input.cards.map((c) => (c.id === card.id ? next : c)),
+    personas,
     calls,
-    logs: [`${persona.name} 给了一个办法：${action.label}`],
+    logs: [`${persona.name} 给了一个下一步：${action.label}`],
   };
 }
 
@@ -700,10 +933,11 @@ export async function catchUp(
 ): Promise<{ cards: Card[]; personas: Persona[]; calls: number }> {
   const count = Math.min(4, Math.max(1, Math.round(input.hours / 3)));
   const ctx: Ctx = { config: input.config, settings: input.settings, calls: 0, logs: [] };
-  let personas = input.personas.map((p) => ({
+  let personas: Persona[] = input.personas.map((p) => ({
     ...p,
     memory: [...p.memory],
     weekLog: [...p.weekLog],
+    mind: ensureMind(p, now),
   }));
   const cards = [...input.cards];
   const now = Date.now();
@@ -743,13 +977,17 @@ export async function catchUp(
       card.pending.push({ personaId: p.id, at: at + (2 + idx * 3) * 60_000, phase: 'reply' });
     });
     cards.push(card);
-    if (made.fact) {
-      personas = personas.map((p) =>
-        p.id === persona.id
-          ? { ...p, weekLog: [...p.weekLog, { at, text: made.fact }].slice(-8) }
-          : p,
-      );
-    }
+    personas = personas.map((p) =>
+      p.id === persona.id
+        ? {
+            ...p,
+            mind: mindAfterPost(p, made.text, at),
+            weekLog: made.fact
+              ? [...p.weekLog, { at, text: made.fact }].slice(-8)
+              : p.weekLog,
+          }
+        : p,
+    );
   }
   return { cards, personas, calls: ctx.calls };
 }

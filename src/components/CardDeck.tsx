@@ -76,7 +76,7 @@ export default function CardDeck({ cards, personas, index, onIndex, onOpen, onLi
         {card.title && <h2 className="deck-title">{card.title}</h2>}
         <p className="deck-text">{card.text}</p>
 
-        {card.advice && <p className="deck-advice">办法：{card.advice.text}</p>}
+        {card.advice && <p className="deck-advice">下一步：{card.advice.text}</p>}
 
         <footer className="deck-foot">
           <span className="deck-comments">

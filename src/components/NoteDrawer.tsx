@@ -8,6 +8,7 @@ interface Props {
   onAdd: (text: string) => void;
   onToggle: (id: string) => void;
   onBrag: (todo: Todo) => void;
+  onBragNote: (text: string) => void;
   onOpenCard: (card: Card) => void;
   onClose: () => void;
 }
@@ -19,6 +20,7 @@ export default function NoteDrawer({
   onAdd,
   onToggle,
   onBrag,
+  onBragNote,
   onOpenCard,
   onClose,
 }: Props) {
@@ -27,7 +29,30 @@ export default function NoteDrawer({
     .filter((c) => c.note && c.status === 'noted')
     .sort((a, b) => b.createdAt - a.createdAt);
   const open = todos.filter((t) => !t.doneAt);
-  const done = todos.filter((t) => t.doneAt);
+  const doneNotes = cards
+    .filter((c) => c.note && c.status === 'done' && c.kind !== 'guide' && c.kind !== 'brag')
+    .sort((a, b) => (b.doneAt ?? b.createdAt) - (a.doneAt ?? a.createdAt));
+  const completed = [
+    ...doneNotes.map((card) => {
+      const giver = personas.find((p) => p.id === card.note?.fromPersonaId);
+      return {
+        key: card.id,
+        text: card.note?.text ?? '',
+        meta: giver ? `${giver.name} 给的` : '来自一张卡',
+        at: card.doneAt ?? card.createdAt,
+        brag: () => onBragNote(card.note?.text ?? ''),
+      };
+    }),
+    ...todos
+      .filter((t) => t.doneAt)
+      .map((todo) => ({
+        key: todo.id,
+        text: todo.text,
+        meta: '自己加的',
+        at: todo.doneAt ?? todo.at,
+        brag: () => onBrag(todo),
+      })),
+  ].sort((a, b) => b.at - a.at);
 
   return (
     <div
@@ -40,7 +65,7 @@ export default function NoteDrawer({
         <header className="drawer-head">
           <div>
             <h2>便签</h2>
-            <p>不保证长期。只记你此刻能做的那一件小事。</p>
+            <p>别人给的下一步、你自己加的小事，做完的也在。</p>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="关闭">
             ×
@@ -74,7 +99,7 @@ export default function NoteDrawer({
 
         {notes.length > 0 && (
           <section className="drawer-section">
-            <h3>别人给的办法</h3>
+            <h3>别人给的下一步</h3>
             {notes.map((card) => {
               const giver = personas.find((p) => p.id === card.note?.fromPersonaId);
               return (
@@ -102,14 +127,14 @@ export default function NoteDrawer({
           ))}
         </section>
 
-        {done.length > 0 && (
+        {completed.length > 0 && (
           <section className="drawer-section">
-            <h3>做到了</h3>
-            {done.map((todo) => (
-              <div key={todo.id} className="drawer-todo is-done">
+            <h3>已完成</h3>
+            {completed.map((row) => (
+              <div key={row.key} className="drawer-todo is-done">
                 <span className="todo-check on" aria-hidden="true" />
-                <span>{todo.text}</span>
-                <button className="drawer-brag" onClick={() => onBrag(todo)}>
+                <span title={row.meta}>{row.text}</span>
+                <button className="drawer-brag" onClick={row.brag}>
                   发个炫耀
                 </button>
               </div>
