@@ -8,6 +8,7 @@ interface Props {
   busy: boolean;
   onOpenCard: (card: Card) => void;
   onAccept: (card: Card) => void;
+  onShrink: (card: Card) => void;
   onDone: (card: Card) => void;
   onAdvice: (card: Card) => void;
   onWrite: () => void;
@@ -26,6 +27,7 @@ export default function StepBoard({
   busy,
   onOpenCard,
   onAccept,
+  onShrink,
   onDone,
   onAdvice,
   onWrite,
@@ -78,7 +80,7 @@ export default function StepBoard({
           <p className="step-line">{noted?.note?.text ?? advised?.advice?.text}</p>
           <p className="step-from">
             {giver ? `${giver.name} 给的 · ` : ''}
-            {noted ? '做不到就再小一级' : '做不到就换更小的'}
+            做不到就再小一级
           </p>
           <div className="step-actions">
             {noted ? (
@@ -86,9 +88,14 @@ export default function StepBoard({
                 我做到了
               </button>
             ) : advised ? (
-              <button className="btn btn-primary" onClick={() => onAccept(advised)}>
-                贴到便签
-              </button>
+              <>
+                <button className="btn btn-ghost" onClick={() => onShrink(advised)}>
+                  做不到
+                </button>
+                <button className="btn btn-primary" onClick={() => onAccept(advised)}>
+                  贴到便签
+                </button>
+              </>
             ) : null}
             <button className="btn btn-ghost" onClick={() => onOpenCard(focus)}>
               {noted ? '打开这张卡' : '先看看上下文'}

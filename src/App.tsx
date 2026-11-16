@@ -236,7 +236,7 @@ export default function App() {
     setDraftTitle('');
     setImage('');
     setView('home');
-    setToast('正在寻找心友，可以去看看别人的卡');
+    setToast('卡放出去了，等一会儿有人来');
   };
 
   const like = (card: Card) =>
@@ -654,6 +654,7 @@ export default function App() {
               busy={working}
               onOpenCard={openCard}
               onAccept={(card) => patch(card.id, (c) => acceptAdvice(c))}
+              onShrink={(card) => patch(card.id, (c) => shrinkAdvice(c))}
               onDone={(card) => patch(card.id, (c) => completeCard(c, Date.now(), settings.speed))}
               onAdvice={(card) => void advice(card)}
               onWrite={() => setView('post')}

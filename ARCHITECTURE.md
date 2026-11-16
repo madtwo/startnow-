@@ -72,6 +72,7 @@ src/
     prompts.ts            系统提示词、评论/发卡/接受建议提示词
     baseline.ts           全局底线 + 语气审计
     safety.ts             危机关键词 + 重度分享判定
+    crisis.ts             热线号码常量（12356 / 120 / 110）
     memory.ts             记忆衰减、合并、渲染
     llm.ts                OpenAI 兼容流式调用、错误描述
     seed.ts               开局说明卡、四张自我介绍卡、初始记忆
