@@ -72,6 +72,16 @@ const SOCIAL_REPLIES: Record<string, Partial<Record<SocialIntent, string[]>>> = 
   },
 };
 
+export function mentionsLocalVenue(text: string): boolean {
+  return /食堂|夜宵|宿舍|操场|教学楼|校门口|楼下|饭搭子|同校|同城/.test(text);
+}
+
+export function latestPlayerIsShortContact(card: Card): boolean {
+  const latest = [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
+  if (!latest || latest.authorKind !== 'player') return false;
+  return ['greeting', 'noise', 'laugh'].includes(inferSocialIntent(latest.text));
+}
+
 export function mockSocialReply(persona: Persona, intent: SocialIntent): string | null {
   const rows = SOCIAL_REPLIES[persona.id]?.[intent];
   if (!rows?.length) return null;

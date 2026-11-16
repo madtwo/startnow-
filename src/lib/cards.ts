@@ -8,7 +8,7 @@ import type {
   WorldSettings,
 } from '../types';
 import { isMock } from '../config/providers';
-import { auditTone } from './baseline';
+import { auditSocial, auditTone } from './baseline';
 import {
   ensureMind,
   mindAfterPeer,
@@ -18,9 +18,13 @@ import {
 } from './mind';
 import { findCrisis, isHeavyShare } from './safety';
 import { addMemory, inferWeight, renderMemory } from './memory';
-import { streamChat } from './llm';
+import { describeError, streamChat } from './llm';
 import { actionLabel, inferTrouble, pickActions, smallerAction } from './actions';
-import { socialReplyForMock } from './dialogue';
+import {
+  latestPlayerIsShortContact,
+  mentionsLocalVenue,
+  socialReplyForMock,
+} from './dialogue';
 import { mockCardText } from './personas';
 import {
   ADVICE_DECIDE_RULES,
@@ -473,13 +477,22 @@ async function generateComment(
         ctx.settings.baselineExtra,
       ),
       commentPrompt(card, persona),
-      200,
+      400,
     );
     const line = cleanLine(text);
-    if (line && !findCrisis(line) && !auditTone(line)) return line;
+    const shortContact = latestPlayerIsShortContact(card);
+    if (
+      line &&
+      !findCrisis(line) &&
+      !auditTone(line) &&
+      !auditSocial(line) &&
+      !(shortContact && mentionsLocalVenue(line))
+    ) {
+      return line;
+    }
     ctx.logs.push(`${persona.name} 的那句被拦下了，换了一句`);
-  } catch {
-    ctx.logs.push(`${persona.name} 这次没说话`);
+  } catch (err) {
+    ctx.logs.push(`${persona.name} 这次没说话：${describeError(err)}`);
   }
   return mockComment(persona, card, phase);
 }
@@ -501,11 +514,11 @@ async function generateAiCard(
       ctx,
       systemFor(persona, renderMemory(persona.memory, now), CARD_RULES, ctx.settings.baselineExtra),
       cardPrompt(recent, new Date(now), weight, persona.intimacy),
-      220,
+      400,
     );
     const [body, fact] = text.split('|||');
     const card = cleanLine(body ?? text, 120);
-    if (!card || findCrisis(card) || auditTone(card)) {
+    if (!card || findCrisis(card) || auditTone(card) || auditSocial(card)) {
       ctx.logs.push(`${persona.name} 的卡被拦下了`);
       return null;
     }
@@ -678,7 +691,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
                   input.settings.baselineExtra,
                 ),
                 decidePrompt(card, adviceText),
-                140,
+                200,
               );
               const [head, ...rest] = raw.split('|');
               const said = cleanLine(rest.join('|'), 60);
@@ -894,7 +907,7 @@ export async function askForAdvice(
             content: systemFor(
               persona,
               renderMemory(persona.memory, now),
-              '从下面三个小步里挑一个最适合这张卡的，用「我卡住的时候一般会……」的口气说出来，不超过 30 字。优先选跟卡片内容最相关的。只输出一行：编号|你说的话',
+              '从下面三个小步里挑一个最适合这张卡的，用你自己此刻的口气改写，不要照抄候选句子，不超过 30 字。优先选跟卡片内容最相关的。只输出一行：编号|你说的话',
               input.settings.baselineExtra,
             ),
           },
@@ -907,11 +920,11 @@ export async function askForAdvice(
         ],
         signal: new AbortController().signal,
         onDelta: () => {},
-        maxTokens: 120,
+        maxTokens: 200,
         lowEffort: true,
       });
       const said = cleanLine(raw.split('|').slice(1).join('|'), 60);
-      if (said && !auditTone(said) && !findCrisis(said)) text = said;
+      if (said && !auditTone(said) && !auditSocial(said) && !findCrisis(said)) text = said;
     } catch {
       text = action.line;
     }

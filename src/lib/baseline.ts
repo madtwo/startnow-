@@ -30,3 +30,31 @@ export function auditTone(text: string): string | null {
   const hit = tonePatterns.find((p) => p.re.test(text));
   return hit ? hit.note : null;
 }
+
+const socialPatterns: { re: RegExp; note: string }[] = [
+  {
+    re: /(饭搭子|一起(?:吃|去|走|玩|下楼|过来|散|转|约)|要不要一起|要不一起|来找我|过来找我|出来见|见面|老地方|校门口|操场见)/,
+    note: '不要邀请线下见面或共同行动',
+  },
+  {
+    re: /(加(个)?微信|留个(微信|电话)|手机号|联系方式)/,
+    note: '不要索要联系方式',
+  },
+  {
+    re: /(我就在你(旁边|楼下)|我在楼下|我在门口|到你楼下)/,
+    note: '不要虚构现实共处',
+  },
+  {
+    re: /(^|[，。！？\s])走[，,]/,
+    note: '不要用线下带走的口气',
+  },
+  {
+    re: /(学校|食堂|宿舍|操场|教学楼|校门口|楼下)(新出的|的|里|旁边的).{0,8}你|(咱|我们)学校|同校|同城|一个学校/,
+    note: '不要默认同校/同城或共享线下场所',
+  },
+];
+
+export function auditSocial(text: string): string | null {
+  const hit = socialPatterns.find((p) => p.re.test(text));
+  return hit ? hit.note : null;
+}
