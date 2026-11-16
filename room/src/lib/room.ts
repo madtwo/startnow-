@@ -12,12 +12,19 @@ import type {
 import { isMock } from '../config/providers';
 import { auditTone, BASELINE } from './baseline';
 import { findCrisis } from './safety';
-import { ensureMind, mindAfterPeer, mindAfterReply, mindAfterStep, mindPrompt } from './mind';
-import { recordReplyMemory, renderMemory } from './memory';
+import { ensureMind, mindAfterPeer, mindAfterReply, mindAfterStep } from './mind';
+import { recordReplyMemory } from './memory';
 import { buildPersonaPrompt, pickCast } from './personas';
 import { streamChat } from './llm';
 import { inferTrouble, pickActions, smallerAction } from './actions';
-import { cleanLine, PUBLIC_RULES, ROOM_RULES, roomPrompt, type RoomLine } from './prompts';
+import {
+  cleanLine,
+  PUBLIC_RULES,
+  ROOM_RULES,
+  roomPrompt,
+  withUntrustedHistory,
+  type RoomLine,
+} from './prompts';
 
 const MIN = 60_000;
 const uid = () => crypto.randomUUID();
@@ -229,14 +236,12 @@ const recentLines = (room: Room, n = 8): RoomLine[] =>
     .slice(-n)
     .map((m) => ({ name: m.authorName, text: m.text }));
 
-const systemForRoom = (persona: Persona, now: number): string =>
+const systemForRoom = (persona: Persona, _now: number): string =>
   [
     BASELINE,
     PUBLIC_RULES,
     ROOM_RULES,
     buildPersonaPrompt(persona),
-    persona.mind ? mindPrompt(persona.mind) : '',
-    renderMemory(persona.memory, now),
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -265,7 +270,11 @@ const generateLine = async (
         { role: 'system', content: systemForRoom(persona, now) },
         {
           role: 'user',
-          content: roomPrompt(room.cast, recentLines(room), { mode, replyName, topic }),
+          content: withUntrustedHistory(
+            roomPrompt(room.cast, recentLines(room), { mode, replyName, topic }),
+            persona,
+            now,
+          ),
         },
       ],
       signal: new AbortController().signal,

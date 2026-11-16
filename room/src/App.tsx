@@ -143,7 +143,10 @@ export default function App() {
 
   /* ---- 玩家动作 ---- */
   const send = (text: string, mentions: string[], replyTo?: string) => {
-    if (findCrisis(text)) setCrisis(text);
+    if (findCrisis(text)) {
+      setCrisis(text);
+      return;
+    }
     const at = Date.now();
     setRoom((prev) =>
       postPlayerMessage(prev, text, identity, mentions, replyTo, at, latest.current.roomSettings.liveliness),
