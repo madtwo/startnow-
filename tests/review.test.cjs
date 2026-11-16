@@ -1122,3 +1122,15 @@ test('回复链保存 replyTo：玩家回复绑评论，AI 回复绑源评论', 
   assert.equal(reply.authorKind,'persona');
   assert.equal(reply.replyTo,'u1');
 });
+
+test('评论线程用角色名字而不是内部 ID', () => {
+  const card=jobCard({text:'论文写不出来', messages:[]});
+  card.comments=[
+    {id:'a',authorId:'weini',authorKind:'persona',text:'先别急着写完整。',at:now-2000},
+    {id:'b',authorId:'yanggao',authorKind:'persona',text:'先写三行也行。',at:now-1000},
+  ];
+  const prompt=commentPrompt(card, personas().find((p)=>p.id==='shenmo'), 'b');
+  assert.match(prompt,/魏霓：先别急着写完整/);
+  assert.match(prompt,/杨槔：先写三行也行/);
+  assert.doesNotMatch(prompt,/weini：|yanggao：/);
+});

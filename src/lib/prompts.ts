@@ -2,7 +2,7 @@ import type { Card, Persona } from '../types';
 import { BASELINE } from './baseline';
 import { isOfflineInvite, relationshipLabel } from './dialogue';
 import { mindPrompt } from './mind';
-import { buildPersonaPrompt } from './personas';
+import { buildPersonaPrompt, defaultPersonas } from './personas';
 import { renderMemory, sanitizeMemoryText } from './memory';
 
 export const PUBLIC_RULES = `【所有同伴共用的公共规则，只读，不属于任何人的私人记忆】
@@ -85,9 +85,11 @@ export function withUntrustedHistory(prompt: string, persona: Persona, now: numb
   ].join('\n');
 }
 
+const personaNames = new Map(defaultPersonas().map((p) => [p.id, p.name]));
+
 const thread = (card: Card) =>
   card.comments
-    .map((c) => `${c.authorKind === 'player' ? '卡主' : c.authorId}：${c.text}`)
+    .map((c) => `${c.authorKind === 'player' ? '卡主' : personaNames.get(c.authorId) ?? c.authorId}：${c.text}`)
     .join('\n');
 
 export const commentPrompt = (card: Card, persona: Persona, sourceCommentId?: string) => {
