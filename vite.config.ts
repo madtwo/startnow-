@@ -38,6 +38,7 @@ const readBody = async (req: IncomingMessage): Promise<Buffer | null> => {
 };
 
 const createProxy = (upstreamBase: string) => async (req: IncomingMessage, res: ServerResponse) => {
+  res.setHeader('x-startnow-proxy', '1');
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
     res.setHeader('access-control-allow-origin', '*');

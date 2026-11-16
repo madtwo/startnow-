@@ -50,7 +50,8 @@ npm run build     # tsc --noEmit && vite build，产物 dist/
 环境：Windows，Node 24；项目在 `D:\shenye-shudong`。
 
 默认演示模式，打开即用，不需要 API Key。  
-真实模型：OpenAI 兼容 `/chat/completions`，在「我的 → API 设置」切换，Key 只存本机浏览器。
+真实模型：OpenAI 兼容 `/chat/completions`，在「我的 → API 设置」切换，Key 只存本机浏览器。  
+OpenCode 两个网关依赖 `vite.config.ts` 里的同源代理，`dev` 和 `preview` 都已挂载；改代理配置后必须重启 dev server（Vite 热更新不会重载插件中间件）。静态部署需要在平台补 `/api/opencode*` 转发。
 
 ---
 

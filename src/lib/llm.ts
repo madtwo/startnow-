@@ -28,7 +28,12 @@ export class LlmError extends Error {
 const endpoint = (baseUrl: string) =>
   `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`;
 
-const parseServerError = (status: number, body: string, baseUrl = ''): LlmError => {
+const parseServerError = (
+  status: number,
+  body: string,
+  baseUrl = '',
+  proxyReached = false,
+): LlmError => {
   let detail = '';
   try {
     const json = JSON.parse(body);
@@ -42,7 +47,9 @@ const parseServerError = (status: number, body: string, baseUrl = ''): LlmError 
   if (status === 404 && baseUrl.startsWith('/')) {
     return new LlmError(
       'notfound',
-      `本站代理没有生效（404）。用 npm run dev / npm run preview 启动，或部署时补上 /api/opencode 与 /api/opencode-go 转发。${detail}`,
+      proxyReached
+        ? `代理已连通，但上游返回 404。检查模型名是否存在、Base URL 是否以 /v1 结尾。${detail}`
+        : `本站代理没有生效（404）。用 npm run dev / npm run preview 启动，或部署时补上 /api/opencode 与 /api/opencode-go 转发。${detail}`,
     );
   }
   if (status === 404) {
@@ -164,7 +171,12 @@ export async function streamChat(opts: {
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw parseServerError(res.status, body, config.baseUrl);
+    throw parseServerError(
+      res.status,
+      body,
+      config.baseUrl,
+      res.headers.get('x-startnow-proxy') === '1',
+    );
   }
 
   const contentType = res.headers.get('content-type') ?? '';
@@ -239,7 +251,12 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw parseServerError(res.status, body, config.baseUrl);
+    throw parseServerError(
+      res.status,
+      body,
+      config.baseUrl,
+      res.headers.get('x-startnow-proxy') === '1',
+    );
   }
 
   const data = await res.json().catch(() => null);
