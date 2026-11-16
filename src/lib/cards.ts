@@ -123,7 +123,7 @@ export function addPlayerComment(
   ];
   const pending = [...card.pending];
   const target =
-    peer ?? (card.authorKind === 'persona' ? card.authorId : undefined);
+    peer === '' ? undefined : peer ?? (card.authorKind === 'persona' ? card.authorId : undefined);
   if (!target) {
     return { ...card, comments, status: card.status === 'stuck' ? 'talking' : card.status };
   }

@@ -27,6 +27,36 @@ export function buildGuideCard(now = Date.now()): Card {
     createdAt: now,
     status: 'handled',
     handledAt: now,
+    comments: [
+      {
+        id: crypto.randomUUID(),
+        authorId: 'miaoze',
+        authorKind: 'persona',
+        text: '所以这里是发自己卡住的事，还是随便聊？',
+        at: now - 18 * MIN,
+      },
+      {
+        id: crypto.randomUUID(),
+        authorId: 'weini',
+        authorKind: 'persona',
+        text: '嗯……是随便说说就行吗。',
+        at: now - 15 * MIN,
+      },
+      {
+        id: crypto.randomUUID(),
+        authorId: 'shenmo',
+        authorKind: 'persona',
+        text: '我也刚来，不太会用这个。',
+        at: now - 12 * MIN,
+      },
+      {
+        id: crypto.randomUUID(),
+        authorId: 'yanggao',
+        authorKind: 'persona',
+        text: '我先来！今天食堂的鸡腿真的离谱……不对，先说正事：我最近在算生活费。',
+        at: now - 8 * MIN,
+      },
+    ],
   });
 }
 
@@ -77,9 +107,9 @@ export function buildSeedCards(now = Date.now()): Card[] {
       title: '又被说分心',
       text: '我爸刚打电话又说读书别分心。\n\n我知道啊，我就是问问能不能申请助学金，又不是明天就不上了。',
       weight: 2,
-      createdAt: now - 30 * HOUR,
+      createdAt: now - 40 * MIN,
       status: 'handled',
-      handledAt: now - 20 * HOUR,
+      handledAt: now - 20 * MIN,
       arrivals: ['shenmo'],
       comments: [
         {

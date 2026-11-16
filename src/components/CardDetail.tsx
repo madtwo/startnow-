@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Card, Comment, Identity, Persona } from '../types';
 import Avatar from './Avatar';
 
@@ -40,6 +40,7 @@ export default function CardDetail({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [modes, setModes] = useState<Record<string, 'comment' | 'advice'>>({});
   const [activeThread, setActiveThread] = useState('');
+  const [general, setGeneral] = useState('');
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const author = personas.find((p) => p.id === card.authorId);
   const mine = card.authorId === 'me';
@@ -156,20 +157,16 @@ export default function CardDetail({
         </div>
       )}
 
-      {isGuide ? (
-        <div className="page-close-row">
-          <button className="btn btn-ghost" onClick={onBack}>
-            知道了
-          </button>
-        </div>
-      ) : (
-      <>
       <h2 className="page-comments-title">{card.comments.length} 条回应</h2>
 
       <div className="page-threads">
         {threads.length === 0 && <p className="view-empty">还没有人说话。等一会儿，或者先回一句。</p>}
         {threads.map((thread) => (
-          <section key={thread.key} className="page-thread">
+          <section
+            key={thread.key}
+            className="page-thread"
+            style={thread.persona ? ({ '--pc': thread.persona.color } as CSSProperties) : undefined}
+          >
             {thread.persona && (
               <div className="page-thread-head">
                 <Avatar avatarKey={thread.persona.avatarKey} color={thread.persona.color} size="xs" />
@@ -244,15 +241,40 @@ export default function CardDetail({
         ))}
       </div>
 
-      {mine && !closed && (
-        <div className="page-close-row">
-          <button className="btn btn-ghost" onClick={onCloseCard}>
-            先这样吧
+      {!isGuide && !closed && (
+        <div className="page-general">
+          <input
+            value={general}
+            placeholder="不一定回复谁，自己说一句"
+            onChange={(e) => setGeneral(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && general.trim()) {
+                onComment(general.trim(), 'comment', '');
+                setGeneral('');
+              }
+            }}
+          />
+          <button
+            className="foot-send"
+            disabled={!general.trim() || busy}
+            onClick={() => {
+              if (!general.trim()) return;
+              onComment(general.trim(), 'comment', '');
+              setGeneral('');
+            }}
+          >
+            说一句
           </button>
         </div>
       )}
-      </>
-      )}
+
+      {(mine && !closed && !isGuide) || isGuide ? (
+        <div className="page-close-row">
+          <button className="btn btn-ghost" onClick={isGuide ? onBack : onCloseCard}>
+            {isGuide ? '知道了' : '先这样吧'}
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 }

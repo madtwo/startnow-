@@ -3708,3 +3708,63 @@ button {
   color: var(--accent-ink);
   font-size: 11px;
 }
+
+/* ---------- 楼层色框 / 自己说 / 速度 ---------- */
+
+.masthead-tools {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.masthead-tools .mode-switch {
+  margin-top: 0;
+}
+
+.speed-chip {
+  padding: 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent-ink);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.page-thread {
+  --pc: var(--warm-silver);
+  padding: 12px 14px;
+  margin: 10px 0;
+  border-bottom: 0;
+  border-left: 3px solid color-mix(in srgb, var(--pc) 55%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--pc) 5%, transparent);
+}
+
+.page-thread-head span {
+  color: color-mix(in srgb, var(--pc) 60%, var(--ink));
+}
+
+.page-general {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.page-general input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.page-general input:focus {
+  outline: none;
+  border-color: var(--focus);
+}

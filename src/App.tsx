@@ -73,7 +73,14 @@ export default function App() {
       const guide = buildGuideCard();
       if (!cards.some((c) => c.kind === 'guide')) return [guide, ...cards];
       return cards.map((c) =>
-        c.kind === 'guide' ? { ...c, title: guide.title, text: guide.text } : c,
+        c.kind === 'guide'
+          ? {
+              ...c,
+              title: guide.title,
+              text: guide.text,
+              comments: c.comments.length ? c.comments : guide.comments,
+            }
+          : c,
       );
     };
     if (isFirstRun()) {
@@ -485,12 +492,26 @@ export default function App() {
               {personas.length} 位同伴 · 今天 {todays.length} 张卡
             </span>
             <span className="masthead-sub">这里不保证长期，只负责此刻能做的那一件小事。</span>
-            <div className="mode-switch">
-              <button className={mode === 'card' ? 'on' : ''} onClick={() => setMode('card')}>
-                卡片
-              </button>
-              <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')}>
-                列表
+            <div className="masthead-tools">
+              <div className="mode-switch">
+                <button className={mode === 'card' ? 'on' : ''} onClick={() => setMode('card')}>
+                  卡片
+                </button>
+                <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')}>
+                  列表
+                </button>
+              </div>
+              <button
+                className="speed-chip"
+                onClick={() =>
+                  setSettings((s) => ({
+                    ...s,
+                    speed: s.speed >= 20 ? 6 : s.speed >= 6 ? 20 : 1,
+                  }))
+                }
+                title="调整节奏：1× / 6× / 20×"
+              >
+                速度 ×{settings.speed}
               </button>
             </div>
           </div>
