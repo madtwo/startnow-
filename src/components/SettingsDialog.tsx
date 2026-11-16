@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { LlmConfig, ProviderId } from '../types';
 import { getPreset, isMock, isReady, PRESETS } from '../config/providers';
 import { describeError, fetchOpenCodeModels, testConnection, type ModelOption } from '../lib/llm';
+import { useDialogFocus } from '../lib/useDialogFocus';
 
 interface Props {
   config: LlmConfig;
@@ -19,17 +20,10 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
   const [models, setModels] = useState<ModelOption[] | null>(null);
   const [modelsError, setModelsError] = useState('');
   const [customModel, setCustomModel] = useState(false);
+  const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
   const preset = getPreset(draft.providerId);
   const isOpenCode = draft.providerId === 'opencode' || draft.providerId === 'opencode-go';
   const isGo = draft.providerId === 'opencode-go';
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   useEffect(() => {
     if (!isOpenCode) return;
@@ -107,7 +101,14 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div
+        className="sheet"
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+      >
         <div className="sheet-head">
           <div>
             <h2 id="settings-title">接入你的 API</h2>
@@ -126,7 +127,11 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
 
         <label className="field">
           <span className="field-label">服务商</span>
-          <select value={draft.providerId} onChange={(e) => changeProvider(e.target.value as ProviderId)}>
+          <select
+            value={draft.providerId}
+            onChange={(e) => changeProvider(e.target.value as ProviderId)}
+            data-autofocus
+          >
             {PRESETS.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}

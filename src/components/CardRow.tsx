@@ -29,12 +29,19 @@ export default function CardRow({ card, personas, onClick, onLike }: Props) {
     <div
       className={`thread-card ${brag ? 'is-brag' : ''}`}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       role="button"
       tabIndex={0}
     >
       <div className="thread-top">
         {author ? (
-          <Avatar avatarKey={author.avatarKey} color={author.color} size="xs" />
+          <Avatar avatarKey={author.avatarKey} name={author.name} color={author.color} size="xs" />
         ) : (
           <Avatar avatarKey="petal" className="me" size="xs" />
         )}

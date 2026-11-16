@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Card, Persona, Todo } from '../types';
 import { isHelpSeekingAction } from '../lib/support';
+import Avatar from './Avatar';
 
 interface Props {
   cards: Card[];
@@ -60,6 +61,7 @@ export default function StepBoard({
   const others = waiting.filter((c) => c.id !== (focus?.id ?? active?.id));
   const myTodos = todos.filter((t) => !t.doneAt);
   const doneTodos = todos.filter((t) => t.doneAt).slice(0, 3);
+  const doneCount = todos.filter((t) => t.doneAt).length;
 
   const add = () => {
     const text = draft.trim();
@@ -70,14 +72,9 @@ export default function StepBoard({
 
   return (
     <div className="step-board">
-      <header className="step-head">
-        <h2>今天能做的一件小事</h2>
-        <p>不用想清楚，只做此刻这一件。</p>
-      </header>
-
       {focus ? (
-        <section className="step-hero" data-tour="step">
-          <p className="step-kicker">{noted ? '今天的一步' : '有人给了你一个下一步'}</p>
+        <section className="step-hero hero-card" data-tour="step">
+          <span className="hero-eyebrow">{noted ? '✦ 今天的一步' : '✦ 有人给了你一个下一步'}</span>
           <p className="step-line">{noted?.note?.text ?? advised?.advice?.text}</p>
           {focus?.advice?.origin && (
             <small>{focus.advice.origin === 'demo' ? '演示动作' : '预置动作'}</small>
@@ -112,8 +109,8 @@ export default function StepBoard({
           </div>
         </section>
       ) : active ? (
-        <section className="step-hero is-waiting" data-tour="step">
-          <p className="step-kicker">你的卡还在等</p>
+        <section className="step-hero hero-card is-waiting" data-tour="step">
+          <span className="hero-eyebrow">✦ 你的卡还在等</span>
           <p className="step-line">{active.title ?? active.text.slice(0, 40)}</p>
           <p className="step-from">
             {active.arrivals.length
@@ -132,8 +129,8 @@ export default function StepBoard({
           </div>
         </section>
       ) : lastDone ? (
-        <section className="step-hero is-done" data-tour="step">
-          <p className="step-kicker">做到了</p>
+        <section className="step-hero hero-card is-done" data-tour="step">
+          <span className="hero-eyebrow">✓ 做到了</span>
           <p className="step-line">{lastDone.note?.text}</p>
           <p className="step-from">不用写读后感。想让人看见，就发个炫耀。</p>
           <div className="step-actions">
@@ -149,10 +146,11 @@ export default function StepBoard({
           </div>
         </section>
       ) : (
-        <section className="step-hero is-empty" data-tour="step">
-          <h3>写一句你卡住的事</h3>
+        <section className="step-hero hero-card is-empty" data-tour="step">
+          <span className="hero-eyebrow">✦ 今天也先动一下</span>
+          <h3>今天，先做一件小事</h3>
           <p className="step-empty-text">
-            四个 AI 同学会先听你说，再陪你把它缩成一个现在能做的小动作。他们卡住时，你也可以去拉一把。
+            四个 AI 同学会先听你说，再陪你把它缩成一个现在能做的小动作，不用想清楚，只做此刻这一件。
           </p>
           <p className="step-ai-note">
             四位同伴都是虚构的 AI 同学，和你在不同学校；只在论坛上聊。你不需要对他们的情绪负责。
@@ -162,8 +160,19 @@ export default function StepBoard({
               写一张卡
             </button>
             <button className="btn btn-ghost" onClick={onForum}>
-              没有灵感？去论坛看看
+              没有灵感？去论坛看看 →
             </button>
+          </div>
+          <div className="companion-strip">
+            <div className="companion-avatars">
+              {personas.map((p) => (
+                <Avatar key={p.id} avatarKey={p.avatarKey} name={p.name} color={p.color} size="sm" />
+              ))}
+            </div>
+            <div className="companion-strip-text">
+              <b>{personas.map((p) => p.name).join('、')}</b>
+              <span>{personas.length} 位 AI 同伴都在 · 不是真人，但会认真听你说</span>
+            </div>
           </div>
         </section>
       )}
@@ -174,10 +183,17 @@ export default function StepBoard({
         </button>
       )}
 
-      <section className="step-shelf">
+      <section className="step-shelf card todo-card">
         <div className="step-shelf-head">
-          <h3>我自己加的</h3>
-          {myTodos.length > 0 && <span>{myTodos.length} 件</span>}
+          <div>
+            <h3>我自己的小事</h3>
+            <p>今天能做的，不用一次做完</p>
+          </div>
+          {todos.length > 0 && (
+            <span className="tag tag-coral">
+              {doneCount} / {todos.length} 已完成
+            </span>
+          )}
         </div>
         <div className="step-add">
           <input

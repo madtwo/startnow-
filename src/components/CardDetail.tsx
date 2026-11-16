@@ -147,7 +147,7 @@ export default function CardDetail({
         >
           <div className="forum-comment-head">
             {persona ? (
-              <Avatar avatarKey={persona.avatarKey} color={persona.color} size="xs" />
+              <Avatar avatarKey={persona.avatarKey} name={persona.name} color={persona.color} size="xs" />
             ) : isHelper ? (
               <Avatar avatarKey="lamp" color="#c96442" size="xs" />
             ) : (
@@ -179,18 +179,18 @@ export default function CardDetail({
   return (
     <article className={`card-page ${!isGuide && !closed ? 'has-composer' : ''}`}>
       <div className="page-top">
-        <button className="link" onClick={onBack}>
-          ← 回去
+        <button className="link breadcrumb" onClick={onBack}>
+          ← 返回
         </button>
         <span className="page-time">
           {new Date(card.createdAt).toLocaleString('zh-CN', { hour12: false })}
         </span>
       </div>
 
-      <header className="page-head">
+      <header className="detail-head">
         <div className="page-author-row">
           {author ? (
-            <Avatar avatarKey={author.avatarKey} color={author.color} size="sm" />
+            <Avatar avatarKey={author.avatarKey} name={author.name} color={author.color} size="sm" />
           ) : isGuide ? (
             <Avatar avatarKey="lamp" color="#c96442" size="sm" />
           ) : (
@@ -206,15 +206,15 @@ export default function CardDetail({
               )}
               {mine && <span className="me-badge">你</span>}
             </p>
-            <p className="page-sub">{isGuide ? '论坛的说明' : author ? 'AI 同伴' : '你的卡'}</p>
+            <p className="detail-role">{isGuide ? '论坛的说明' : author ? 'AI 同伴' : '你的卡'}</p>
           </div>
         </div>
       </header>
 
       {card.kind === 'brag' && <span className="brag-badge">做到了</span>}
-      {card.title && <h1 className="page-title">{card.title}</h1>}
+      {card.title && <h1 className="detail-title">{card.title}</h1>}
       <p className="page-text">{card.text}</p>
-      {card.image && <img className="card-image" src={card.image} alt="卡里配的图" />}
+      {card.image && <img className="card-image" src={card.image} alt="卡片配图" />}
 
       {!isGuide && card.advice && !closed && (
         <div className="advice">

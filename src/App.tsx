@@ -1,5 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import AdminPanel from './components/AdminPanel';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import Avatar from './components/Avatar';
 import CardDetail from './components/CardDetail';
 import CardRow from './components/CardRow';
@@ -11,7 +20,6 @@ import PostForm from './components/PostForm';
 import StepBoard from './components/StepBoard';
 import Tour from './components/Tour';
 import CrisisCard from './components/CrisisCard';
-import SettingsDialog from './components/SettingsDialog';
 import { defaultConfig, isMock, isReady } from './config/providers';
 import { HOTLINE } from './lib/crisis';
 import { containsCrisis, hasCrisisInArchive } from './lib/submissionGuard';
@@ -76,6 +84,18 @@ import type {
 
 const TICK_MS = 4000;
 const GUIDE_DISMISSED_KEY = 'startnow.guideDismissed';
+
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
+const SettingsDialog = lazy(() => import('./components/SettingsDialog'));
+
+const AVATAR_COLORS: Record<string, string> = {
+  moon: '#7BA3C9',
+  leaf: '#8FB78E',
+  petal: '#E8634A',
+  waves: '#A78BC4',
+  window: '#E8A87C',
+  pebble: '#8C847A',
+};
 
 type View = 'home' | 'post' | 'mine' | 'profile' | 'detail';
 
@@ -160,6 +180,8 @@ export default function App() {
   const [bragText, setBragText] = useState('');
   const [bragTitle, setBragTitle] = useState('');
   const brandClicks = useRef<number[]>([]);
+  const bellRef = useRef<HTMLDivElement>(null);
+  const [, refreshClock] = useState(0);
 
   useEffect(() => saveCards(cards), [cards]);
   useEffect(() => savePersonas(personas), [personas]);
@@ -169,6 +191,27 @@ export default function App() {
   useEffect(() => saveTodos(todos), [todos]);
   useEffect(() => localStorage.setItem('startnow.mode', mode), [mode]);
   useEffect(() => localStorage.setItem('startnow.homeTab', homeTab), [homeTab]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => refreshClock((n) => n + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!bellOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!bellRef.current?.contains(e.target as Node)) setBellOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBellOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [bellOpen]);
 
   const ready = isReady(config);
   const latest = useRef({ cards, personas, world, settings, config, working });
@@ -666,6 +709,9 @@ export default function App() {
     .filter((c) => c.advice?.accepted && c.advice.fromPersonaId === 'me')
     .sort((a, b) => b.createdAt - a.createdAt);
   const detailCard = cards.find((c) => c.id === detailId);
+  const doneToday =
+    todos.filter((t) => t.doneAt && t.doneAt >= todayStart).length +
+    myCards.filter((c) => c.doneAt && c.doneAt >= todayStart).length;
   const notices = useMemo(() => {
     const out: { card: Card; comment: Comment; persona?: Persona }[] = [];
     cards.forEach((c) => {
@@ -710,30 +756,34 @@ export default function App() {
   return (
     <div className="shell">
       <header className="top">
-        <div className="brand" onClick={bumpBrand} title="StartNow">
-          <span className="mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 19V6M12 6l-4.4 4.4M12 6l4.4 4.4"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M5.5 19.5h13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </span>
-          <div className="brand-text">
-            <h1>先动一下</h1>
-            <p>四个 AI 同学的互助小圈子</p>
-          </div>
-        </div>
-        <div className="top-actions">
-          <div className="bell-wrap">
+        <div className="top-inner">
+          <button type="button" className="brand" onClick={bumpBrand} title="StartNow">
+            <span className="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 3c.6 3.8-1.8 5-1.8 7.4a4.2 4.2 0 0 0 2.4 3.8A3 3 0 0 1 12 18c-1.8 0-3-1-3-3 0-1.9 1.2-3.1 3-5.6Z"
+                  fill="currentColor"
+                />
+                <path
+                  d="M6 16.5c.3 1.8 1.4 2.4 1.4 3.9 0 .8-.7 1.3-1.4 1.3s-1.4-.5-1.4-1.3c0-1.5 1.1-2.1 1.4-3.9Z"
+                  fill="currentColor"
+                  opacity="0.7"
+                />
+              </svg>
+            </span>
+            <span className="brand-text">
+              <span className="brand-name">先动一下</span>
+              <span className="brand-sub">四个 AI 同学的互助小圈子</span>
+            </span>
+          </button>
+          <div className="top-actions">
+          <div className="bell-wrap" ref={bellRef}>
             <button
               className="bell-btn"
               onClick={() => setBellOpen((v) => !v)}
               aria-label="回复通知"
+              aria-expanded={bellOpen}
+              aria-controls="bell-panel"
             >
               <svg viewBox="0 0 24 24" fill="none">
                 <path
@@ -749,7 +799,7 @@ export default function App() {
               )}
             </button>
             {bellOpen && (
-              <div className="bell-panel">
+              <div className="bell-panel" id="bell-panel">
                 <div className="bell-head">
                   <p className="bell-title">有人回了你</p>
                   {notices.length > 0 && (
@@ -777,29 +827,109 @@ export default function App() {
             <Avatar avatarKey={identity.avatarKey} className="me" size="sm" />
           </button>
         </div>
+        </div>
       </header>
 
-      {view === 'home' && (
-        <main className="feed">
-          <div className="home-tabs" role="tablist" aria-label="首页">
-            <button
-              role="tab"
-              aria-selected={homeTab === 'step'}
-              className={homeTab === 'step' ? 'on' : ''}
-              onClick={() => setHomeTab('step')}
-            >
-              下一步
-            </button>
-            <button
-              role="tab"
-              aria-selected={homeTab === 'forum'}
-              className={homeTab === 'forum' ? 'on' : ''}
-              onClick={() => setHomeTab('forum')}
-            >
-              论坛
-            </button>
-          </div>
+      <div className="page-wrap">
+        <div className="layout">
+          <aside className="sidebar">
+            <nav className="side-nav" aria-label="主导航">
+              <button
+                type="button"
+                className={`nav-item ${
+                  view === 'home' && homeTab === 'step' ? 'active' : ''
+                }`}
+                aria-current={view === 'home' && homeTab === 'step' ? 'page' : undefined}
+                onClick={() => {
+                  setHomeTab('step');
+                  setView('home');
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 16v-4M12 8h.01" />
+                </svg>
+                下一步
+              </button>
+              <button
+                type="button"
+                className={`nav-item ${
+                  (view === 'home' && homeTab === 'forum') || view === 'detail' ? 'active' : ''
+                }`}
+                aria-current={
+                  (view === 'home' && homeTab === 'forum') || view === 'detail' ? 'page' : undefined
+                }
+                onClick={() => {
+                  setHomeTab('forum');
+                  setView('home');
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <rect x="3" y="4" width="18" height="15" rx="3" />
+                  <path d="M8 9h8M8 13h5" />
+                </svg>
+                论坛
+              </button>
+              <button
+                type="button"
+                className={`nav-item ${view === 'post' ? 'active' : ''}`}
+                aria-current={view === 'post' ? 'page' : undefined}
+                onClick={() => setView('post')}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                发一张卡
+              </button>
+              <button
+                type="button"
+                className={`nav-item ${view === 'profile' || view === 'mine' ? 'active' : ''}`}
+                aria-current={view === 'profile' || view === 'mine' ? 'page' : undefined}
+                onClick={() => setView('profile')}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <circle cx="12" cy="8" r="4" />
+                  <path d="M5 20a7 7 0 0 1 14 0" />
+                </svg>
+                我的
+              </button>
+            </nav>
 
+            <div className="side-section">
+              <p className="side-label">设置</p>
+              <nav className="side-nav" aria-label="设置">
+                <button type="button" className="nav-item" onClick={() => openSettings()}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M4 7h9M18 7h2M4 17h3M12 17h8" />
+                    <circle cx="15.5" cy="7" r="2.2" />
+                    <circle cx="9.5" cy="17" r="2.2" />
+                  </svg>
+                  API 设置
+                </button>
+                <button type="button" className="nav-item" onClick={() => setAdminOpen(true)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.5 2 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2Z" />
+                  </svg>
+                  作者后台
+                </button>
+              </nav>
+            </div>
+
+            <div className="side-section">
+              <button type="button" className="user-chip" onClick={() => setView('profile')}>
+                <Avatar avatarKey={identity.avatarKey} className="me" size="sm" />
+                <span className="user-chip-text">
+                  <b>{identity.name}</b>
+                  <small>今日已完成 {doneToday} 件</small>
+                </span>
+              </button>
+            </div>
+          </aside>
+
+          <main className="main">
+      {view === 'home' && (
+        <div className="feed">
           {homeTab === 'step' && (
             <StepBoard
               cards={cards}
@@ -823,20 +953,28 @@ export default function App() {
 
           {homeTab === 'forum' && (
             <>
-              <div className="masthead">
-                <p className="masthead-title">卡住了没关系，先动一下</p>
-                <span className="masthead-date">
-                  {personas.length} 位同伴 · 今天 {todays.length} 张卡
-                </span>
-                <span className="masthead-sub">
-                  这里不保证长期，只负责此刻能做的那一件小事。
-                </span>
-                <div className="masthead-tools">
-                  <div className="mode-switch">
-                    <button className={mode === 'card' ? 'on' : ''} onClick={() => setMode('card')}>
+              <div className="page-head">
+                <div>
+                  <h1 className="page-title">大家在说什么</h1>
+                  <p className="page-sub">看看别人卡在哪，也许你也有同感</p>
+                </div>
+                <div className="page-head-tools">
+                  <span className="masthead-date">
+                    {personas.length} 位同伴 · 今天 {todays.length} 张卡
+                  </span>
+                  <div className="mode-switch" role="group" aria-label="显示方式">
+                    <button
+                      className={mode === 'card' ? 'on' : ''}
+                      aria-pressed={mode === 'card'}
+                      onClick={() => setMode('card')}
+                    >
                       卡片
                     </button>
-                    <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')}>
+                    <button
+                      className={mode === 'list' ? 'on' : ''}
+                      aria-pressed={mode === 'list'}
+                      onClick={() => setMode('list')}
+                    >
                       列表
                     </button>
                   </div>
@@ -896,11 +1034,11 @@ export default function App() {
               )}
             </>
           )}
-        </main>
+        </div>
       )}
 
       {view === 'post' && (
-        <main className="feed">
+        <div className="feed">
           <PostForm
             value={draft}
             title={draftTitle}
@@ -914,12 +1052,11 @@ export default function App() {
             onSubmit={send}
             onOpenSettings={() => openSettings()}
           />
-          <p className="view-empty">标题可以不写。放出去之后不用守着，有人来会提示你。</p>
-        </main>
+        </div>
       )}
 
       {view === 'detail' && detailCard && (
-        <main className="feed">
+        <div className="feed">
           <CardDetail
             card={detailCard}
             me={identity}
@@ -935,12 +1072,16 @@ export default function App() {
             onBack={() => setView('home')}
             onLike={() => like(detailCard)}
           />
-        </main>
+        </div>
       )}
 
       {view === 'mine' && (
-        <main className="feed">
-          <div className="view-head">
+        <div className="feed">
+          <div className="page-head">
+            <div>
+              <h1 className="page-title">我的卡</h1>
+              <p className="page-sub">你放出去的每一张，都在这里</p>
+            </div>
             <button
               className="link"
               onClick={() => {
@@ -950,7 +1091,6 @@ export default function App() {
             >
               ← 回到下一步
             </button>
-            <h2>我的卡</h2>
           </div>
           {myCards.length === 0 && <p className="view-empty">你还没放过卡。</p>}
           {myCards.map((card) => (
@@ -963,49 +1103,69 @@ export default function App() {
                 />
           ))}
           {myCards.length > 0 && <p className="view-empty">点开任意一张，可以继续聊或贴便签。</p>}
-        </main>
+        </div>
       )}
 
       {view === 'profile' && (
-        <main className="feed">
-          <div className="view-head">
-            <button className="link" onClick={() => setView('home')}>
-              ← 回去
-            </button>
-            <h2>我的</h2>
+        <div className="feed">
+          <div className="page-head">
+            <div>
+              <h1 className="page-title">我的</h1>
+              <p className="page-sub">管理你的身份和这件小事</p>
+            </div>
           </div>
 
-          <section className="profile-block">
-            <div className="profile-row">
-              <Avatar avatarKey={identity.avatarKey} className="me" size="lg" />
-              <div>
-                <input
-                  className="profile-name"
-                  value={identity.name}
-                  onChange={(e) => setIdentity({ ...identity, name: e.target.value })}
-                />
-                <p className="profile-hint">这个名字会出现在你的卡上</p>
+          <section className="profile-head">
+            <Avatar avatarKey={identity.avatarKey} className="me profile-avatar" size="lg" />
+            <div className="profile-info">
+              <input
+                className="profile-name"
+                value={identity.name}
+                aria-label="你的名字"
+                onChange={(e) => setIdentity({ ...identity, name: e.target.value })}
+              />
+              <p className="profile-hint">这个名字会出现在你的卡上</p>
+              <div className="avatar-picker">
+                {['moon', 'leaf', 'petal', 'waves', 'window', 'pebble'].map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`avatar-option ${identity.avatarKey === key ? 'on' : ''}`}
+                    aria-label={`切换头像 ${key}`}
+                    onClick={() => setIdentity({ ...identity, avatarKey: key })}
+                  >
+                    <Avatar avatarKey={key} color={AVATAR_COLORS[key]} size="sm" />
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="adm-marks">
-              {['moon', 'leaf', 'petal', 'wave', 'window', 'pebble'].map((key) => (
-                <button
-                  key={key}
-                  className={`adm-mark ${identity.avatarKey === key ? 'on' : ''}`}
-                  onClick={() => setIdentity({ ...identity, avatarKey: key })}
-                >
-                  <Avatar avatarKey={key} size="sm" />
-                </button>
-              ))}
+            <div className="profile-stats">
+              <div className="stat">
+                <b>{myCards.length}</b>
+                <span>发过卡</span>
+              </div>
+              <div className="stat">
+                <b>{helped.length}</b>
+                <span>帮过人</span>
+              </div>
+              <div className="stat">
+                <b>{doneToday}</b>
+                <span>今日完成</span>
+              </div>
             </div>
           </section>
 
-          <section className="profile-block">
-            <h3>我帮过的人</h3>
+          <section className="card section-card">
+            <div className="section-head">
+              <h3>我帮过的人</h3>
+            </div>
             {helped.length === 0 && (
-              <p className="view-empty">
-                还没有。你在别人卡下给过建议、对方试了，就会出现在这里。
-              </p>
+              <div className="empty">
+                <div className="empty-title">还没有帮过谁</div>
+                <div className="empty-desc">
+                  你在别人卡下给过建议、对方试了，就会出现在这里。
+                </div>
+              </div>
             )}
             {helped.map((c) => (
               <div className="helped-row" key={c.id}>
@@ -1014,7 +1174,9 @@ export default function App() {
               </div>
             ))}
             {helped.length > 0 && (
-              <p className="view-empty">你只是递过一句，接不接、做不做，是他们自己的事。</p>
+              <p className="profile-fineprint">
+                你只是递过一句，接不接、做不做，是他们自己的事。
+              </p>
             )}
           </section>
 
@@ -1025,23 +1187,69 @@ export default function App() {
             onForgetAll={forgetAllMemory}
           />
 
-          <section className="profile-block">
-            <h3>数据与应用</h3>
-            <div className="adm-actions">
-              <button className="btn btn-ghost" onClick={() => openSettings()}>
-                API 设置
+          <section className="card section-card">
+            <div className="section-head">
+              <h3>数据与应用</h3>
+            </div>
+            <div className="menu-grid">
+              <button type="button" className="menu-item" onClick={() => openSettings()}>
+                <span className="menu-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#E8634A" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M12 3v18M8 7l-4 5 4 5M16 7l4 5-4 5" />
+                  </svg>
+                </span>
+                <span className="menu-item-text">
+                  <b>API 设置</b>
+                  <span>接入你自己的模型</span>
+                </span>
               </button>
-              <button className="btn btn-ghost" onClick={() => setAdminOpen(true)}>
-                作者后台 · 推进时间
+              <button type="button" className="menu-item" onClick={() => setAdminOpen(true)}>
+                <span className="menu-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#A78BC4" strokeWidth="1.8" strokeLinecap="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.5 2 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2Z" />
+                  </svg>
+                </span>
+                <span className="menu-item-text">
+                  <b>作者后台 · 推进时间</b>
+                  <span>管理同伴与圈子</span>
+                </span>
               </button>
-              <button className="btn btn-ghost" onClick={() => setOnboardOpen(true)}>
-                怎么玩
+              <button type="button" className="menu-item" onClick={() => setOnboardOpen(true)}>
+                <span className="menu-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#8FB78E" strokeWidth="1.8" strokeLinecap="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 16v-4M12 8h.01" />
+                  </svg>
+                </span>
+                <span className="menu-item-text">
+                  <b>怎么玩</b>
+                  <span>了解产品玩法</span>
+                </span>
               </button>
-              <button className="btn btn-ghost" onClick={showRules}>
-                论坛规矩
+              <button type="button" className="menu-item" onClick={showRules}>
+                <span className="menu-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#8FB78E" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M6 4h9l3 3v13H6z" />
+                    <path d="M9 9h6M9 13h6M9 17h4" />
+                  </svg>
+                </span>
+                <span className="menu-item-text">
+                  <b>论坛规矩</b>
+                  <span>重新打开置顶说明</span>
+                </span>
               </button>
-              <button className="btn btn-ghost" onClick={doExport}>
-                导出
+              <button type="button" className="menu-item" onClick={doExport}>
+                <span className="menu-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#7BA3C9" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M12 15V3m0 12l-4-4m4 4l4-4" />
+                    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                  </svg>
+                </span>
+                <span className="menu-item-text">
+                  <b>导出</b>
+                  <span>导出你的数据</span>
+                </span>
               </button>
               {legacyKeys.length > 0 && (
                 <button className="btn btn-ghost danger" onClick={() => {
@@ -1054,23 +1262,36 @@ export default function App() {
                 </button>
               )}
               <button
-                className="btn btn-ghost danger"
+                type="button"
+                className="menu-item danger-item"
                 onClick={() => {
                   if (confirm('清空本机所有数据？建议先导出。')) doClear();
                 }}
               >
-                重置软件内容
+                <span className="menu-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#C0392B" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                  </svg>
+                </span>
+                <span className="menu-item-text">
+                  <b>重置软件内容</b>
+                  <span>清空所有本地数据</span>
+                </span>
               </button>
             </div>
-            <p className="view-empty">
+            <p className="profile-fineprint">
               卡片、便签和角色记忆保存在此浏览器；模型请求会发送相关内容给所选模型服务。导出文件包含卡片、便签和记忆，不包含 API Key；重置会清除当前模型配置。
             </p>
-            <p className="view-empty">
-              这里的 {personas.length} 位同伴都是虚构的 AI 角色，和你在不同学校；不是心理咨询师，内容不构成医疗建议。
+            <p className="profile-fineprint">
+              这里的 {personas.length} 位同伴都是虚构的 AI
+              角色，和你在不同学校；不是心理咨询师，内容不构成医疗建议。
             </p>
           </section>
-        </main>
+        </div>
       )}
+          </main>
+        </div>
+      </div>
 
       {toast && <div className="toast">{toast}</div>}
 
@@ -1143,7 +1364,7 @@ export default function App() {
           [
             ['step', '下一步'],
             ['forum', '论坛'],
-            ['post', '发一张'],
+            ['post', '发一张卡'],
             ['profile', '我的'],
           ] as [string, string][]
         ).map(([id, label]) => (
@@ -1151,8 +1372,10 @@ export default function App() {
             key={id}
             className={`tab ${
               (id === 'step' && view === 'home' && homeTab === 'step') ||
-              (id === 'forum' && view === 'home' && homeTab === 'forum') ||
-              (id !== 'step' && id !== 'forum' && view === id)
+              (id === 'forum' &&
+                ((view === 'home' && homeTab === 'forum') || view === 'detail')) ||
+              (id === 'profile' && (view === 'profile' || view === 'mine')) ||
+              (id !== 'step' && id !== 'forum' && id !== 'profile' && view === id)
                 ? 'on'
                 : ''
             }`}
@@ -1171,6 +1394,9 @@ export default function App() {
             {label}
           </button>
         ))}
+        <button className="tab" onClick={() => setDrawerOpen(true)}>
+          便签{noteCount > 0 ? ` · ${noteCount}` : ''}
+        </button>
       </nav>
 
       {onboardOpen && (
@@ -1203,43 +1429,47 @@ export default function App() {
       {detailCard && view !== 'detail' && null}
 
       {settingsOpen && (
-        <SettingsDialog
-          config={config}
-          notice={settingsNotice}
-          onSave={(next) => {
-            setConfig(next);
-            saveConfig(next);
-            setSettingsOpen(false);
-            setSettingsNotice('');
-          }}
-          onClose={() => {
-            setSettingsOpen(false);
-            setSettingsNotice('');
-          }}
-        />
+        <Suspense fallback={null}>
+          <SettingsDialog
+            config={config}
+            notice={settingsNotice}
+            onSave={(next) => {
+              setConfig(next);
+              saveConfig(next);
+              setSettingsOpen(false);
+              setSettingsNotice('');
+            }}
+            onClose={() => {
+              setSettingsOpen(false);
+              setSettingsNotice('');
+            }}
+          />
+        </Suspense>
       )}
 
       {adminOpen && (
-        <AdminPanel
-          personas={personas}
-          settings={settings}
-          identity={identity}
-          world={world}
-          onChangePersona={patchPersona}
-          onChangeSettings={setSettings}
-          onChangeIdentity={setIdentity}
-          onMemory={setMemory}
-          onPersonas={setPersonas}
-          onTick={() => void nudge()}
-          onAdvance={(hours) => void advance(hours)}
-          onSummon={summon}
-          onPostAs={postAs}
-          onExport={doExport}
-          onImport={doImport}
-          onReseed={doReseed}
-          onClear={doClear}
-          onClose={() => setAdminOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <AdminPanel
+            personas={personas}
+            settings={settings}
+            identity={identity}
+            world={world}
+            onChangePersona={patchPersona}
+            onChangeSettings={setSettings}
+            onChangeIdentity={setIdentity}
+            onMemory={setMemory}
+            onPersonas={setPersonas}
+            onTick={() => void nudge()}
+            onAdvance={(hours) => void advance(hours)}
+            onSummon={summon}
+            onPostAs={postAs}
+            onExport={doExport}
+            onImport={doImport}
+            onReseed={doReseed}
+            onClear={doClear}
+            onClose={() => setAdminOpen(false)}
+          />
+        </Suspense>
       )}
     </div>
   );

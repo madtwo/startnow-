@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useDialogFocus } from '../lib/useDialogFocus';
 
 type View = 'home' | 'post' | 'mine' | 'profile';
 
@@ -56,6 +57,7 @@ export default function Tour({ onNavigate, onClose }: Props) {
   const step = STEPS[i];
   const navigate = useRef(onNavigate);
   navigate.current = onNavigate;
+  const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
 
   useEffect(() => {
     navigate.current(step.view, step.tab);
@@ -87,6 +89,7 @@ export default function Tour({ onNavigate, onClose }: Props) {
 
   const pad = 6;
   const TIP_H = 300;
+  const tipWidth = Math.min(320, window.innerWidth - 32);
   const below = rect ? rect.y + rect.h + 14 : 0;
   const tipTop = rect
     ? below + TIP_H <= window.innerHeight
@@ -94,11 +97,21 @@ export default function Tour({ onNavigate, onClose }: Props) {
       : Math.max(16, rect.y - TIP_H - 14)
     : window.innerHeight / 2 - 80;
   const tipLeft = rect
-    ? Math.min(window.innerWidth - 340, Math.max(16, rect.x + rect.w / 2 - 160))
-    : Math.max(16, window.innerWidth / 2 - 160);
+    ? Math.min(
+        window.innerWidth - tipWidth - 16,
+        Math.max(16, rect.x + rect.w / 2 - tipWidth / 2),
+      )
+    : Math.max(16, (window.innerWidth - tipWidth) / 2);
 
   return (
-    <div className="tour" role="dialog" aria-modal="true" aria-label="新手引导">
+    <div
+      className="tour"
+      ref={dialogRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label="新手引导"
+    >
       {rect ? (
         <div
           className="tour-spot"
@@ -113,7 +126,7 @@ export default function Tour({ onNavigate, onClose }: Props) {
         <div className="tour-dim" />
       )}
 
-      <div className="tour-tip" style={{ left: tipLeft, top: tipTop }}>
+      <div className="tour-tip" style={{ left: tipLeft, top: tipTop, width: tipWidth }}>
         <p className="tour-step">
           {i + 1} / {STEPS.length}
         </p>
@@ -130,6 +143,7 @@ export default function Tour({ onNavigate, onClose }: Props) {
           )}
           <button
             className="btn btn-primary"
+            data-autofocus
             onClick={() => {
               if (i === STEPS.length - 1) onClose();
               else setI(i + 1);
