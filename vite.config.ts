@@ -4,9 +4,19 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // opencode.ai 不返回 Access-Control-Allow-Origin，浏览器不能直连，只能由同源代理转发。
-const UPSTREAM = (
-  process.env.OPENCODE_PROXY_UPSTREAM ?? 'https://opencode.ai/inference/openai'
-).replace(/\/+$/, '');
+// 按量付费和 Go 是两套网关，Key 不通用，所以各挂一个前缀。
+const PROXIES = [
+  {
+    mount: '/api/opencode',
+    upstream: (process.env.OPENCODE_PROXY_UPSTREAM ?? 'https://opencode.ai/inference/openai').replace(/\/+$/, ''),
+  },
+  {
+    mount: '/api/opencode-go',
+    upstream: (
+      process.env.OPENCODE_GO_PROXY_UPSTREAM ?? 'https://opencode.ai/inference/go/openai'
+    ).replace(/\/+$/, ''),
+  },
+];
 const MAX_BODY = 1_000_000;
 
 const reply = (res: ServerResponse, status: number, message: string) => {
@@ -27,11 +37,11 @@ const readBody = async (req: IncomingMessage): Promise<Buffer | null> => {
   return Buffer.concat(chunks);
 };
 
-const opencodeProxy = async (req: IncomingMessage, res: ServerResponse) => {
+const createProxy = (upstreamBase: string) => async (req: IncomingMessage, res: ServerResponse) => {
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
     res.setHeader('access-control-allow-origin', '*');
-    res.setHeader('access-control-allow-headers', 'Content-Type, Authorization');
+    res.setHeader('access-control-allow-headers', 'Content-Type, Authorization, X-Opencode-Session');
     res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
     res.end();
     return;
@@ -52,8 +62,12 @@ const opencodeProxy = async (req: IncomingMessage, res: ServerResponse) => {
   const headers: Record<string, string> = {
     'content-type': req.headers['content-type'] ?? 'application/json',
     accept: req.headers.accept ?? 'application/json',
+    'user-agent': 'shudong-forum/0.1',
   };
   if (req.headers.authorization) headers.authorization = req.headers.authorization;
+  if (req.headers['x-opencode-session']) {
+    headers['x-opencode-session'] = String(req.headers['x-opencode-session']);
+  }
 
   const init: RequestInit = { method: req.method, headers, signal: controller.signal };
   if (req.method === 'POST') {
@@ -67,7 +81,7 @@ const opencodeProxy = async (req: IncomingMessage, res: ServerResponse) => {
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${UPSTREAM}${url}`, init);
+    upstream = await fetch(`${upstreamBase}${url}`, init);
   } catch (err) {
     if (controller.signal.aborted) return;
     reply(res, 502, `转发到 opencode.ai 失败：${err instanceof Error ? err.message : String(err)}`);
@@ -90,10 +104,14 @@ const opencodeProxy = async (req: IncomingMessage, res: ServerResponse) => {
 const proxyPlugin = (): Plugin => ({
   name: 'opencode-proxy',
   configureServer(server) {
-    server.middlewares.use('/api/opencode', opencodeProxy);
+    for (const { mount, upstream } of PROXIES) {
+      server.middlewares.use(mount, createProxy(upstream));
+    }
   },
   configurePreviewServer(server) {
-    server.middlewares.use('/api/opencode', opencodeProxy);
+    for (const { mount, upstream } of PROXIES) {
+      server.middlewares.use(mount, createProxy(upstream));
+    }
   },
 });
 

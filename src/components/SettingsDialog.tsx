@@ -20,7 +20,8 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
   const [modelsError, setModelsError] = useState('');
   const [customModel, setCustomModel] = useState(false);
   const preset = getPreset(draft.providerId);
-  const isOpenCode = draft.providerId === 'opencode';
+  const isOpenCode = draft.providerId === 'opencode' || draft.providerId === 'opencode-go';
+  const isGo = draft.providerId === 'opencode-go';
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -33,23 +34,32 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
   useEffect(() => {
     if (!isOpenCode) return;
     const controller = new AbortController();
-    fetchOpenCodeModels(controller.signal)
+    fetchOpenCodeModels(isGo ? 'go' : 'console', controller.signal)
       .then(setModels)
       .catch((err) => {
         if ((err as Error)?.name !== 'AbortError') setModelsError(describeError(err));
       });
     return () => controller.abort();
-  }, [isOpenCode]);
+  }, [isOpenCode, isGo]);
 
   const changeProvider = (id: ProviderId) => {
     if (id === draft.providerId) return;
     const next = getPreset(id);
-    setDraft({ providerId: id, baseUrl: next.baseUrl, model: next.model, apiKey: '' });
+    // 按量付费和 Go 用的是同一个 Console Key，切换时不用重贴
+    const keepKey =
+      (draft.providerId === 'opencode' || draft.providerId === 'opencode-go') &&
+      (id === 'opencode' || id === 'opencode-go');
+    setDraft({
+      providerId: id,
+      baseUrl: next.baseUrl,
+      model: next.model,
+      apiKey: keepKey ? draft.apiKey : '',
+    });
     setResult(null);
     setError('');
     setCustomModel(false);
     setModelsError('');
-    if (id !== 'opencode') setModels(null);
+    setModels(null);
   };
 
   const knownModel = models?.some((m) => m.id === draft.model) ?? false;
@@ -170,7 +180,10 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
                     <option value="__custom">自定义模型名…</option>
                     {models.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.name} · ${m.inputPrice.toFixed(2)}/${m.outputPrice.toFixed(2)}
+                        {m.name} ·{' '}
+                        {m.inputPrice > 0
+                          ? `$${m.inputPrice.toFixed(2)}/$${m.outputPrice.toFixed(2)}`
+                          : '免费'}
                       </option>
                     ))}
                   </select>
@@ -183,7 +196,9 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
                   />
                 )}
                 <span className="field-hint">
-                  美元 / 百万 tokens，按输入价排序。免费模型只对 OpenCode 客户端开放，这里不列。
+                  {isGo
+                    ? 'Go 套餐内的模型都在这里。token 价只用来折算每月额度，不另外扣费。'
+                    : '美元 / 百万 tokens，按输入价排序。免费模型只对 OpenCode 客户端开放，这里不列。'}
                   {modelsError ? ` ${modelsError}` : ''}
                 </span>
               </label>

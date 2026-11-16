@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import type { CSSProperties } from 'react';
 
 interface Props {
   onClose: () => void;
@@ -15,7 +14,7 @@ export default function CrisisCard({ onClose }: Props) {
   }, [onClose]);
 
   return (
-    <aside className="crisis" style={{ '--pc': '#e0a458' } as CSSProperties}>
+    <aside className="crisis">
       <div className="crisis-head">
         <strong>先停一下，你不需要一个人扛</strong>
         <button className="icon-btn" onClick={onClose} aria-label="关闭提示">

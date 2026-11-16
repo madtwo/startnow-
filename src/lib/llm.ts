@@ -1,9 +1,15 @@
 import type { ChatMessage, LlmConfig } from '../types';
-import { isMock, OPENCODE_CATALOG } from '../config/providers';
+import {
+  isMock,
+  isOpenCodeBase,
+  OPENCODE_CATALOG,
+  OPENCODE_GO_CATALOG,
+} from '../config/providers';
 
 export type LlmErrorKind =
   | 'config'
   | 'auth'
+  | 'quota'
   | 'notfound'
   | 'rate'
   | 'network'
@@ -36,13 +42,21 @@ const parseServerError = (status: number, body: string, baseUrl = ''): LlmError 
   if (status === 404 && baseUrl.startsWith('/')) {
     return new LlmError(
       'notfound',
-      `本站代理没有生效（404）。用 npm run dev / npm run preview 启动，或部署时补上 /api/opencode 转发。${detail}`,
+      `本站代理没有生效（404）。用 npm run dev / npm run preview 启动，或部署时补上 /api/opencode 与 /api/opencode-go 转发。${detail}`,
     );
   }
   if (status === 404) {
     return new LlmError(
       'notfound',
       `接口地址或模型名不对（404）。检查 Base URL 是否以 /v1 结尾、模型名是否存在。${detail}`,
+    );
+  }
+  if (status === 402) {
+    return new LlmError(
+      'quota',
+      baseUrl.includes('/opencode-go')
+        ? `Go 套餐额度用完了，或订阅没生效（402）。到 opencode.ai/console 的 Go 页面确认订阅。${detail}`
+        : `这个 Key 属于 Go 套餐，不能走按量付费网关（402）。服务商换成「OpenCode Go · 订阅套餐」再试。${detail}`,
     );
   }
   if (status === 429) {
@@ -57,13 +71,82 @@ const networkError = () =>
     '连不上这个接口。常见原因：地址写错，或该服务不允许浏览器直连（CORS）。可以换 DeepSeek / OpenAI，或填一个自建代理地址。',
   );
 
+const newSessionId = () => `ses_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
+
+// 居民都是随手发帖，默认只给最低思考度；模型不认这个参数时记住并回退
+const effortUnsupported = new Set<string>();
+const effortKey = (config: LlmConfig) => `${config.baseUrl.trim()}|${config.model.trim()}`;
+
+const chatBody = (
+  config: LlmConfig,
+  messages: ChatMessage[],
+  stream: boolean,
+  maxTokens: number,
+  lowEffort: boolean,
+) => {
+  const body: Record<string, unknown> = {
+    model: config.model.trim(),
+    messages,
+    stream,
+    max_tokens: maxTokens,
+  };
+  if (lowEffort && !effortUnsupported.has(effortKey(config))) {
+    body.reasoning_effort = 'low';
+  }
+  return body;
+};
+
+const sendChat = async (
+  config: LlmConfig,
+  messages: ChatMessage[],
+  signal: AbortSignal | undefined,
+  sessionId: string | undefined,
+  stream: boolean,
+  maxTokens: number,
+  lowEffort: boolean,
+) => {
+  const post = () =>
+    fetch(endpoint(config.baseUrl), {
+      method: 'POST',
+      signal,
+      headers: chatHeaders(config, sessionId),
+      body: JSON.stringify(chatBody(config, messages, stream, maxTokens, lowEffort)),
+    });
+  let res = await post();
+  if (res.status === 400 && lowEffort && !effortUnsupported.has(effortKey(config))) {
+    const detail = await res.clone().text().catch(() => '');
+    if (/reasoning_effort|thinking|unsupported|unknown (param|field)/i.test(detail)) {
+      effortUnsupported.add(effortKey(config));
+      res = await post();
+    }
+  }
+  return res;
+};
+
+const chatHeaders = (config: LlmConfig, sessionId?: string) => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${config.apiKey.trim()}`,
+  };
+  // Go 套餐要求每个会话带稳定 session id，用于路由和缓存
+  if (isOpenCodeBase(config.baseUrl)) {
+    headers['x-opencode-session'] = sessionId ?? newSessionId();
+  }
+  return headers;
+};
+
 export async function streamChat(opts: {
   config: LlmConfig;
   messages: ChatMessage[];
   signal: AbortSignal;
+  sessionId?: string;
   onDelta: (text: string) => void;
+  maxTokens?: number;
+  lowEffort?: boolean;
 }): Promise<string> {
-  const { config, messages, signal, onDelta } = opts;
+  const { config, messages, signal, sessionId, onDelta } = opts;
+  const maxTokens = opts.maxTokens ?? 600;
+  const lowEffort = opts.lowEffort ?? true;
   if (isMock(config)) {
     throw new LlmError('config', '演示模式不走网络请求。');
   }
@@ -73,20 +156,7 @@ export async function streamChat(opts: {
 
   let res: Response;
   try {
-    res = await fetch(endpoint(config.baseUrl), {
-      method: 'POST',
-      signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey.trim()}`,
-      },
-      body: JSON.stringify({
-        model: config.model.trim(),
-        messages,
-        stream: true,
-        max_tokens: 600,
-      }),
-    });
+    res = await sendChat(config, messages, signal, sessionId, true, maxTokens, lowEffort);
   } catch (err) {
     if ((err as Error)?.name === 'AbortError') throw err;
     throw networkError();
@@ -154,10 +224,7 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
     res = await fetch(endpoint(config.baseUrl), {
       method: 'POST',
       signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey.trim()}`,
-      },
+      headers: chatHeaders(config),
       body: JSON.stringify({
         model: config.model.trim(),
         messages: [{ role: 'user', content: '只回复两个字：可以' }],
@@ -195,10 +262,14 @@ interface RawModel {
   cost?: { text?: { input?: { price?: unknown }; output?: { price?: unknown } } };
 }
 
-export async function fetchOpenCodeModels(signal?: AbortSignal): Promise<ModelOption[]> {
+export async function fetchOpenCodeModels(
+  plan: 'console' | 'go',
+  signal?: AbortSignal,
+): Promise<ModelOption[]> {
+  const isGo = plan === 'go';
   let res: Response;
   try {
-    res = await fetch(OPENCODE_CATALOG, { signal });
+    res = await fetch(isGo ? OPENCODE_GO_CATALOG : OPENCODE_CATALOG, { signal });
   } catch (err) {
     if ((err as Error)?.name === 'AbortError') throw err;
     throw new LlmError('network', '拉不到 OpenCode 的模型列表，先手动填模型名也能用。');
@@ -209,15 +280,15 @@ export async function fetchOpenCodeModels(signal?: AbortSignal): Promise<ModelOp
   const json = await res.json().catch(() => null);
   const rows: RawModel[] = Array.isArray(json?.data) ? json.data : [];
   return rows
-    .filter((m) => typeof m.id === 'string' && m.type === 'chat' && !m.id.endsWith('-free'))
+    .filter((m) => typeof m.id === 'string' && m.type === 'chat')
     .map((m) => ({
       id: m.id as string,
       name: typeof m.name === 'string' && m.name ? m.name : (m.id as string),
-      inputPrice: Number(m.cost?.text?.input?.price),
-      outputPrice: Number(m.cost?.text?.output?.price),
+      inputPrice: Number(m.cost?.text?.input?.price ?? 0),
+      outputPrice: Number(m.cost?.text?.output?.price ?? 0),
     }))
-    .filter((m) => Number.isFinite(m.inputPrice) && m.inputPrice > 0)
-    .sort((a, b) => a.inputPrice - b.inputPrice);
+    .filter((m) => isGo || (Number.isFinite(m.inputPrice) && m.inputPrice > 0))
+    .sort((a, b) => a.inputPrice - b.inputPrice || a.name.localeCompare(b.name));
 }
 
 export function describeError(err: unknown): string {

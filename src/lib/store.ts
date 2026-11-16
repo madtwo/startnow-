@@ -1,14 +1,19 @@
-import type { LlmConfig, Post } from '../types';
+import type { Card, Identity, LlmConfig, Persona, World, WorldSettings } from '../types';
 import { defaultConfig, PRESETS } from '../config/providers';
+import { defaultPersonas } from './personas';
 
-const CONFIG_KEY = 'shudong.config.v1';
-const POSTS_KEY = 'shudong.posts.v1';
-const IDENTITY_KEY = 'shudong.identity.v1';
+const KEYS = {
+  config: 'shudong.config.v1',
+  cards: 'shudong.cards.v1',
+  personas: 'shudong.personas.v1',
+  world: 'shudong.world.v1',
+  settings: 'shudong.settings.v1',
+  identity: 'shudong.identity.v2',
+  identityLegacy: 'shudong.identity.v1',
+};
 
-export interface Identity {
-  id: string;
-  name: string;
-}
+const LEGACY_POST_KEYS = ['shudong.posts.v3', 'shudong.posts.v2', 'shudong.posts.v1'];
+const DAY = 86_400_000;
 
 const read = (key: string): unknown => {
   try {
@@ -27,8 +32,27 @@ const write = (key: string, value: unknown) => {
   }
 };
 
+export const defaultSettings: WorldSettings = {
+  paused: false,
+  maxArrivals: 3,
+  aiCardLimit: 2,
+  dailyCalls: 60,
+  maxCallsPerTick: 2,
+  speed: 6,
+  baselineExtra: '',
+};
+
+export const dayKey = (ts: number) => new Date(ts).toDateString();
+
+export const emptyWorld = (now = Date.now()): World => ({
+  lastTickAt: now,
+  dayKey: dayKey(now),
+  callsToday: 0,
+  logs: [],
+});
+
 export function loadConfig(): LlmConfig {
-  const saved = read(CONFIG_KEY) as Partial<LlmConfig> | null;
+  const saved = read(KEYS.config) as Partial<LlmConfig> | null;
   if (!saved || typeof saved !== 'object') return defaultConfig;
   const providerId = PRESETS.some((p) => p.id === saved.providerId)
     ? saved.providerId!
@@ -41,35 +65,198 @@ export function loadConfig(): LlmConfig {
   };
 }
 
-export const saveConfig = (config: LlmConfig) => write(CONFIG_KEY, config);
+export const saveConfig = (config: LlmConfig) => write(KEYS.config, config);
 
-export function loadPosts(): Post[] {
-  const saved = read(POSTS_KEY);
+const legacyAny = () =>
+  LEGACY_POST_KEYS.some((key) => localStorage.getItem(key) !== null);
+
+export const isFirstRun = () =>
+  localStorage.getItem(KEYS.cards) === null && !legacyAny();
+
+export const needsUpgrade = () =>
+  localStorage.getItem(KEYS.cards) === null && legacyAny();
+
+const retention = (cards: Card[], now = Date.now()) =>
+  cards
+    .filter((c) => now - c.createdAt < 14 * DAY)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 200);
+
+const normalizeCard = (raw: Partial<Card>): Card | null => {
+  if (!raw || typeof raw.text !== 'string') return null;
+  const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : Date.now();
+  return {
+    id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
+    authorId: typeof raw.authorId === 'string' ? raw.authorId : 'me',
+    authorName: typeof raw.authorName === 'string' ? raw.authorName : '我',
+    authorKind: raw.authorKind === 'persona' ? 'persona' : 'player',
+    text: raw.text,
+    createdAt,
+    status: raw.status ?? 'stuck',
+    arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
+    plan: Array.isArray(raw.plan) ? raw.plan : [],
+    pending: Array.isArray(raw.pending) ? raw.pending : [],
+    comments: Array.isArray(raw.comments) ? raw.comments : [],
+    advice: raw.advice
+      ? { ...raw.advice, text: raw.advice.text ?? '一个办法' }
+      : undefined,
+    note: raw.note
+      ? { ...raw.note, text: raw.note.text ?? '一件小事' }
+      : undefined,
+    doneAt: raw.doneAt,
+    noMemory: raw.noMemory,
+  };
+};
+
+export function loadCards(): Card[] {
+  const saved = read(KEYS.cards);
   if (!Array.isArray(saved)) return [];
-  return saved
-    .filter((p): p is Post => Boolean(p) && typeof p.content === 'string')
-    .slice(0, 30)
-    .map((post) => ({
-      ...post,
-      replies: (Array.isArray(post.replies) ? post.replies : []).map((r) =>
-        r.status === 'streaming'
-          ? { ...r, status: 'stopped' as const, error: '页面刷新，生成中断' }
-          : r,
-      ),
-    }));
+  return retention(saved.map(normalizeCard).filter((c): c is Card => Boolean(c)));
 }
 
-export const savePosts = (posts: Post[]) => write(POSTS_KEY, posts.slice(0, 30));
+export const saveCards = (cards: Card[]) => write(KEYS.cards, retention(cards));
+
+function mergePersonas(rows: unknown[]): Persona[] {
+  const defaults = defaultPersonas();
+  const merged = defaults.map((base) => {
+    const found = rows.find((p) => p && (p as Persona).id === base.id) as
+      | Partial<Persona>
+      | undefined;
+    if (!found) return base;
+    return {
+      ...base,
+      ...found,
+      memory: Array.isArray(found.memory) ? found.memory : [],
+      weekLog: Array.isArray(found.weekLog) ? found.weekLog : [],
+      weights: found.weights ?? base.weights,
+      intimacy: typeof found.intimacy === 'number' ? found.intimacy : base.intimacy,
+    } as Persona;
+  });
+  const extra = rows
+    .filter((p) => p && typeof (p as Persona).id === 'string')
+    .filter((p) => (p as Persona).id.startsWith('custom-'))
+    .filter((p) => !defaults.some((d) => d.id === (p as Persona).id))
+    .slice(0, 2)
+    .map((p) => {
+      const row = p as Partial<Persona>;
+      const fallback = defaults[0];
+      return {
+        ...fallback,
+        ...row,
+        id: row.id as string,
+        name: row.name ?? '新同伴',
+        background: row.background ?? '',
+        voice: row.voice ?? '',
+        weights: row.weights ?? fallback.weights,
+        intimacy: typeof row.intimacy === 'number' ? row.intimacy : 10,
+        followUp: row.followUp ?? 'sometimes',
+        memory: Array.isArray(row.memory) ? row.memory : [],
+        weekLog: Array.isArray(row.weekLog) ? row.weekLog : [],
+      } as Persona;
+    });
+  return [...merged, ...extra];
+}
+
+export function loadPersonas(): Persona[] {
+  const saved = read(KEYS.personas);
+  if (!Array.isArray(saved) || !saved.length) return defaultPersonas();
+  return mergePersonas(saved);
+}
+
+export const savePersonas = (personas: Persona[]) => write(KEYS.personas, personas);
+
+export function loadWorld(now = Date.now()): World {
+  const saved = read(KEYS.world) as Partial<World> | null;
+  if (!saved || typeof saved !== 'object') return emptyWorld(now);
+  return {
+    lastTickAt: typeof saved.lastTickAt === 'number' ? saved.lastTickAt : now,
+    dayKey: typeof saved.dayKey === 'string' ? saved.dayKey : dayKey(now),
+    callsToday: typeof saved.callsToday === 'number' ? saved.callsToday : 0,
+    logs: Array.isArray(saved.logs) ? saved.logs.slice(0, 20) : [],
+  };
+}
+
+export const saveWorld = (world: World) =>
+  write(KEYS.world, { ...world, logs: world.logs.slice(0, 20) });
+
+export function loadSettings(): WorldSettings {
+  const saved = read(KEYS.settings) as Partial<WorldSettings> | null;
+  if (!saved || typeof saved !== 'object') return { ...defaultSettings };
+  return { ...defaultSettings, ...saved, paused: Boolean(saved.paused) };
+}
+
+export const saveSettings = (settings: WorldSettings) => write(KEYS.settings, settings);
 
 export function loadIdentity(): Identity {
-  const saved = read(IDENTITY_KEY) as Identity | null;
+  const saved = read(KEYS.identity) as Partial<Identity> | null;
   if (saved && typeof saved.id === 'string' && typeof saved.name === 'string') {
-    return saved;
+    return {
+      id: saved.id,
+      name: saved.name,
+      avatarKey: typeof saved.avatarKey === 'string' ? saved.avatarKey : 'petal',
+      bio: typeof saved.bio === 'string' ? saved.bio : '',
+    };
   }
+  const legacy = read(KEYS.identityLegacy) as Partial<Identity> | null;
   const identity: Identity = {
-    id: crypto.randomUUID(),
-    name: `匿名 · ${Math.floor(100 + Math.random() * 900)}`,
+    id: typeof legacy?.id === 'string' ? legacy.id : crypto.randomUUID(),
+    name:
+      typeof legacy?.name === 'string' ? legacy.name : `匿名 · ${Math.floor(100 + Math.random() * 900)}`,
+    avatarKey: 'petal',
+    bio: '',
   };
-  write(IDENTITY_KEY, identity);
+  write(KEYS.identity, identity);
   return identity;
+}
+
+export const saveIdentity = (identity: Identity) => write(KEYS.identity, identity);
+
+export interface Bundle {
+  version: 3;
+  exportedAt: number;
+  cards: Card[];
+  personas: Persona[];
+  world: World;
+  settings: WorldSettings;
+  identity: Identity;
+}
+
+export function exportBundle(state: Omit<Bundle, 'version' | 'exportedAt'>): string {
+  const bundle: Bundle = { version: 3, exportedAt: Date.now(), ...state };
+  return JSON.stringify(bundle, null, 2);
+}
+
+export function importBundle(raw: string): Bundle | null {
+  try {
+    const data = JSON.parse(raw) as Partial<Bundle>;
+    if (!data || data.version !== 3 || !Array.isArray(data.cards)) return null;
+    return {
+      version: 3,
+      exportedAt: typeof data.exportedAt === 'number' ? data.exportedAt : Date.now(),
+      cards: retention(
+        (data.cards as Partial<Card>[]).map(normalizeCard).filter((c): c is Card => Boolean(c)),
+      ),
+      personas:
+        Array.isArray(data.personas) && data.personas.length
+          ? mergePersonas(data.personas)
+          : defaultPersonas(),
+      world: data.world && typeof data.world === 'object' ? (data.world as World) : emptyWorld(),
+      settings: data.settings
+        ? { ...defaultSettings, ...(data.settings as Partial<WorldSettings>) }
+        : { ...defaultSettings },
+      identity: (data.identity as Identity) ?? loadIdentity(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearAll() {
+  [...Object.values(KEYS), ...LEGACY_POST_KEYS].forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // 忽略
+    }
+  });
 }

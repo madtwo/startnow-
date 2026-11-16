@@ -52,10 +52,18 @@ export const PRESETS: ProviderPreset[] = [
   },
   {
     id: 'opencode',
-    name: 'OpenCode · Console 网关',
+    name: 'OpenCode · 按量付费',
     baseUrl: '/api/opencode/v1',
     model: 'glm-5.3-flash',
-    hint: '在 opencode.ai/console 充值取 Key。opencode.ai 不允许浏览器直连，这里走本站代理转发。',
+    hint: 'Console 里充值按量付费的 Key 走这里。和 Go 套餐的 Key 不通用。',
+    needsKey: true,
+  },
+  {
+    id: 'opencode-go',
+    name: 'OpenCode Go · 订阅套餐',
+    baseUrl: '/api/opencode-go/v1',
+    model: 'glm-5.3-flash',
+    hint: 'Go / Go Plus 订阅的 Key 走这里。用成按量付费会报 402。',
     needsKey: true,
   },
   {
@@ -77,6 +85,9 @@ export const PRESETS: ProviderPreset[] = [
 ];
 
 export const OPENCODE_CATALOG = 'https://opencode.ai/inference/v1/models';
+export const OPENCODE_GO_CATALOG = 'https://opencode.ai/inference/go/v1/models';
+
+export const isOpenCodeBase = (baseUrl: string) => baseUrl.trim().startsWith('/api/opencode');
 
 export const getPreset = (id: ProviderId): ProviderPreset =>
   PRESETS.find((p) => p.id === id) ?? PRESETS[0];
