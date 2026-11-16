@@ -39,7 +39,12 @@ export default function CardDeck({ cards, personas, index, onIndex, onOpen, onLi
   return (
     <section className="deck">
       <div className="deck-bar">
-        <button className="deck-nav" onClick={() => onIndex(Math.max(0, index - 1))} disabled={index <= 0}>
+        <button
+          className="deck-nav"
+          onClick={() => onIndex(Math.max(0, index - 1))}
+          disabled={index <= 0}
+          aria-label="上一张"
+        >
           ←
         </button>
         <span className="deck-progress">
@@ -49,6 +54,7 @@ export default function CardDeck({ cards, personas, index, onIndex, onOpen, onLi
           className="deck-nav"
           onClick={() => onIndex(Math.min(cards.length - 1, index + 1))}
           disabled={index >= cards.length - 1}
+          aria-label="下一张"
         >
           →
         </button>
@@ -105,7 +111,16 @@ export default function CardDeck({ cards, personas, index, onIndex, onOpen, onLi
           </button>
         </footer>
 
-        <span className="deck-open">点开看全部对话 →</span>
+        <button
+          type="button"
+          className="deck-open"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen(card);
+          }}
+        >
+          点开看全部对话 →
+        </button>
       </article>
 
       {cards.length > 1 && (

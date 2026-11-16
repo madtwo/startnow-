@@ -133,7 +133,7 @@ export default function CardDetail({
       {card.kind === 'brag' && <span className="brag-badge">做到了</span>}
       {card.title && <h1 className="page-title">{card.title}</h1>}
       <p className="page-text">{card.text}</p>
-      {card.image && <img className="card-image" src={card.image} alt="卡里配的图" />}
+      {card.image && <img className="card-image" src={card.image} alt="卡片配图" />}
 
       {!isGuide && card.advice && !closed && (
         <div className="advice">

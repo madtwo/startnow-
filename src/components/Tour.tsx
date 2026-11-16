@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useDialogFocus } from '../lib/useDialogFocus';
 
 type View = 'home' | 'post' | 'mine' | 'profile';
 
@@ -43,6 +44,7 @@ export default function Tour({ onNavigate, onClose }: Props) {
   const step = STEPS[i];
   const navigate = useRef(onNavigate);
   navigate.current = onNavigate;
+  const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
 
   useEffect(() => {
     navigate.current(step.view, step.tab);
@@ -85,7 +87,14 @@ export default function Tour({ onNavigate, onClose }: Props) {
     : Math.max(16, window.innerWidth / 2 - 160);
 
   return (
-    <div className="tour" role="dialog" aria-modal="true" aria-label="新手引导">
+    <div
+      className="tour"
+      ref={dialogRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label="新手引导"
+    >
       {rect ? (
         <div
           className="tour-spot"
@@ -117,6 +126,7 @@ export default function Tour({ onNavigate, onClose }: Props) {
           )}
           <button
             className="btn btn-primary"
+            data-autofocus
             onClick={() => {
               if (i === STEPS.length - 1) onClose();
               else setI(i + 1);

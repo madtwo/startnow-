@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import AdminPanel from './components/AdminPanel';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Avatar from './components/Avatar';
 import CardDetail from './components/CardDetail';
 import CardRow from './components/CardRow';
@@ -10,7 +9,6 @@ import PostForm from './components/PostForm';
 import StepBoard from './components/StepBoard';
 import Tour from './components/Tour';
 import CrisisCard from './components/CrisisCard';
-import SettingsDialog from './components/SettingsDialog';
 import { isMock, isReady } from './config/providers';
 import { HOTLINE } from './lib/crisis';
 import { findCrisis } from './lib/safety';
@@ -69,6 +67,9 @@ import type {
 } from './types';
 
 const TICK_MS = 4000;
+
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
+const SettingsDialog = lazy(() => import('./components/SettingsDialog'));
 
 type View = 'home' | 'post' | 'mine' | 'profile' | 'detail';
 
@@ -139,6 +140,8 @@ export default function App() {
   const [bragTitle, setBragTitle] = useState('');
   const brandClicks = useRef<number[]>([]);
   const busy = useRef(false);
+  const bellRef = useRef<HTMLDivElement>(null);
+  const [, refreshClock] = useState(0);
 
   useEffect(() => saveCards(cards), [cards]);
   useEffect(() => savePersonas(personas), [personas]);
@@ -148,6 +151,27 @@ export default function App() {
   useEffect(() => saveTodos(todos), [todos]);
   useEffect(() => localStorage.setItem('startnow.mode', mode), [mode]);
   useEffect(() => localStorage.setItem('startnow.homeTab', homeTab), [homeTab]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => refreshClock((n) => n + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!bellOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!bellRef.current?.contains(e.target as Node)) setBellOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBellOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [bellOpen]);
 
   const ready = isReady(config);
   const latest = useRef({ cards, personas, world, settings, config, working });
@@ -582,11 +606,13 @@ export default function App() {
           </div>
         </div>
         <div className="top-actions">
-          <div className="bell-wrap">
+          <div className="bell-wrap" ref={bellRef}>
             <button
               className="bell-btn"
               onClick={() => setBellOpen((v) => !v)}
               aria-label="回复通知"
+              aria-expanded={bellOpen}
+              aria-controls="bell-panel"
             >
               <svg viewBox="0 0 24 24" fill="none">
                 <path
@@ -602,7 +628,7 @@ export default function App() {
               )}
             </button>
             {bellOpen && (
-              <div className="bell-panel">
+              <div className="bell-panel" id="bell-panel">
                 <p className="bell-title">有人回了你</p>
                 {notices.length === 0 && <p className="bell-empty">还没有新的回复。</p>}
                 {notices.map((n) => (
@@ -627,10 +653,24 @@ export default function App() {
 
       {view === 'home' && (
         <main className="feed">
-          <div className="home-tabs" role="tablist" aria-label="首页">
+          <div
+            className="home-tabs"
+            role="tablist"
+            aria-label="首页"
+            onKeyDown={(e) => {
+              if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+              e.preventDefault();
+              const next = homeTab === 'step' ? 'forum' : 'step';
+              setHomeTab(next);
+              e.currentTarget
+                .querySelectorAll<HTMLButtonElement>('[role="tab"]')
+                [next === 'step' ? 0 : 1]?.focus();
+            }}
+          >
             <button
               role="tab"
               aria-selected={homeTab === 'step'}
+              tabIndex={homeTab === 'step' ? 0 : -1}
               className={homeTab === 'step' ? 'on' : ''}
               onClick={() => setHomeTab('step')}
             >
@@ -639,6 +679,7 @@ export default function App() {
             <button
               role="tab"
               aria-selected={homeTab === 'forum'}
+              tabIndex={homeTab === 'forum' ? 0 : -1}
               className={homeTab === 'forum' ? 'on' : ''}
               onClick={() => setHomeTab('forum')}
             >
@@ -678,11 +719,19 @@ export default function App() {
                   这里不保证长期，只负责此刻能做的那一件小事。
                 </span>
                 <div className="masthead-tools">
-                  <div className="mode-switch">
-                    <button className={mode === 'card' ? 'on' : ''} onClick={() => setMode('card')}>
+                  <div className="mode-switch" role="group" aria-label="显示方式">
+                    <button
+                      className={mode === 'card' ? 'on' : ''}
+                      aria-pressed={mode === 'card'}
+                      onClick={() => setMode('card')}
+                    >
                       卡片
                     </button>
-                    <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')}>
+                    <button
+                      className={mode === 'list' ? 'on' : ''}
+                      aria-pressed={mode === 'list'}
+                      onClick={() => setMode('list')}
+                    >
                       列表
                     </button>
                   </div>
@@ -1027,43 +1076,47 @@ export default function App() {
       {detailCard && view !== 'detail' && null}
 
       {settingsOpen && (
-        <SettingsDialog
-          config={config}
-          notice={settingsNotice}
-          onSave={(next) => {
-            setConfig(next);
-            saveConfig(next);
-            setSettingsOpen(false);
-            setSettingsNotice('');
-          }}
-          onClose={() => {
-            setSettingsOpen(false);
-            setSettingsNotice('');
-          }}
-        />
+        <Suspense fallback={null}>
+          <SettingsDialog
+            config={config}
+            notice={settingsNotice}
+            onSave={(next) => {
+              setConfig(next);
+              saveConfig(next);
+              setSettingsOpen(false);
+              setSettingsNotice('');
+            }}
+            onClose={() => {
+              setSettingsOpen(false);
+              setSettingsNotice('');
+            }}
+          />
+        </Suspense>
       )}
 
       {adminOpen && (
-        <AdminPanel
-          personas={personas}
-          settings={settings}
-          identity={identity}
-          world={world}
-          onChangePersona={patchPersona}
-          onChangeSettings={setSettings}
-          onChangeIdentity={setIdentity}
-          onMemory={setMemory}
-          onPersonas={setPersonas}
-          onTick={() => void nudge()}
-          onAdvance={(hours) => void advance(hours)}
-          onSummon={summon}
-          onPostAs={postAs}
-          onExport={doExport}
-          onImport={doImport}
-          onReseed={doReseed}
-          onClear={doClear}
-          onClose={() => setAdminOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <AdminPanel
+            personas={personas}
+            settings={settings}
+            identity={identity}
+            world={world}
+            onChangePersona={patchPersona}
+            onChangeSettings={setSettings}
+            onChangeIdentity={setIdentity}
+            onMemory={setMemory}
+            onPersonas={setPersonas}
+            onTick={() => void nudge()}
+            onAdvance={(hours) => void advance(hours)}
+            onSummon={summon}
+            onPostAs={postAs}
+            onExport={doExport}
+            onImport={doImport}
+            onReseed={doReseed}
+            onClear={doClear}
+            onClose={() => setAdminOpen(false)}
+          />
+        </Suspense>
       )}
     </div>
   );

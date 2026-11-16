@@ -29,6 +29,13 @@ export default function CardRow({ card, personas, onClick, onLike }: Props) {
     <div
       className={`thread-card ${brag ? 'is-brag' : ''}`}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       role="button"
       tabIndex={0}
     >

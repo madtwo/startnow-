@@ -3,6 +3,7 @@ import type { Gender, Identity, MemoryEntry, Persona, World, WorldSettings } fro
 import { AVATAR_KEYS, AVATAR_LABELS, AvatarMark } from '../lib/avatars';
 import { BASELINE } from '../lib/baseline';
 import { ensureMind, MOOD_LABEL } from '../lib/mind';
+import { useDialogFocus } from '../lib/useDialogFocus';
 import Avatar from './Avatar';
 
 const COLORS = ['#5f7f66', '#b06a45', '#97784a', '#80667a', '#4f6b8a', '#8a5a4a', '#6b7a4f', '#9a6b7a'];
@@ -64,6 +65,7 @@ export default function AdminPanel(props: Props) {
   const [raw, setRaw] = useState('');
   const persona = personas.find((p) => p.id === selected) ?? personas[0];
   const mind = persona ? ensureMind(persona) : null;
+  const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
 
   const patch = (part: Partial<Persona>) => {
     if (!persona) return;
@@ -77,7 +79,14 @@ export default function AdminPanel(props: Props) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="sheet admin" role="dialog" aria-modal="true" aria-label="作者后台">
+      <div
+        className="sheet admin"
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="作者后台"
+      >
         <div className="sheet-head">
           <div>
             <h2>作者后台</h2>
