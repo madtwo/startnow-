@@ -4,3 +4,6 @@ dist
 .DS_Store
 .shots
 startnow-prototype.zip
+
+__pycache__/
+*.pyc
