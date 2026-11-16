@@ -42,72 +42,86 @@ export default function PostForm({
   };
 
   return (
-    <section className="post-form">
-      <h2>放一张卡</h2>
-      <p className="post-form-hint">一两句就行，说清卡在哪。可以配一张图。</p>
-
-      <input
-        className="post-form-title"
-        value={title}
-        placeholder="标题（可以不写）"
-        onChange={(e) => onTitle(e.target.value)}
-        aria-label="标题，可以不写"
-      />
-
-      <textarea
-        className="post-form-input"
-        rows={6}
-        value={value}
-        placeholder="比如：明天材料物理小测，书才背到第三章。室友在打游戏，我戴着耳机也听不进去。"
-        onChange={(e) => onChange(e.target.value)}
-        aria-label="写下你卡住的地方"
-      />
-
-      {image && (
-        <div className="post-image">
-          <img src={image} alt="" />
-          <button className="post-image-remove" onClick={() => onImage('')}>
-            移除
-          </button>
-        </div>
-      )}
-
-      <div className="post-form-foot">
-        <div className="who">
-          <span className="who-avatars">
-            {personas.map((p) => (
-              <span key={p.id} className="who-avatar" title={`${p.name} · ${p.tagline}`}>
-                <Avatar avatarKey={p.avatarKey} color={p.color} size="xs" />
-              </span>
-            ))}
-          </span>
-          <span className="who-text">{personas.length} 位同伴，来不来不一定</span>
-        </div>
-        <div className="post-form-actions">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={(e) => {
-              void pick(e.target.files?.[0]);
-              e.target.value = '';
-            }}
-          />
-          <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
-            加一张图
-          </button>
-          {ready ? (
-            <button className="btn btn-primary" disabled={!value.trim() || busy} onClick={onSubmit}>
-              放出去
-            </button>
-          ) : (
-            <button className="btn btn-primary" onClick={onOpenSettings}>
-              先接入 API
-            </button>
-          )}
+    <>
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">放一张卡</h1>
+          <p className="page-sub">一两句说清卡在哪，可以配一张图</p>
         </div>
       </div>
-    </section>
+
+      <section className="post-form card compose-card">
+        <label className="field">
+          <span className="field-label">标题（可以不写）</span>
+          <input
+            className="post-form-title"
+            value={title}
+            placeholder="比如：材料物理小测，还没背完"
+            onChange={(e) => onTitle(e.target.value)}
+            aria-label="标题，可以不写"
+          />
+        </label>
+
+        <label className="field">
+          <span className="field-label">说说卡在哪</span>
+          <textarea
+            className="post-form-input"
+            rows={6}
+            value={value}
+            placeholder="比如：明天材料物理小测，书才背到第三章。室友在打游戏，我戴着耳机也听不进去。"
+            onChange={(e) => onChange(e.target.value)}
+            aria-label="写下你卡住的地方"
+          />
+        </label>
+
+        {image && (
+          <div className="post-image">
+            <img src={image} alt="" />
+            <button className="post-image-remove" onClick={() => onImage('')}>
+              移除
+            </button>
+          </div>
+        )}
+
+        <div className="post-form-foot">
+          <div className="who">
+            <span className="who-avatars">
+              {personas.map((p) => (
+                <span key={p.id} className="who-avatar" title={`${p.name} · ${p.tagline}`}>
+                  <Avatar avatarKey={p.avatarKey} color={p.color} size="xs" />
+                </span>
+              ))}
+            </span>
+            <span className="who-text">{personas.length} 位同伴，来不来不一定</span>
+          </div>
+          <div className="post-form-actions">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                void pick(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+            <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
+              加一张图
+            </button>
+            {ready ? (
+              <button className="btn btn-primary" disabled={!value.trim() || busy} onClick={onSubmit}>
+                放出去
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={onOpenSettings}>
+                先接入 API
+              </button>
+            )}
+          </div>
+        </div>
+
+        <p className="compose-tip">放出去后，会有 AI 同伴来回应你。不用守着，忙完回来看看。</p>
+      </section>
+    </>
   );
 }
