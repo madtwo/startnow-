@@ -79,6 +79,7 @@ export function createPlayerCard(
     kind,
     likes: 0,
     likedByMe: false,
+    helperAt: now + (kind === 'brag' ? 6000 : 4000) / scale(settings),
     text,
     createdAt: now,
     status: 'stuck',
@@ -390,6 +391,30 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       plan: [...original.plan],
       pending: [...original.pending],
     };
+
+    if (
+      card.helperAt &&
+      now >= card.helperAt &&
+      !card.comments.some((c) => c.authorId === 'helper')
+    ) {
+      card = {
+        ...card,
+        helperAt: undefined,
+        comments: [
+          ...card.comments,
+          {
+            id: uid(),
+            authorId: 'helper',
+            authorKind: 'helper',
+            text:
+              card.kind === 'brag'
+                ? '记下了。做到了就是做到了，不用写得漂亮。'
+                : '看到了。先不用急着讲清楚，坐一会儿，会有人陆续来。',
+            at: now,
+          },
+        ],
+      };
+    }
 
     if (card.status === 'noted' && card.note && now > card.note.dueAt) {
       card = { ...card, status: 'handled', handledAt: now, note: undefined };

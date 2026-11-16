@@ -69,8 +69,13 @@ type View = 'home' | 'post' | 'mine' | 'profile' | 'detail';
 
 export default function App() {
   const [boot] = useState(() => {
-    const withGuide = (cards: Card[]) =>
-      cards.some((c) => c.kind === 'guide') ? cards : [buildGuideCard(), ...cards];
+    const withGuide = (cards: Card[]) => {
+      const guide = buildGuideCard();
+      if (!cards.some((c) => c.kind === 'guide')) return [guide, ...cards];
+      return cards.map((c) =>
+        c.kind === 'guide' ? { ...c, title: guide.title, text: guide.text } : c,
+      );
+    };
     if (isFirstRun()) {
       return { cards: buildSeedCards(), personas: seedMemories(defaultPersonas()) };
     }

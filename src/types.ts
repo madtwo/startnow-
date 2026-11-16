@@ -125,6 +125,7 @@ export interface Card {
   title?: string;
   kind?: 'worry' | 'brag' | 'guide';
   likes?: number;
+  helperAt?: number;
   likedByMe?: boolean;
   text: string;
   weight?: 1 | 2 | 3;

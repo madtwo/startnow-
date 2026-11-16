@@ -83,7 +83,11 @@ export default function CardDeck({ cards, personas, index, onIndex, onOpen, onLi
             {recent.length === 0 && '还没有人说话'}
             {recent.map((c, i) => (
               <span key={c.id} className="deck-comment">
-                <b>{personas.find((p) => p.id === c.authorId)?.name ?? '你'}</b>
+                <b>
+                  {c.authorId === 'helper'
+                    ? '论坛小助手'
+                    : personas.find((p) => p.id === c.authorId)?.name ?? '你'}
+                </b>
                 {c.text}
                 {i < recent.length - 1 ? '　' : ''}
               </span>

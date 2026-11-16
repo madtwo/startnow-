@@ -98,6 +98,7 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     title: typeof raw.title === 'string' ? raw.title : undefined,
     kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'guide' ? 'guide' : 'worry',
     likes: typeof raw.likes === 'number' ? raw.likes : 0,
+    helperAt: typeof raw.helperAt === 'number' ? raw.helperAt : undefined,
     likedByMe: Boolean(raw.likedByMe),
     text: raw.text,
     createdAt,

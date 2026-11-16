@@ -192,7 +192,13 @@ export default function CardDetail({
                 >
                   <div className="comment-main">
                     <span className="comment-name">
-                      {isMe ? '你' : thread.persona ? '' : persona?.name}
+                      {isMe
+                        ? '你'
+                        : c.authorId === 'helper'
+                          ? '论坛小助手'
+                          : thread.persona
+                            ? ''
+                            : persona?.name}
                       {c.kind === 'advice' && <span className="advice-tag">建议</span>}
                     </span>
                     <p className="comment-text">{c.text}</p>
