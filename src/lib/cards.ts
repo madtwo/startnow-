@@ -68,7 +68,7 @@ export function createPlayerCard(
     personaId: p.id,
     at:
       now +
-      ((i === 0 ? rand(20, 60) : i === 1 ? rand(70, 180) : rand(180, 360)) * 1000) / scale(settings),
+      ((i === 0 ? rand(8, 20) : i === 1 ? rand(20, 50) : rand(45, 90)) * 1000) / scale(settings),
   }));
   return {
     id: uid(),
@@ -132,7 +132,7 @@ export function addPlayerComment(
     return { ...card, comments, pending, status: card.status === 'stuck' ? 'talking' : card.status };
   }
   if (pending.length < 3) {
-    pending.push({ personaId: target, at: now + (rand(8, 35) * 1000) / speed, phase: 'reply' });
+    pending.push({ personaId: target, at: now + (rand(3, 12) * 1000) / speed, phase: 'reply' });
   }
   return {
     ...card,
@@ -693,6 +693,65 @@ export async function askForAdvice(
     calls,
     logs: [`${persona.name} 给了一个办法：${action.label}`],
   };
+}
+
+export async function catchUp(
+  input: TickInput & { hours: number },
+): Promise<{ cards: Card[]; personas: Persona[]; calls: number }> {
+  const count = Math.min(4, Math.max(1, Math.round(input.hours / 3)));
+  const ctx: Ctx = { config: input.config, settings: input.settings, calls: 0, logs: [] };
+  let personas = input.personas.map((p) => ({
+    ...p,
+    memory: [...p.memory],
+    weekLog: [...p.weekLog],
+  }));
+  const cards = [...input.cards];
+  const now = Date.now();
+
+  for (let i = 0; i < count; i++) {
+    if (!isMock(input.config) && ctx.calls >= 4) break;
+    const persona = personas[Math.floor(Math.random() * personas.length)];
+    if (!persona) break;
+    const weight = allowedWeight(persona.intimacy);
+    const at = now - rand(25, 25 + 55 * (i + 1)) * 60_000;
+    const recent = cards
+      .filter((c) => c.authorId === persona.id)
+      .slice(0, 3)
+      .map((c) => c.text);
+    const made = await generateAiCard(ctx, persona, recent, at, weight);
+    if (!made) continue;
+    const card: Card = {
+      id: uid(),
+      authorId: persona.id,
+      authorName: persona.name,
+      authorKind: 'persona',
+      text: made.text,
+      weight,
+      createdAt: at,
+      status: 'stuck',
+      arrivals: [],
+      plan: [],
+      pending: [],
+      comments: [],
+      topic: made.text.slice(0, 12),
+    };
+    const chosen = pickArrivals(
+      personas.filter((p) => p.id !== persona.id),
+      1 + (Math.random() < 0.5 ? 1 : 0),
+    );
+    chosen.forEach((p, idx) => {
+      card.pending.push({ personaId: p.id, at: at + (2 + idx * 3) * 60_000, phase: 'reply' });
+    });
+    cards.push(card);
+    if (made.fact) {
+      personas = personas.map((p) =>
+        p.id === persona.id
+          ? { ...p, weekLog: [...p.weekLog, { at, text: made.fact }].slice(-8) }
+          : p,
+      );
+    }
+  }
+  return { cards, personas, calls: ctx.calls };
 }
 
 export function markSeen(card: Card, now = Date.now()): Card {

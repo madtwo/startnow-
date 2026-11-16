@@ -16,6 +16,7 @@ import {
   acceptAdvice,
   addPlayerComment,
   askForAdvice,
+  catchUp,
   closeCard,
   completeCard,
   createPlayerCard,
@@ -258,7 +259,7 @@ export default function App() {
     setToast('炫耀帖发出去了');
   };
 
-  const advance = (hours: number) => {
+  const advance = async (hours: number) => {
     const cur = latest.current;
     const shift = hours * 3_600_000;
     const shifted = cur.cards.map((c) => ({
@@ -272,9 +273,21 @@ export default function App() {
     }));
     setCards(shifted);
     setTimeMenu(false);
-    setToast(`过了 ${hours} 小时`);
     busy.current = false;
-    void tick({ cards: shifted });
+    const res = await catchUp({
+      cards: shifted,
+      personas: cur.personas,
+      settings: cur.settings,
+      config: cur.config,
+      hours,
+    });
+    setCards(res.cards);
+    setPersonas(res.personas);
+    if (res.calls) {
+      setWorld((w) => ({ ...w, callsToday: w.callsToday + res.calls }));
+    }
+    setToast(`过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`);
+    await tick({ cards: res.cards });
   };
 
   const openCard = (card: Card) => {
