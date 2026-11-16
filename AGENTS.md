@@ -12,8 +12,9 @@
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # tsc --noEmit && vite build
+npm run dev         # http://localhost:5173（默认绑定 127.0.0.1）
+npm run build       # tsc --noEmit && vite build
+npm run test:review # 53 项线下边界/来源/重试回归
 ```
 
 默认就是演示模式，打开即用；真实模型在「我的 → API 设置」里切换。

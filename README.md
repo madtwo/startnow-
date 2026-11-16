@@ -22,6 +22,7 @@ npm run dev
 
 ```bash
 npm run build
+npm run test:review
 ```
 
 ## 数据
