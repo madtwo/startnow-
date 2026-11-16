@@ -37,16 +37,16 @@ export default function CardDetail({
   onBack,
   onLike,
 }: Props) {
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [modes, setModes] = useState<Record<string, 'comment' | 'advice'>>({});
-  const [activeThread, setActiveThread] = useState('');
-  const [general, setGeneral] = useState('');
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [draft, setDraft] = useState('');
+  const [mode, setMode] = useState<'comment' | 'advice'>('comment');
+  const [replyTo, setReplyTo] = useState(card.authorKind === 'persona' ? card.authorId : '');
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const author = personas.find((p) => p.id === card.authorId);
   const mine = card.authorId === 'me';
   const giver = card.advice ? personas.find((p) => p.id === card.advice?.fromPersonaId) : undefined;
   const closed = card.status === 'done' || card.status === 'handled';
   const isGuide = card.kind === 'guide';
+  const target = personas.find((p) => p.id === replyTo);
 
   const threads = useMemo<Thread[]>(() => {
     const map = new Map<string, Comment[]>();
@@ -68,12 +68,17 @@ export default function CardDetail({
     return rows;
   }, [card, personas]);
 
-  const send = (threadKey: string) => {
-    const text = (drafts[threadKey] ?? '').trim();
+  const send = () => {
+    const text = draft.trim();
     if (!text || busy) return;
-    onComment(text, modes[threadKey] ?? 'comment', threadKey);
-    setDrafts((prev) => ({ ...prev, [threadKey]: '' }));
-    setModes((prev) => ({ ...prev, [threadKey]: 'comment' }));
+    onComment(text, mode === 'advice' ? 'advice' : 'comment', replyTo);
+    setDraft('');
+    setMode('comment');
+  };
+
+  const pick = (peerId: string) => {
+    setReplyTo(peerId);
+    inputRef.current?.focus();
   };
 
   return (
@@ -99,10 +104,10 @@ export default function CardDetail({
           <div>
             <p className="page-author">
               {card.authorName}
-              {!mine && <span className="thread-badge">AI</span>}
+              {!mine && !isGuide && <span className="thread-badge">AI</span>}
               {mine && <span className="me-badge">你</span>}
             </p>
-            <p className="page-sub">{isGuide ? '论坛的说明' : author ? 'AI 同伴' : '一张卡'}</p>
+            <p className="page-sub">{isGuide ? '论坛的说明' : author ? 'AI 同伴' : '楼主'}</p>
           </div>
         </div>
       </header>
@@ -131,14 +136,6 @@ export default function CardDetail({
         </div>
       )}
 
-      {!isGuide && (
-      <div className="page-like-row">
-        <button className={`like ${card.likedByMe ? 'on' : ''}`} onClick={onLike}>
-          ♥ {card.likes ?? 0}
-        </button>
-      </div>
-      )}
-
       {!isGuide && card.note && card.status === 'noted' && (
         <div className="sticky-note">
           <span className="sticky-tag">便签</span>
@@ -149,7 +146,15 @@ export default function CardDetail({
         </div>
       )}
 
-      {!isGuide && mine && !card.advice && card.arrivals.length > 0 && !closed && (
+      {!isGuide && (
+        <div className="page-like-row">
+          <button className={`like ${card.likedByMe ? 'on' : ''}`} onClick={onLike}>
+            ♥ {card.likes ?? 0}
+          </button>
+        </div>
+      )}
+
+      {mine && !card.advice && card.arrivals.length > 0 && !closed && (
         <div className="card-actions">
           <button className="btn btn-ghost" onClick={onAdvice} disabled={busy}>
             直接给我个办法
@@ -160,18 +165,20 @@ export default function CardDetail({
       <h2 className="page-comments-title">{card.comments.length} 条回应</h2>
 
       <div className="page-threads">
-        {threads.length === 0 && <p className="view-empty">还没有人说话。等一会儿，或者先回一句。</p>}
+        {threads.length === 0 && (
+          <p className="view-empty">还没有人说话。等一会儿，或者在下面先回楼主一句。</p>
+        )}
         {threads.map((thread) => (
           <section
             key={thread.key}
-            className="page-thread"
+            className={`page-thread ${replyTo === thread.key ? 'targeted' : ''}`}
             style={thread.persona ? ({ '--pc': thread.persona.color } as CSSProperties) : undefined}
           >
             {thread.persona && (
               <div className="page-thread-head">
                 <Avatar avatarKey={thread.persona.avatarKey} color={thread.persona.color} size="xs" />
                 <span>{thread.persona.name}</span>
-                <em>{thread.persona.tagline}</em>
+                {replyTo === thread.persona.id && <em>正在回复</em>}
               </div>
             )}
             {thread.rows.map((c) => {
@@ -180,11 +187,10 @@ export default function CardDetail({
               return (
                 <div
                   key={c.id}
-                  className={`comment ${isMe ? 'mine' : ''} lineless`}
+                  className={`comment ${isMe ? 'mine' : ''} lineless clickable`}
                   onClick={() => {
-                    if (!thread.persona || closed) return;
-                    setActiveThread(thread.key);
-                    inputRefs.current[thread.key]?.focus();
+                    if (thread.persona) pick(thread.persona.id);
+                    else if (c.peer) pick(c.peer);
                   }}
                 >
                   <div className="comment-main">
@@ -203,78 +209,60 @@ export default function CardDetail({
                 </div>
               );
             })}
-            {!closed && thread.persona && (
-              <div className="page-reply">
-                <button
-                  className={`advice-toggle ${modes[thread.key] === 'advice' ? 'on' : ''}`}
-                  onClick={() =>
-                    setModes((prev) => ({
-                      ...prev,
-                      [thread.key]: prev[thread.key] === 'advice' ? 'comment' : 'advice',
-                    }))
-                  }
-                >
-                  {modes[thread.key] === 'advice' ? '建议中' : '给建议'}
-                </button>
-                <input
-                  ref={(el) => {
-                    inputRefs.current[thread.key] = el;
-                  }}
-                  className={activeThread === thread.key ? 'active' : ''}
-                  value={drafts[thread.key] ?? ''}
-                  placeholder={`回 ${thread.persona.name} 一句`}
-                  onChange={(e) => setDrafts((prev) => ({ ...prev, [thread.key]: e.target.value }))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') send(thread.key);
-                  }}
-                />
-                <button
-                  className="foot-send"
-                  onClick={() => send(thread.key)}
-                  disabled={!(drafts[thread.key] ?? '').trim() || busy}
-                >
-                  发
-                </button>
-              </div>
-            )}
           </section>
         ))}
       </div>
 
       {!isGuide && !closed && (
-        <div className="page-general">
-          <input
-            value={general}
-            placeholder="不一定回复谁，自己说一句"
-            onChange={(e) => setGeneral(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && general.trim()) {
-                onComment(general.trim(), 'comment', '');
-                setGeneral('');
-              }
-            }}
-          />
-          <button
-            className="foot-send"
-            disabled={!general.trim() || busy}
-            onClick={() => {
-              if (!general.trim()) return;
-              onComment(general.trim(), 'comment', '');
-              setGeneral('');
-            }}
-          >
-            说一句
+        <div className="page-composer">
+          <div className="page-composer-head">
+            <span className="page-composer-to">
+              {target ? `给 ${target.name} 回复` : mine ? '说一句（不指定人）' : '回复楼主'}
+            </span>
+            {target && (
+              <button className="page-composer-reset" onClick={() => setReplyTo('')}>
+                {mine ? '改成自己说' : '取消指定'}
+              </button>
+            )}
+            <button
+              className={`advice-toggle ${mode === 'advice' ? 'on' : ''}`}
+              onClick={() => setMode((m) => (m === 'advice' ? 'comment' : 'advice'))}
+            >
+              {mode === 'advice' ? '建议中' : '给建议'}
+            </button>
+          </div>
+          <div className="page-composer-row">
+            <input
+              ref={inputRef}
+              value={draft}
+              placeholder={target ? `给 ${target.name} 回复…` : mine ? '说一句…' : '回复楼主…'}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') send();
+              }}
+            />
+            <button className="foot-send" onClick={send} disabled={!draft.trim() || busy}>
+              发
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isGuide && (
+        <div className="page-close-row">
+          <button className="btn btn-ghost" onClick={onBack}>
+            知道了
           </button>
         </div>
       )}
 
-      {(mine && !closed && !isGuide) || isGuide ? (
+      {mine && !closed && !isGuide && (
         <div className="page-close-row">
-          <button className="btn btn-ghost" onClick={isGuide ? onBack : onCloseCard}>
-            {isGuide ? '知道了' : '先这样吧'}
+          <button className="btn btn-ghost" onClick={onCloseCard}>
+            先这样吧
           </button>
         </div>
-      ) : null}
+      )}
     </article>
   );
 }
