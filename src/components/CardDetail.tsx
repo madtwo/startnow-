@@ -264,6 +264,9 @@ export default function CardDetail({
               发
             </button>
           </div>
+          {!mine && (
+            <p className="page-composer-note">你只是递一句，接不接、做不做，是他们自己的事。</p>
+          )}
         </div>
       )}
 

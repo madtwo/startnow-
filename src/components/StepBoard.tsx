@@ -145,7 +145,9 @@ export default function StepBoard({
           <p className="step-empty-text">
             四个 AI 同学会先听你说，再陪你把它缩成一个现在能做的小动作。他们卡住时，你也可以去拉一把。
           </p>
-          <p className="step-ai-note">四位同伴都是 AI，会自己发帖，也会卡住。</p>
+          <p className="step-ai-note">
+            四位同伴都是虚构的 AI 同学，和你在不同学校；只在论坛上聊。你不需要对他们的情绪负责。
+          </p>
           <div className="step-actions">
             <button className="btn btn-primary" onClick={onWrite}>
               写一张卡

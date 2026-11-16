@@ -11,7 +11,7 @@ import StepBoard from './components/StepBoard';
 import Tour from './components/Tour';
 import CrisisCard from './components/CrisisCard';
 import SettingsDialog from './components/SettingsDialog';
-import { isReady } from './config/providers';
+import { isMock, isReady } from './config/providers';
 import { HOTLINE } from './lib/crisis';
 import { findCrisis } from './lib/safety';
 import {
@@ -857,6 +857,9 @@ export default function App() {
                 <span>你给的下一步：{c.advice?.text}</span>
               </div>
             ))}
+            {helped.length > 0 && (
+              <p className="view-empty">你只是递过一句，接不接、做不做，是他们自己的事。</p>
+            )}
           </section>
 
           <section className="profile-block">
@@ -884,7 +887,10 @@ export default function App() {
               </button>
             </div>
             <p className="view-empty">
-              这里的 {personas.length} 位同伴都是 AI。他们不是心理咨询师，内容不构成医疗建议。
+              卡片、便签、同伴记忆和 API Key 只存在这台浏览器；导出文件会包含它们。
+            </p>
+            <p className="view-empty">
+              这里的 {personas.length} 位同伴都是虚构的 AI 角色，和你在不同学校；不是心理咨询师，内容不构成医疗建议。
             </p>
           </section>
         </main>
@@ -1009,8 +1015,12 @@ export default function App() {
           <p className="foot-brand">先动一下 · StartNow</p>
           <p>不保证长期陪伴，只帮你看清当下能做的最小一步。</p>
           <p>
-            这里的同伴都是 AI。如有伤害自己的念头，请拨打 <strong>{HOTLINE}</strong> 心理援助热线。
+            这里的同伴都是虚构的 AI 同学，和你在不同学校；只在论坛上聊。如有伤害自己的念头，请拨打{' '}
+            <strong>{HOTLINE}</strong> 心理援助热线。
           </p>
+          {isMock(config) && (
+            <p className="foot-demo">当前是演示模式：同伴回复由本地脚本生成，不是真实模型。</p>
+          )}
         </div>
       </footer>
 

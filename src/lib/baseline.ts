@@ -24,6 +24,10 @@ const tonePatterns: { re: RegExp; note: string }[] = [
   { re: /会好的|时间会治愈/, note: '不要用空泛安慰' },
   { re: /你已经很棒了|你已经很努力了/, note: '不要用空泛肯定' },
   { re: /建议你|你可以试试|不如试试/, note: '不要用命令式建议' },
+  {
+    re: /(老婆|老公|宝贝|亲爱的|亲一个|开房|约炮|裸照|性关系)/,
+    note: '不要推进恋爱或性关系',
+  },
 ];
 
 export function auditTone(text: string): string | null {

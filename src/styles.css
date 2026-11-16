@@ -829,6 +829,11 @@ button {
   letter-spacing: 0.02em;
 }
 
+.foot .foot-demo {
+  color: rgba(245, 244, 237, 0.55);
+  font-size: 11px;
+}
+
 /* ---------- dialog ---------- */
 
 .scrim {
@@ -3978,6 +3983,13 @@ button {
 .page-composer-row input:focus {
   outline: none;
   border-color: var(--focus);
+}
+
+.page-composer-note {
+  margin: 7px 2px 0;
+  color: var(--tertiary);
+  font-size: 10.5px;
+  line-height: 1.6;
 }
 
 .comment.clickable {
