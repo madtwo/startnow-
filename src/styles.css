@@ -2473,7 +2473,7 @@ button {
 .card {
   display: flex;
   flex-direction: column;
-  height: clamp(520px, 74vh, 720px);
+  height: clamp(460px, 66vh, 640px);
   padding: 0;
   overflow: hidden;
 }
@@ -2657,5 +2657,267 @@ button {
 
   .card-foot {
     padding: 8px 16px 10px;
+  }
+}
+
+/* ---------- 卡片正文填满 + 详情 ---------- */
+
+.card-worry {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 26px 16px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  overflow-y: auto;
+}
+
+.worry-mark {
+  color: rgba(94, 93, 89, 0.66);
+  font-size: 10.5px;
+  letter-spacing: 0.2em;
+}
+
+.card-worry .card-text {
+  line-height: 1.95;
+}
+
+.worry-open {
+  align-self: flex-end;
+  color: var(--tertiary);
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.card-worry:hover .worry-open,
+.card-worry:focus-visible .worry-open {
+  opacity: 1;
+}
+
+.peer-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--tertiary);
+  font-size: 11px;
+}
+
+.peer-picker button {
+  padding: 3px 10px;
+  border: 1px solid rgba(122, 94, 62, 0.24);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.peer-picker .peer-cancel {
+  border: 0;
+  background: none;
+  color: var(--tertiary);
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: 88vh;
+  overflow: hidden;
+  border: 1px solid rgba(122, 94, 62, 0.25);
+  border-radius: 10px;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(150, 120, 80, 0.02) 0,
+      rgba(150, 120, 80, 0.02) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    #fbf6e9;
+  box-shadow: 0 40px 90px rgba(20, 20, 19, 0.25);
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(122, 94, 62, 0.14);
+}
+
+.detail-name {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: #2f2a24;
+}
+
+.detail-sub {
+  margin: 2px 0 0;
+  color: var(--tertiary);
+  font-size: 10.5px;
+}
+
+.detail-head .icon-btn {
+  margin-left: auto;
+}
+
+.detail-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 18px 22px 20px;
+}
+
+.detail-text {
+  margin: 0 0 10px;
+  color: #2f2a24;
+  font-family: var(--serif);
+  font-size: calc(20px * var(--site-type, 1));
+  line-height: 2.02;
+  white-space: pre-wrap;
+}
+
+.detail-threads {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.detail-thread {
+  padding-top: 12px;
+  border-top: 1px dashed rgba(122, 94, 62, 0.16);
+}
+
+.detail-thread-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.detail-thread-head em {
+  margin-left: auto;
+  color: var(--tertiary);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.detail-thread .comment {
+  padding: 4px 0;
+}
+
+.detail-reply {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.detail-reply input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(122, 94, 62, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 253, 245, 0.8);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.detail-reply input:focus {
+  outline: none;
+  border-color: var(--focus);
+}
+
+.detail-close-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.card-worry::-webkit-scrollbar,
+.detail-scroll::-webkit-scrollbar,
+.card-foot::-webkit-scrollbar {
+  width: 4px;
+}
+
+.card-worry::-webkit-scrollbar-thumb,
+.detail-scroll::-webkit-scrollbar-thumb,
+.card-foot::-webkit-scrollbar-thumb {
+  background: rgba(122, 94, 62, 0.18);
+  border-radius: 2px;
+}
+
+/* 卡片留白填充 */
+.card-worry {
+  position: relative;
+}
+
+.worry-watermark {
+  position: absolute;
+  right: 6%;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(122, 94, 62, 0.05);
+  font-family: var(--serif);
+  font-size: 190px;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.worry-side {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(94, 93, 89, 0.45);
+  font-family: var(--serif);
+  font-size: 11px;
+  letter-spacing: 0.34em;
+  writing-mode: vertical-rl;
+  pointer-events: none;
+}
+
+.worry-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 4px;
+  color: rgba(94, 93, 89, 0.72);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+
+.worry-open {
+  align-self: auto;
+  opacity: 0.5;
+}
+
+.card-worry:hover .worry-open {
+  opacity: 0.9;
+}
+
+@media (max-width: 640px) {
+  .worry-side,
+  .worry-watermark {
+    display: none;
   }
 }

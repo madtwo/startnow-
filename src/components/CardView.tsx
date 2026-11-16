@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Card, Comment, Identity, Persona } from '../types';
+import type { Card, Identity, Persona } from '../types';
 import Avatar from './Avatar';
 
 const MIN = 60_000;
@@ -11,6 +11,16 @@ const timeLabel = (ts: number) => {
   if (diff < 24 * 60 * MIN) return `${Math.floor(diff / (60 * MIN))} 小时前`;
   const d = new Date(ts);
   return `${d.getMonth() + 1}月${d.getDate()}日`;
+};
+
+const dayLabel = (ts: number) => {
+  const diff = Math.floor((Date.now() - ts) / 86_400_000);
+  if (diff <= 0) {
+    const d = new Date(ts);
+    return `今天 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+  if (diff === 1) return '昨天';
+  return `${diff} 天前`;
 };
 
 const STATUS: Record<Card['status'], string> = {
@@ -34,12 +44,7 @@ interface Props {
   onAccept: () => void;
   onDone: () => void;
   onCloseCard: () => void;
-}
-
-interface Thread {
-  key: string;
-  persona?: Persona;
-  rows: Comment[];
+  onOpenDetail: () => void;
 }
 
 export default function CardView({
@@ -53,58 +58,51 @@ export default function CardView({
   onAccept,
   onDone,
   onCloseCard,
+  onOpenDetail,
 }: Props) {
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<'idle' | 'comment' | 'advice'>('idle');
   const [replyTo, setReplyTo] = useState('');
-  const [expanded, setExpanded] = useState(false);
+  const [picking, setPicking] = useState(false);
   const author = personas.find((p) => p.id === card.authorId);
   const mine = card.authorId === 'me';
   const giver = card.advice ? personas.find((p) => p.id === card.advice?.fromPersonaId) : undefined;
-  const arrived = card.arrivals
-    .map((id) => personas.find((p) => p.id === id))
-    .filter((p): p is Persona => Boolean(p));
   const closed = card.status === 'done' || card.status === 'handled';
 
-  const threads = useMemo<Thread[]>(() => {
-    const map = new Map<string, Comment[]>();
+  const participants = useMemo<Persona[]>(() => {
+    const ids = new Set<string>();
+    card.arrivals.forEach((id) => ids.add(id));
     card.comments.forEach((c) => {
-      const key = c.authorKind === 'persona' ? c.authorId : c.peer ?? '_';
-      map.set(key, [...(map.get(key) ?? []), c]);
+      if (c.authorKind === 'persona') ids.add(c.authorId);
+      else if (c.peer) ids.add(c.peer);
     });
-    return [...map.entries()].map(([key, rows]) => ({
-      key,
-      persona: key === '_' ? undefined : personas.find((p) => p.id === key),
-      rows,
-    }));
-  }, [card.comments, personas]);
+    if (card.authorKind === 'persona') ids.add(card.authorId);
+    return [...ids].map((id) => personas.find((p) => p.id === id)).filter((p): p is Persona => Boolean(p));
+  }, [card, personas]);
 
-  const lastComment = card.comments[card.comments.length - 1];
-  const defaultPeer =
-    lastComment?.authorKind === 'persona'
-      ? lastComment.authorId
-      : card.authorKind === 'persona'
-        ? card.authorId
-        : arrived[0]?.id ?? '';
   const target = personas.find((p) => p.id === replyTo);
+  const recent = card.comments.slice(-2);
+  const canAsk = mine && !card.advice && card.arrivals.length > 0 && !closed;
 
-  const openCompose = (next: 'comment' | 'advice') => {
-    if (!replyTo) setReplyTo(defaultPeer);
+  const choose = (peerId: string, next: 'comment' | 'advice') => {
+    setReplyTo(peerId);
+    setPicking(false);
     setMode(next);
+  };
+
+  const start = (next: 'comment' | 'advice') => {
+    if (participants.length === 1) choose(participants[0].id, next);
+    else if (participants.length > 1) setPicking(true);
+    else if (participants.length === 0 && card.authorKind === 'persona') choose(card.authorId, next);
   };
 
   const send = () => {
     const text = draft.trim();
-    if (!text || busy) return;
-    const peer = replyTo || defaultPeer;
-    if (mode === 'advice' && !peer) return;
-    onComment(text, mode === 'advice' ? 'advice' : 'comment', peer || undefined);
+    if (!text || busy || !replyTo) return;
+    onComment(text, mode === 'advice' ? 'advice' : 'comment', replyTo);
     setDraft('');
     setMode('idle');
   };
-
-  const canAsk = mine && !card.advice && card.arrivals.length > 0 && !closed;
-  const recent = card.comments.slice(-2);
 
   return (
     <article className={`card ${card.status === 'done' ? 'is-done' : ''}`}>
@@ -129,143 +127,119 @@ export default function CardView({
         {!mine && <span className={`card-status s-${card.status}`}>{STATUS[card.status]}</span>}
       </header>
 
-      <div className="card-worry">
-        <p className="card-text">{card.text}</p>
+      <button className="card-worry" onClick={onOpenDetail} title="点开看全部对话">
+        <span className="worry-watermark" aria-hidden="true">
+          {(author?.name ?? '我').slice(-1)}
+        </span>
+        <span className="worry-side" aria-hidden="true">
+          {author?.name ?? '我'} · {dayLabel(card.createdAt)}
+        </span>
+        <span className="worry-mark">{author ? author.major || '这里' : '我的卡'}</span>
+        <p
+          className="card-text"
+          style={{
+            fontSize: `calc(${card.text.length <= 24 ? 30 : card.text.length <= 48 ? 25 : 21}px * var(--site-type, 1))`,
+          }}
+        >
+          {card.text}
+        </p>
         {card.image && <img className="card-image" src={card.image} alt="卡里配的图" />}
-        {arrived.length > 0 && (
-          <div className="card-arrivals">
-            <span>来过</span>
-            <span className="arrival-avatars">
-              {arrived.map((p) => (
-                <span key={p.id} title={p.name}>
-                  <Avatar avatarKey={p.avatarKey} color={p.color} size="xs" />
-                </span>
-              ))}
-            </span>
-          </div>
-        )}
+        <span className="worry-foot">
+          <span>
+            {dayLabel(card.createdAt)} · {author ? `${author.major} ${author.cohort}` : '你写的'}
+          </span>
+          <span className="worry-open">点开看全部 →</span>
+        </span>
+      </button>
 
-        {card.advice && !closed && (
-          <div className="advice">
-            <div className="advice-head">
-              <span className="advice-from">{giver ? `${giver.name}的办法` : '你的建议'}</span>
+      {card.advice && !closed && (
+        <div className="advice">
+          <div className="advice-head">
+            <span className="advice-from">{giver ? `${giver.name}的办法` : '你的建议'}</span>
+          </div>
+          <p className="advice-label">{card.advice.text}</p>
+          {mine && !card.advice.accepted && (
+            <div className="advice-actions">
+              <button className="btn btn-ghost" onClick={onShrink}>
+                做不到
+              </button>
+              <button className="btn btn-primary" onClick={onAccept}>
+                贴到便签
+              </button>
             </div>
-            <p className="advice-label">{card.advice.text}</p>
-            {mine && !card.advice.accepted && (
-              <div className="advice-actions">
-                <button className="btn btn-ghost" onClick={onShrink}>
-                  做不到
-                </button>
-                <button className="btn btn-primary" onClick={onAccept}>
-                  贴到便签
-                </button>
-              </div>
-            )}
-            {!mine && card.advice.accepted && <span className="advice-note">TA 说会试试</span>}
-          </div>
-        )}
+          )}
+          {!mine && card.advice.accepted && <span className="advice-note">TA 说会试试</span>}
+        </div>
+      )}
 
-        {card.note && card.status === 'noted' && (
-          <div className="sticky-note">
-            <span className="sticky-tag">便签</span>
-            <p>{card.note.text}</p>
-            <span className="sticky-hint">24 小时内没做，它就自己消失</span>
-            <button className="btn btn-primary" onClick={onDone}>
-              我做到了
-            </button>
-          </div>
-        )}
+      {card.note && card.status === 'noted' && (
+        <div className="sticky-note">
+          <span className="sticky-tag">便签</span>
+          <p>{card.note.text}</p>
+          <button className="btn btn-primary" onClick={onDone}>
+            我做到了
+          </button>
+        </div>
+      )}
 
-        {(canAsk || (mine && !closed)) && (
-          <div className="card-actions">
-            {canAsk && (
-              <button className="btn btn-ghost" onClick={onAdvice} disabled={busy}>
-                直接给我个办法
-              </button>
-            )}
-            {mine && !closed && (
-              <button className="btn btn-ghost" onClick={onCloseCard}>
-                先这样吧
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      {canAsk && (
+        <div className="card-actions">
+          <button className="btn btn-ghost" onClick={onAdvice} disabled={busy}>
+            直接给我个办法
+          </button>
+          <button className="btn btn-ghost" onClick={onCloseCard}>
+            先这样吧
+          </button>
+        </div>
+      )}
 
       <div className="card-foot">
         <div className="foot-comments">
           {recent.length === 0 && <span className="foot-empty">还没有人说话</span>}
-          {!expanded &&
-            recent.map((c) => {
-              const persona = personas.find((p) => p.id === c.authorId);
-              const isMe = c.authorKind === 'player';
-              return (
-                <div key={c.id} className="foot-comment">
-                  <span className="foot-who">{isMe ? '你' : persona?.name}</span>
-                  <span className="foot-text">{c.text}</span>
-                  <span className="foot-time">{timeLabel(c.at)}</span>
-                </div>
-              );
-            })}
-          {expanded &&
-            threads.map((thread) => (
-              <div key={thread.key} className="foot-thread">
-                <div className="foot-thread-head">
-                  {thread.persona && (
-                    <>
-                      <Avatar
-                        avatarKey={thread.persona.avatarKey}
-                        color={thread.persona.color}
-                        size="xs"
-                      />
-                      <span>{thread.persona.name}</span>
-                    </>
-                  )}
-                  {thread.persona && !closed && (
-                    <button
-                      className="thread-reply"
-                      onClick={() => {
-                        setReplyTo(thread.persona!.id);
-                        setMode('comment');
-                      }}
-                    >
-                      回复
-                    </button>
-                  )}
-                </div>
-                {thread.rows.map((c) => (
-                  <div key={c.id} className="foot-comment">
-                    <span className="foot-who">
-                      {c.authorKind === 'player' ? '你' : thread.persona?.name}
-                    </span>
-                    <span className="foot-text">
-                      {c.kind === 'advice' ? `建议：${c.text}` : c.text}
-                    </span>
-                    <span className="foot-time">{timeLabel(c.at)}</span>
-                  </div>
-                ))}
+          {recent.map((c) => {
+            const persona = personas.find((p) => p.id === c.authorId);
+            const isMe = c.authorKind === 'player';
+            return (
+              <div key={c.id} className="foot-comment">
+                <span className="foot-who">{isMe ? '你' : persona?.name}</span>
+                <span className="foot-text">{c.text}</span>
+                <span className="foot-time">{timeLabel(c.at)}</span>
               </div>
-            ))}
+            );
+          })}
+          {card.comments.length > 2 && (
+            <button className="foot-more" onClick={onOpenDetail}>
+              共 {card.comments.length} 条 · 点开看全部
+            </button>
+          )}
         </div>
 
-        {card.comments.length > 2 && (
-          <button className="foot-more" onClick={() => setExpanded((v) => !v)}>
-            {expanded ? '收起' : `全部 ${card.comments.length} 条`}
-          </button>
+        {picking && (
+          <div className="peer-picker">
+            <span>回复谁</span>
+            {participants.map((p) => (
+              <button key={p.id} onClick={() => choose(p.id, mode === 'advice' ? 'advice' : 'comment')}>
+                {p.name}
+              </button>
+            ))}
+            <button className="peer-cancel" onClick={() => setPicking(false)}>
+              算了
+            </button>
+          </div>
         )}
 
-        {!closed && (
+        {!closed && !picking && (
           <div className="foot-actions">
             {mode === 'idle' ? (
               <>
-                <button className="foot-btn" onClick={() => openCompose('comment')}>
+                <button className="foot-btn" onClick={() => start('comment')}>
                   回一句
                 </button>
-                <button className="foot-btn" onClick={() => openCompose('advice')}>
+                <button className="foot-btn" onClick={() => start('advice')}>
                   给出建议
                 </button>
                 <span className="foot-peer">
-                  {target ? `回复 ${target.name}` : '默认回最后说话的人'}
+                  {target ? `回复 ${target.name}` : '选一个人再回'}
                 </span>
               </>
             ) : (

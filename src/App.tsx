@@ -4,6 +4,7 @@ import Avatar from './components/Avatar';
 import PostForm from './components/PostForm';
 import Onboarding from './components/Onboarding';
 import CardView from './components/CardView';
+import CardDetail from './components/CardDetail';
 import CrisisCard from './components/CrisisCard';
 import SettingsDialog from './components/SettingsDialog';
 import { configLabel, isReady } from './config/providers';
@@ -86,6 +87,7 @@ export default function App() {
   const [settingsNotice, setSettingsNotice] = useState('');
   const [adminOpen, setAdminOpen] = useState(false);
   const [crisis, setCrisis] = useState('');
+  const [detailId, setDetailId] = useState('');
   const brandClicks = useRef<number[]>([]);
   const busy = useRef(false);
 
@@ -370,6 +372,7 @@ export default function App() {
     onAccept: () => patch(card.id, (c) => acceptAdvice(c)),
     onDone: () => patch(card.id, (c) => completeCard(c, Date.now(), settings.speed)),
     onCloseCard: () => patch(card.id, (c) => closeCard(c)),
+    onOpenDetail: () => setDetailId(card.id),
   });
 
   return (
@@ -671,6 +674,24 @@ export default function App() {
           </p>
         </div>
       </footer>
+
+      {detailId && cards.find((c) => c.id === detailId) && (() => {
+        const card = cards.find((c) => c.id === detailId)!;
+        return (
+          <CardDetail
+            card={card}
+            me={identity}
+            personas={personas}
+            busy={working}
+            onComment={(text, kind, peer) => comment(card, text, kind, peer)}
+            onShrink={() => patch(card.id, (c) => shrinkAdvice(c))}
+            onAccept={() => patch(card.id, (c) => acceptAdvice(c))}
+            onDone={() => patch(card.id, (c) => completeCard(c, Date.now(), settings.speed))}
+            onCloseCard={() => patch(card.id, (c) => closeCard(c))}
+            onClose={() => setDetailId('')}
+          />
+        );
+      })()}
 
       {settingsOpen && (
         <SettingsDialog
