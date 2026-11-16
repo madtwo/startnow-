@@ -13,6 +13,7 @@ const card = (row: Partial<Card> & { text: string; authorId: string; authorName:
   plan: [],
   pending: [],
   comments: [],
+  readAt: row.readAt ?? row.createdAt ?? Date.now(),
   ...row,
 });
 

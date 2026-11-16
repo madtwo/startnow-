@@ -141,6 +141,7 @@ export interface Card {
   doneAt?: number;
   handledAt?: number;
   seenAt?: number;
+  readAt?: number;
   refused?: number;
   topic?: string;
   noMemory?: boolean;

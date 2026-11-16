@@ -15,6 +15,7 @@ interface Props {
   onCloseCard: () => void;
   onBack: () => void;
   onLike: () => void;
+  initialPeer?: string;
 }
 
 interface Thread {
@@ -36,10 +37,13 @@ export default function CardDetail({
   onCloseCard,
   onBack,
   onLike,
+  initialPeer,
 }: Props) {
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<'comment' | 'advice'>('comment');
-  const [replyTo, setReplyTo] = useState(card.authorKind === 'persona' ? card.authorId : '');
+  const [replyTo, setReplyTo] = useState(
+    initialPeer || (card.authorKind === 'persona' ? card.authorId : ''),
+  );
   const inputRef = useRef<HTMLInputElement | null>(null);
   const author = personas.find((p) => p.id === card.authorId);
   const mine = card.authorId === 'me';

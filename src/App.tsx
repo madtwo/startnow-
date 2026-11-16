@@ -20,7 +20,6 @@ import {
   closeCard,
   completeCard,
   createPlayerCard,
-  markSeen,
   notePlayerShare,
   personaCard,
   shrinkAdvice,
@@ -55,6 +54,7 @@ import {
 } from './lib/store';
 import type {
   Card,
+  Comment,
   Identity,
   LlmConfig,
   MemoryEntry,
@@ -116,6 +116,8 @@ export default function App() {
   );
   const [deckIndex, setDeckIndex] = useState(0);
   const [timeMenu, setTimeMenu] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [detailPeer, setDetailPeer] = useState('');
   const [detailId, setDetailId] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState('');
@@ -290,9 +292,15 @@ export default function App() {
     await tick({ cards: res.cards });
   };
 
-  const openCard = (card: Card) => {
+  const openCard = (card: Card, peer?: string) => {
+    setDetailPeer(peer ?? '');
     setDetailId(card.id);
-    if (!card.seenAt) patch(card.id, (c) => markSeen(c));
+    patch(card.id, (c) => ({
+      ...c,
+      seenAt: c.seenAt ?? Date.now(),
+      readAt: Date.now(),
+    }));
+    setBellOpen(false);
     setView('detail');
   };
 
@@ -461,6 +469,27 @@ export default function App() {
     .filter((c) => c.advice?.accepted && c.advice.fromPersonaId === 'me')
     .sort((a, b) => b.createdAt - a.createdAt);
   const detailCard = cards.find((c) => c.id === detailId);
+  const notices = useMemo(() => {
+    const out: { card: Card; comment: Comment; persona?: Persona }[] = [];
+    cards.forEach((c) => {
+      if (c.kind === 'guide') return;
+      const since = c.readAt ?? 0;
+      const latest = [...c.comments]
+        .reverse()
+        .find(
+          (x) => x.authorKind === 'persona' && x.authorId !== 'helper' && x.at > since,
+        );
+      const participated =
+        c.authorId === 'me' || c.comments.some((x) => x.authorKind === 'player');
+      if (!latest || !participated) return;
+      out.push({
+        card: c,
+        comment: latest,
+        persona: personas.find((p) => p.id === latest.authorId),
+      });
+    });
+    return out.sort((a, b) => b.comment.at - a.comment.at);
+  }, [cards, personas]);
 
   useEffect(() => {
     if (view !== 'home' || mode !== 'card') return;
@@ -503,6 +532,43 @@ export default function App() {
           </div>
         </div>
         <div className="top-actions">
+          <div className="bell-wrap">
+            <button
+              className="bell-btn"
+              onClick={() => setBellOpen((v) => !v)}
+              aria-label="回复通知"
+            >
+              <svg viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M6.8 16.4V11a5.2 5.2 0 0 1 10.4 0v5.4l1.4 1.8H5.4l1.4-1.8Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                />
+                <path d="M10.2 20.2a2 2 0 0 0 3.6 0" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+              {notices.length > 0 && (
+                <span className="bell-dot">{notices.length > 9 ? '9+' : notices.length}</span>
+              )}
+            </button>
+            {bellOpen && (
+              <div className="bell-panel">
+                <p className="bell-title">有人回了你</p>
+                {notices.length === 0 && <p className="bell-empty">还没有新的回复。</p>}
+                {notices.map((n) => (
+                  <button
+                    key={n.comment.id}
+                    className="bell-item"
+                    onClick={() => openCard(n.card, n.comment.authorId)}
+                  >
+                    <span className="bell-who">{n.persona?.name ?? '有人'}</span>
+                    <span className="bell-text">{n.comment.text}</span>
+                    <span className="bell-card">{n.card.title ?? n.card.text.slice(0, 12)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             className={`chip ${ready ? 'ok' : 'warn'}`}
             onClick={() => openSettings()}
@@ -639,6 +705,7 @@ export default function App() {
           <CardDetail
             card={detailCard}
             me={identity}
+            initialPeer={detailPeer}
             personas={personas}
             busy={working}
             onComment={(text, kind, peer) => comment(detailCard, text, kind, peer)}
