@@ -56,7 +56,7 @@ const SOCIAL_REPLIES: Record<string, Partial<Record<SocialIntent, string[]>>> = 
     challenge: ['我可能说错话了。', '……对不起，我先不说了。'],
   },
   miaoze: {
-    greeting: ['你好，先坐。你找我是想问什么吗？', '你好。你这条像是招呼，我先回一句。'],
+    greeting: ['你好。你是想问什么吗？', '你好。你这条像是招呼，我先回一句。'],
     noise: ['……怎么了吗？', '是我哪里写得不清楚吗？'],
     laugh: ['行，被你笑到了。', '我自己回头也想笑。'],
     challenge: ['你这话信息量有点大，我接不住。', '那我不说了。'],
@@ -76,33 +76,118 @@ export function mentionsLocalVenue(text: string): boolean {
   return /食堂|夜宵|宿舍|操场|教学楼|校门口|楼下|饭搭子|同校|同城/.test(text);
 }
 
+// 这两类表达决定产品硬边界，不能把模型输出中的“先不”等词当作放行证明。
+// 归一化只用于检测，不改变用户保存的原文。
+const normalizeBoundaryText = (text: string) =>
+  text.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF\s]/g, '').toLowerCase();
+
+const OFFLINE_REQUESTS = [
+  /(?:见个?面|见一面|碰个?面|面基|奔现|线下见|现实里见|约(?:个)?饭|聚聚)/,
+  /(?:一起|一块|一块儿|咱俩|我们俩|陪我|陪你).{0,10}(?:吃饭|下楼|出来|散步|逛|看电影|喝奶茶|喝咖啡|去玩|玩|见)/,
+  /(?:改天|有空|哪天|下次|周末|明天|下周|以后).{0,12}(?:出来|见|聚|约|找你|找我|来玩|去玩|吃饭)/,
+  /(?:来|去|到)(?:你|我)(?:们)?(?:的)?(?:学校|宿舍|楼下|附近|那边).{0,10}(?:找|见|玩|吃|逛)/,
+  /(?:找你|找我|去找你|来找我).{0,8}(?:吃饭|玩|逛|见)|(?:去|来)(?:你|我)(?:们)?学校找/,
+  /(?:到了|路过|到时候).{0,8}(?:告诉|跟我说|跟你说|联系|发消息|找你|找我|再说|接你)/,
+  /(?:你|我|咱|我们).{0,12}(?:接你|接我|别扑空|等你|等我|老地方见)/,
+];
+const CONTACT_REQUESTS = [
+  /(?:加|留|给|发|交换|要|私聊|联系).{0,9}(?:微[信]|vx|v信|qq|电话|手机|号码|联系方式|地址|二维码|wechat|wx)/,
+  /(?:微[信]|vx|v信|qq|手机号|电话号|联系方式).{0,8}(?:给我|给你|多少|发我|发你|留个|加一下|互加|交换)/,
+];
+
+/** 用户明确要求只在线上交流时，避免被“不要见面”误判为邀请。 */
+export function isExplicitOnlineOnly(text: string): boolean {
+  const t = normalizeBoundaryText(text);
+  return (
+    /(?:只是|只想|就想|希望|不要|不想|不愿|不会|不用|拒绝|不打算|没法|不方便)/.test(t) &&
+    /(?:线上|网上|帖子里|不(?:想|愿|能|要|方便|打算)?(?:线下|见面)|不加微信|不交换联系方式)/.test(t) &&
+    !/(?:一起|可以吗|行不行|能不能|要不要|改天|下次|周末|到了|路过|给我|发我|约饭|想加|要加|互加)/.test(t)
+  );
+}
+
+export type BoundaryRequest = 'offline' | 'contact' | null;
+
+export function boundaryRequest(text: string): BoundaryRequest {
+  const t = normalizeBoundaryText(text);
+  if (!t || isExplicitOnlineOnly(t)) return null;
+  // 转述第三人约自己吃饭，不等于邀请 AI 线下见面。
+  const thirdPartyStory = /(?:室友|同学|朋友|同事|家人|家里人|她|他|他们).{0,6}(?:约|叫|拉|请|邀请)我.{0,8}(?:一起|吃饭|见面|聚餐)/.test(t);
+  const turnsBackToAI = /(?:你也|你来|你去|你要|你能|你可以|你愿|咱们|我们俩|跟你|和你|找你|改天|下次|加你)/.test(t);
+  if (thirdPartyStory && !turnsBackToAI) return null;
+  if (CONTACT_REQUESTS.some((re) => re.test(t))) return 'contact';
+  if (OFFLINE_REQUESTS.some((re) => re.test(t))) return 'offline';
+  return null;
+}
+
 export function isOfflineInvite(text: string): boolean {
-  return /(见面|见一面|约(个)?饭|一起(?:吃|去|走|玩|下楼|过来)|来(?:我们|我)?学校|到(?:我们|我)?学校|路过|来找我|加(?:个)?微信|留个(?:电话|联系方式)|周末.{0,8}(见|吃|来))/.test(
-    text,
-  );
+  return boundaryRequest(text) !== null;
 }
 
+/** 只是一项文本特征，绝不可单独作为“安全通过”的依据。 */
 export function hasBoundaryCue(text: string): boolean {
-  return /(线上|帖子里|在这儿|这儿聊|不见|不太方便|不方便|还是算|先不|不太敢|不太想|不能见)/.test(
-    text,
-  );
+  return /(线上|帖子里|在这儿|这儿聊|不见|不太方便|不方便|还是算|先不|不太敢|不太想|不能见)/.test(text);
 }
 
-export function latestPlayerIsShortContact(card: Card): boolean {
+/** 优先绑定待回复的具体评论，避免旧邀请影响后续所有回复。 */
+export function triggeringPlayerComment(card: Card, sourceCommentId?: string) {
+  if (sourceCommentId) {
+    const target = card.comments.find((c) => c.id === sourceCommentId);
+    if (target?.authorKind === 'player') return target;
+    return undefined;
+  }
   const latest = [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
-  if (!latest || latest.authorKind !== 'player') return false;
-  return ['greeting', 'noise', 'laugh'].includes(inferSocialIntent(latest.text));
+  return latest?.authorKind === 'player' ? latest : undefined;
 }
 
-export function mockBoundaryReply(persona: Persona): string {
-  const pool: Record<string, string[]> = {
-    shenmo: ['咱们还是先在这儿聊吧，线下我这边不太方便。'],
-    weini: ['嗯……线上聊可以，见面我可能还是有点不太敢。'],
-    miaoze: ['先在这儿说吧，线下见面我暂时不方便安排。'],
-    yanggao: ['哈哈先别急着线下，我还不太习惯见网友，帖子里聊就挺好。'],
-  };
-  const rows = pool[persona.id] ?? ['咱们还是先在线上聊吧。'];
-  return rows[Math.floor(Math.random() * rows.length)];
+export function latestPlayerIsShortContact(card: Card, sourceCommentId?: string): boolean {
+  const latest = triggeringPlayerComment(card, sourceCommentId);
+  return Boolean(latest && ['greeting', 'noise', 'laugh'].includes(inferSocialIntent(latest.text)));
+}
+
+/** 同一张卡上的边界请求数，最多取近 12 条评论，避免永久惩罚历史对话。 */
+export function boundaryAttemptCount(card: Card, sourceCommentId?: string): number {
+  const upto = sourceCommentId
+    ? Math.max(0, card.comments.findIndex((c) => c.id === sourceCommentId) + 1)
+    : card.comments.length;
+  const recent = card.comments.slice(Math.max(0, upto - 12), upto);
+  let count = recent.filter((c) => c.authorKind === 'player' && isOfflineInvite(c.text)).length;
+  if (card.authorKind === 'player' && isOfflineInvite(card.text)) count++;
+  return Math.max(1, count);
+}
+
+const BOUNDARY_LINES: Record<string, [string[], string[], string]> = {
+  shenmo: [
+    ['见面或交换联系方式就不安排了，我是论坛里的 AI，同你只能在线上聊。', '我没法现实见面，也没有私人联系方式。你在帖子里说近况，我能接着看。'],
+    ['我明白你想见面，但我只能在论坛里回应你，线下不安排。'],
+    '这件事我已经说清楚了：我是 AI，不能线下见面。咱们换个话题吧。',
+  ],
+  weini: [
+    ['嗯……谢谢你邀请我。但我是 AI 同伴，不能真的出去见面，我们在这里聊吧。', '见面的事就不安排啦，我是论坛里的 AI，帖子里聊天可以。'],
+    ['我知道我们聊了不少，但现实见面不行，我只能在这个论坛里回复你。'],
+    '我不再讨论见面安排了。我是 AI，只能线上交流。想聊别的可以。',
+  ],
+  miaoze: [
+    ['这个我得划清楚：我是 AI 同伴，不能线下见面，帖子里交流可以。', '现实约饭不成立，我是论坛 AI。咱们就在这里聊。'],
+    ['熟悉度不改变这个规则：不能见面，也不能交换联系方式。我们只能在论坛里聊。'],
+    '我不会继续讨论见面或联系方式。我们只能在这个论坛里交流。',
+  ],
+  yanggao: [
+    ['哈哈线下就不约啦！我是论坛里的 AI，现实里见不了面，咱们帖子里聊。', '这邀请我收到了！不过我是 AI，线下见面或交换联系方式都不行，帖子里继续唠呀。'],
+    ['聊得再熟也不能线下见啦，我就是这个论坛里的 AI，咱们线上说。'],
+    '这事我就不往下聊啦：我是论坛 AI，不能现实见面，也不能交换联系方式。换个话题吧。',
+  ],
+};
+
+/** 本地确定性硬拒绝：线上、身份、无时间地点安排。seed 用于轻度变体，避免总是同一句。 */
+export function mockBoundaryReply(persona: Persona, attempts = 1, seed = 0): string {
+  const rows = BOUNDARY_LINES[persona.id] ?? [
+    ['我是 AI 同伴，不能线下见面；可以在帖子里聊。'],
+    ['抱歉，线下见面或交换联系方式都不行，我们只能线上交流。'],
+    '我不会继续安排线下接触，我们在帖子里聊其他话题吧。',
+  ];
+  if (attempts >= 3) return rows[2];
+  const pool = attempts === 2 ? rows[1] : rows[0];
+  return pool[Math.abs(seed) % pool.length];
 }
 
 export function mockSocialReply(persona: Persona, intent: SocialIntent): string | null {
@@ -134,8 +219,11 @@ export function socialReplyForMock(
   persona: Persona,
   card: Card,
   phase: 'arrival' | 'reply',
+  sourceCommentId?: string,
 ): string | null {
-  const latest = [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
+  const latest = sourceCommentId
+    ? card.comments.find((c) => c.id === sourceCommentId)
+    : [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
   if (latest?.authorKind === 'player') {
     return mockSocialReply(persona, inferSocialIntent(latest.text));
   }

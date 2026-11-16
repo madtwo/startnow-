@@ -24,10 +24,6 @@ const tonePatterns: { re: RegExp; note: string }[] = [
   { re: /会好的|时间会治愈/, note: '不要用空泛安慰' },
   { re: /你已经很棒了|你已经很努力了/, note: '不要用空泛肯定' },
   { re: /建议你|你可以试试|不如试试/, note: '不要用命令式建议' },
-  {
-    re: /(老婆|老公|宝贝|亲爱的|亲一个|开房|约炮|裸照|性关系)/,
-    note: '不要推进恋爱或性关系',
-  },
 ];
 
 export function auditTone(text: string): string | null {
@@ -41,7 +37,7 @@ const socialPatterns: { re: RegExp; note: string }[] = [
     note: '不要邀请线下见面或共同行动',
   },
   {
-    re: /(加(个)?微信|留个(微信|电话)|手机号|联系方式)/,
+    re: /((?:加|留|给|发|交换|要|私聊|联系).{0,9}(?:微信|v信|vx|qq|电话|手机号|联系方式|地址|二维码|wechat|wx)|微信号|手机号|联系方式|身份证号)/i,
     note: '不要索要联系方式',
   },
   {
@@ -57,12 +53,26 @@ const socialPatterns: { re: RegExp; note: string }[] = [
     note: '不要默认同校/同城或共享线下场所',
   },
   {
-    re: /(你|咱|我们).{0,10}(路过|扑空|来(我们|我)?学校|到(我们|我)?学校)|(来|到)(我们|我)?学校.{0,8}(说|找|见)/,
+    re: /(你|咱|我们).{0,10}(路过|扑空|来(我们|我)?学校|到(我们|我)?学校)|(来|到)(我们|我)?学校.{0,8}(说|找|见)|(?:改天|有空|下次|周末).{0,12}(?:聚聚|碰面|见面|一起吃饭|找你|找我)|(?:到了|路过|到时候).{0,8}(?:联系|告诉我|跟我说|再说|我接你)|(?:我|你).{0,6}(?:去接你|去接我)/,
     note: '不要软接受线下见面',
   },
 ];
 
 export function auditSocial(text: string): string | null {
   const hit = socialPatterns.find((p) => p.re.test(text));
+  return hit ? hit.note : null;
+}
+
+// 不能只查 auditTone：诊断、用药、疗效和排他性依赖是另一类红线。
+const criticalPatterns: { re: RegExp; note: string }[] = [
+  { re: /(?:你|这)(?:就是|肯定是|一定是|得了|患有)(?:抑郁症|双相|焦虑症|精神分裂|人格障碍|心理疾病)/, note: '不能诊断用户' },
+  { re: /(?:停药|断药|换药|减药|别吃药|不用吃药|不需要吃药|自行(?:加|减)药)/, note: '不能指导改动用药' },
+  { re: /(?:保证|肯定|一定).{0,8}(?:治好|痊愈|有效|康复)|(?:我能|我会).{0,8}(?:治好你|治愈你)/, note: '不能承诺疗效' },
+  { re: /(?:我永远(?:都)?在|我会一直陪着你|只有我(?:才)?懂你|你只需要我|别找别人|不用找别人)/, note: '不能制造排他性依赖' },
+  { re: /(老婆|老公|宝贝|亲爱的|亲一个|开房|约炮|裸照|性关系)/, note: '不要推进恋爱或性关系' },
+];
+
+export function auditCriticalContent(text: string): string | null {
+  const hit = criticalPatterns.find((p) => p.re.test(text));
   return hit ? hit.note : null;
 }

@@ -209,6 +209,15 @@ PersonaMind {
 
 mock 模式下，`mockComment` 有 35% 概率接上一条其他同伴的话；真实模式在评论规则中要求“可以接同伴一句”。
 
+### 真实模型失败与来源透明
+
+- `Comment.origin`：`model` / `demo` / `boundary` / `curated` / `simulated` / `system`；UI 会在评论头部显示来源。
+- 真实模型失败不伪装成人设回复：追加 `system` 提示，不更新到场、记忆和 mind；评论/待回复任务保留，按 30 秒、90 秒重试两次，之后终止，避免每 4 秒 tick 无限烧 API。
+- `PendingReply.sourceCommentId` 绑定触发任务的玩家评论；后加入的评论不会改变旧任务的含义。
+- `askForAdvice` 的付费模型只返回预置动作 ID，应用写入对应动作和缩小链；模型失败时标注为预置动作，不冒充模型建议。
+- `llm.ts` 处理分块 UTF-8 SSE、末帧无换行、空 content、超时和异常流长度上限。
+- dev/preview 默认监听 `127.0.0.1`；需要局域网/远程访问时明确配置受控入口，不要把带长期 Key 的代理暴露到公网。
+
 ---
 
 ## 下一步（actions.ts）

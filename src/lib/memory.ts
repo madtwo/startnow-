@@ -53,7 +53,7 @@ export function pruneMemory(memory: MemoryEntry[], now: number): MemoryEntry[] {
       postId: oldest.postId,
       merged: true,
     };
-    rows = [...live.filter((m) => !overflow.includes(m)), merged];
+    rows = [...live.filter((m) => !overflow.includes(m) && !m.merged), merged];
   }
   if (rows.length > TOTAL_MAX) {
     const lightFirst = [...rows].sort((a, b) => {
@@ -71,6 +71,13 @@ export function addMemory(
   entry: Omit<MemoryEntry, 'id'>,
   now: number,
 ): MemoryEntry[] {
+  const key = (value: string) => value.normalize('NFKC').replace(/\s+/g, ' ').trim();
+  // 同一个帖子的同一段事实反复被 tick 看见时，不应重复写入独立记忆。
+  const duplicate = memory.some(
+    (row) => row.postId === entry.postId &&
+      key(row.about) === key(entry.about) && key(row.what) === key(entry.what),
+  );
+  if (duplicate) return pruneMemory(memory, now);
   const next: MemoryEntry = { ...entry, id: crypto.randomUUID() };
   return pruneMemory([next, ...memory], now);
 }

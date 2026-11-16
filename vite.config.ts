@@ -121,6 +121,8 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    host: true,
+    // 演示机默认仅绑定回环地址，避免局域网设备访问带 Key 的调试代理。
+    host: '127.0.0.1',
   },
+  preview: { host: '127.0.0.1' },
 });

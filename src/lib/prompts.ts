@@ -70,8 +70,9 @@ const thread = (card: Card) =>
     .map((c) => `${c.authorKind === 'player' ? '卡主' : c.authorId}：${c.text}`)
     .join('\n');
 
-export const commentPrompt = (card: Card, persona: Persona) => {
-  const latest = [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
+export const commentPrompt = (card: Card, persona: Persona, sourceCommentId?: string) => {
+  const latest = (sourceCommentId && card.comments.find((c) => c.id === sourceCommentId)) ||
+    [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
   const target = latest
     ? latest.authorKind === 'player'
       ? '公开评论里的网友'

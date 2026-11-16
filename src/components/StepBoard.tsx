@@ -78,6 +78,9 @@ export default function StepBoard({
         <section className="step-hero" data-tour="step">
           <p className="step-kicker">{noted ? '今天的一步' : '有人给了你一个下一步'}</p>
           <p className="step-line">{noted?.note?.text ?? advised?.advice?.text}</p>
+          {focus?.advice?.origin && (
+            <small>{focus.advice.origin === 'demo' ? '演示动作' : '预置动作'}</small>
+          )}
           <p className="step-from">
             {giver ? `${giver.name} 给的 · ` : ''}
             做不到就再小一级

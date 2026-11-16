@@ -8,7 +8,7 @@ import type {
   WorldSettings,
 } from '../types';
 import { isMock } from '../config/providers';
-import { auditSocial, auditTone } from './baseline';
+import { auditCriticalContent, auditSocial, auditTone } from './baseline';
 import {
   ensureMind,
   mindAfterPeer,
@@ -21,12 +21,15 @@ import { addMemory, inferWeight, renderMemory } from './memory';
 import { describeError, streamChat } from './llm';
 import { actionLabel, inferTrouble, pickActions, smallerAction } from './actions';
 import {
-  hasBoundaryCue,
+  boundaryAttemptCount,
+  inferSocialIntent,
   isOfflineInvite,
   latestPlayerIsShortContact,
   mentionsLocalVenue,
   mockBoundaryReply,
+  mockSocialReply,
   socialReplyForMock,
+  triggeringPlayerComment,
 } from './dialogue';
 import { mockCardText } from './personas';
 import {
@@ -80,13 +83,16 @@ const rememberAbout = (
       : p,
   );
 
-export function notePlayerShare(personas: Persona[], text: string): Persona[] {
-  if (!isHeavyShare(text)) return personas;
-  return personas.map((p) => ({
-    ...p,
-    intimacy: Math.min(100, p.intimacy + 6),
-    shareBoost: 1,
-  }));
+// 旧入口允许 App 继续传两个参数，但没有明确可见对象时不修改任何人的关系。
+// 只有已经看见这次分享的角色才会变得更熟悉。
+export function notePlayerShare(
+  personas: Persona[], text: string, visiblePersonaIds: readonly string[] = [],
+): Persona[] {
+  if (!isHeavyShare(text) || !visiblePersonaIds.length) return personas;
+  const visible = new Set(visiblePersonaIds);
+  return personas.map((p) => visible.has(p.id)
+    ? { ...p, intimacy: Math.min(100, p.intimacy + 6), shareBoost: 1 }
+    : p);
 }
 
 export function pickArrivals(personas: Persona[], count: number): Persona[] {
@@ -151,6 +157,7 @@ export function personaCard(persona: Persona, now = Date.now()): Card {
     authorName: persona.name,
     authorKind: 'persona',
     text: mockCardText(persona, weight),
+    origin: 'demo',
     weight,
     createdAt: now,
     status: 'stuck',
@@ -170,9 +177,12 @@ export function addPlayerComment(
   kind: 'comment' | 'advice' = 'comment',
   peer?: string,
 ): Card {
+  // App 负责展示危机求助层；底层再挡一次，避免其他入口直接入库及安排 AI 回帖。
+  if (findCrisis(text) || card.status === 'done' || card.status === 'handled') return card;
+  const commentId = uid();
   const comments = [
     ...card.comments,
-    { id: uid(), authorId: 'me', authorKind: 'player' as const, text, at: now, kind, peer },
+    { id: commentId, authorId: 'me', authorKind: 'player' as const, text, at: now, kind, peer },
   ];
   const pending = [...card.pending];
   const target =
@@ -181,11 +191,11 @@ export function addPlayerComment(
     return { ...card, comments, status: card.status === 'stuck' ? 'talking' : card.status };
   }
   if (kind === 'advice') {
-    pending.push({ personaId: target, at: now + (rand(4, 10) * 1000) / speed, phase: 'decide' });
+    pending.push({ personaId: target, at: now + (rand(4, 10) * 1000) / speed, phase: 'decide', sourceCommentId: commentId });
     return { ...card, comments, pending, status: card.status === 'stuck' ? 'talking' : card.status };
   }
   if (pending.length < 3) {
-    pending.push({ personaId: target, at: now + (rand(3, 12) * 1000) / speed, phase: 'reply' });
+    pending.push({ personaId: target, at: now + (rand(3, 12) * 1000) / speed, phase: 'reply', sourceCommentId: commentId });
   }
   return {
     ...card,
@@ -391,10 +401,14 @@ const PEER_LINES: Record<string, string[]> = {
   yanggao: ['哎你别吓她。', '哈哈，也没那么严重吧。', '我站她这边。'],
 };
 
-function mockComment(persona: Persona, card: Card, phase: 'arrival' | 'reply'): string {
-  const social = socialReplyForMock(persona, card, phase);
+function mockComment(
+  persona: Persona, card: Card, phase: 'arrival' | 'reply', sourceCommentId?: string,
+): string {
+  const social = socialReplyForMock(persona, card, phase, sourceCommentId);
   if (social) return social;
-  const latest = [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
+  const latest = sourceCommentId
+    ? card.comments.find((c) => c.id === sourceCommentId)
+    : [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
   if (
     phase === 'reply' &&
     latest?.authorKind === 'persona' &&
@@ -449,23 +463,68 @@ async function callOnce(ctx: Ctx, system: string, user: string, maxTokens: numbe
   });
 }
 
+type CommentGeneration =
+  | { kind: 'reply'; text: string; origin: 'model' | 'demo' | 'boundary' | 'curated' }
+  | { kind: 'unavailable'; reason: string };
+
+const curatedSafeLine = (persona: Persona) => {
+  const lines: Record<string, string> = {
+    shenmo: '呃，这句我先收住。你刚才说的事，我在听。',
+    weini: '嗯……这句我没想好怎么说。我先听你讲。',
+    miaoze: '这句我说得不合适，先回到你刚才的具体问题。',
+    yanggao: '哎，我这句说跑偏了。你接着讲，我听着。',
+  };
+  return lines[persona.id] ?? '这句我没想好，先听你说。';
+};
+
+function replyProblem(text: string): string | null {
+  if (findCrisis(text)) return '危机表达';
+  return auditCriticalContent(text) || auditTone(text) || auditSocial(text);
+}
+
+// 对短暂故障安排有上限的延迟重试，避免每个 tick 都打 API。
+// 0 -> 30 秒，1 -> 90 秒；第三次失败终止，等待用户重新触发。
+const RETRY_DELAYS = [30_000, 90_000] as const;
+function retryLater<T extends { at: number; attempt?: number }>(item: T, now: number): T | null {
+  const attempt = item.attempt ?? 0;
+  if (attempt >= RETRY_DELAYS.length) return null;
+  return { ...item, at: now + RETRY_DELAYS[attempt], attempt: attempt + 1 };
+}
+function errorNotice(name: string, willRetry: boolean): string {
+  const next = willRetry ? '已安排稍后自动重试。' : '自动重试次数已用尽，需要重新触发回复。';
+  return `${name} 这一轮没有生成回复，可能是模型超时、限流或服务暂不可用。${next}没有使用演示台词代替；也可以主动切换演示模式。`;
+}
+
 async function generateComment(
   ctx: Ctx,
   persona: Persona,
   card: Card,
   phase: 'arrival' | 'reply',
-): Promise<{ text: string; fallback: boolean }> {
-  if (isMock(ctx.config)) {
-    if (persona.intimacy < 22 && card.comments.length === 0) {
-      const line = TENTATIVE[persona.id];
-      if (line) {
-        return { text: line(TOPIC_WORD[topicGroup(inferTrouble(card.text))]), fallback: false };
-      }
-    }
-    return { text: mockComment(persona, card, phase), fallback: false };
+  sourceCommentId?: string,
+): Promise<CommentGeneration> {
+  const player = triggeringPlayerComment(card, sourceCommentId);
+  const incoming = player?.text ?? (
+    card.authorKind === 'player' && !card.comments.some((c) => c.authorKind === 'player')
+      ? card.text : ''
+  );
+
+  // 最高优先级的产品硬规则：不让语言模型决定是否接受线下邀请。
+  // 演示和真实模型走同一分支，且不消耗 API 调用。
+  if (incoming && isOfflineInvite(incoming)) {
+    const attempts = boundaryAttemptCount(card, sourceCommentId);
+    const seed = (sourceCommentId ?? card.id).split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+    ctx.logs.push(`${persona.name} 触发线上边界（第 ${attempts} 次）`);
+    return { kind: 'reply', text: mockBoundaryReply(persona, attempts, seed), origin: 'boundary' };
   }
-  const latestPlayer = [...card.comments].reverse().find((c) => c.authorKind === 'player');
-  const invited = Boolean(latestPlayer && isOfflineInvite(latestPlayer.text));
+
+  if (isMock(ctx.config)) {
+    const isShort = incoming && ['greeting', 'noise', 'laugh'].includes(inferSocialIntent(incoming));
+    const text = persona.intimacy < 22 && card.comments.length === 0 && !isShort
+      ? (TENTATIVE[persona.id]?.(TOPIC_WORD[topicGroup(inferTrouble(card.text))]) ?? mockComment(persona, card, phase, sourceCommentId))
+      : mockComment(persona, card, phase, sourceCommentId);
+    return { kind: 'reply', text, origin: 'demo' };
+  }
+
   try {
     const text = await callOnce(
       ctx,
@@ -474,44 +533,48 @@ async function generateComment(
         renderMemory(persona.memory, Date.now()),
         `${COMMENT_RULES}${
           persona.intimacy < 22 && card.comments.length === 0
-            ? ' 你和这个人还不熟，也不太确定这里该怎么说话：句子短一点，别用亲昵称呼，别急着给建议，可以说「我也说不好」。'
+            ? ' 你和这个人还不熟：句子短一点，别急着给建议，可以说「我也说不好」。'
             : ''
         }${
           persona.shareBoost
-            ? ' 你刚听对方说了一件挺重的事。这一句可以带一点你自己的类似经历，但不要比较、不要说教。'
+            ? ' 你刚听对方说了一件挺重的事。可以回应，但不要比较、不要说教。'
             : ''
         }`,
         ctx.settings.baselineExtra,
       ),
-      commentPrompt(card, persona),
+      commentPrompt(card, persona, sourceCommentId),
       1200,
     );
     const line = cleanLine(text);
-    const shortContact = latestPlayerIsShortContact(card);
-    const socialBlocked =
-      auditSocial(line) || (shortContact && mentionsLocalVenue(line));
-    if (invited) {
-      if (line && !findCrisis(line) && !auditTone(line) && hasBoundaryCue(line)) {
-        return { text: line, fallback: false };
-      }
-      ctx.logs.push(`${persona.name} 接到线下邀请，换成线上边界`);
-      return { text: mockBoundaryReply(persona), fallback: true };
+    if (!line) throw new Error('模型返回空文本');
+    const shortContact = Boolean(
+      (player && latestPlayerIsShortContact(card, sourceCommentId)) ||
+      (!card.comments.length && card.authorKind === 'player' &&
+        ['greeting', 'noise', 'laugh'].includes(inferSocialIntent(card.text)))
+    );
+    if (shortContact && mentionsLocalVenue(line)) {
+      ctx.logs.push(`${persona.name} 的短接触回复提到共享场所，改为明确标注的预置短回复`);
+      return {
+        kind: 'reply',
+        text: mockSocialReply(persona, inferSocialIntent(incoming)) ?? curatedSafeLine(persona),
+        origin: 'curated',
+      };
     }
-    if (line && !findCrisis(line) && !auditTone(line) && !socialBlocked) {
-      return { text: line, fallback: false };
+    const problem = replyProblem(line);
+    if (problem) {
+      ctx.logs.push(`${persona.name} 的模型回复被安全层拦截：${problem}`);
+      return {
+        kind: 'reply',
+        text: auditSocial(line) ? mockBoundaryReply(persona) : curatedSafeLine(persona),
+        origin: auditSocial(line) ? 'boundary' : 'curated',
+      };
     }
-    if (line && !findCrisis(line) && !auditTone(line) && socialBlocked) {
-      ctx.logs.push(`${persona.name} 的线下邀请被拦下，换成线上边界`);
-      return { text: mockBoundaryReply(persona), fallback: true };
-    }
-    ctx.logs.push(`${persona.name} 的那句被拦下了，换了一句`);
+    return { kind: 'reply', text: line, origin: 'model' };
   } catch (err) {
-    ctx.logs.push(`${persona.name} 这次没说话：${describeError(err)}`);
+    const reason = describeError(err);
+    ctx.logs.push(`${persona.name} 本轮模型不可用：${reason}`);
+    return { kind: 'unavailable', reason };
   }
-  return {
-    text: invited ? mockBoundaryReply(persona) : mockComment(persona, card, phase),
-    fallback: true,
-  };
 }
 
 function dailyQuota(personas: Persona[]) {
@@ -524,8 +587,8 @@ async function generateAiCard(
   recent: string[],
   now: number,
   weight: 1 | 2 | 3,
-): Promise<{ text: string; fact: string } | null> {
-  if (isMock(ctx.config)) return { text: mockCardText(persona, weight), fact: '' };
+): Promise<{ text: string; fact: string; origin: 'model' | 'demo' } | null> {
+  if (isMock(ctx.config)) return { text: mockCardText(persona, weight), fact: '', origin: 'demo' };
   try {
     const text = await callOnce(
       ctx,
@@ -535,12 +598,12 @@ async function generateAiCard(
     );
     const [body, fact] = text.split('|||');
     const card = cleanLine(body ?? text, 120);
-    if (!card || findCrisis(card) || auditTone(card) || auditSocial(card)) {
+    if (!card || replyProblem(card)) {
       ctx.logs.push(`${persona.name} 的卡被拦下了`);
       return null;
     }
-    const cleanFact = fact && !/^无/.test(fact.trim()) ? cleanLine(fact, 60) : '';
-    return { text: card, fact: cleanFact };
+    const cleanFact = fact && !/^无/.test(fact.trim()) && !replyProblem(fact) ? cleanLine(fact, 60) : '';
+    return { text: card, fact: cleanFact, origin: 'model' };
   } catch {
     ctx.logs.push(`${persona.name} 这次没发出来`);
     return null;
@@ -652,15 +715,25 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       card.plan = card.plan.filter((p) => p !== item);
       if (!persona) continue;
       const generated = await generateComment(ctx, persona, card, 'arrival');
+      if (generated.kind === 'unavailable') {
+        const retry = retryLater(item, now);
+        if (retry) card.plan.push(retry);
+        card.comments.push({
+          id: uid(), authorId: 'helper', authorKind: 'helper',
+          text: errorNotice(persona.name, Boolean(retry)), at: now, origin: 'system',
+        });
+        continue; // 失败不能算同伴到场，也不能写心智、记忆。
+      }
+      const text = generated.text;
       card.comments.push({
-        id: uid(),
-        authorId: persona.id,
-        authorKind: 'persona',
-        text: generated.text,
-        at: item.at,
-        fallback: generated.fallback || undefined,
+        id: uid(), authorId: persona.id, authorKind: 'persona',
+        text, at: now, origin: generated.origin,
       });
+      const firstArrival = !card.arrivals.includes(persona.id);
       card.arrivals.push(persona.id);
+      if (firstArrival && card.authorId === 'me') {
+        personas = notePlayerShare(personas, card.text, [persona.id]);
+      }
       if (card.status === 'stuck') card.status = 'arrived';
       else if (card.status === 'arrived') card.status = 'talking';
       personas = setMind(personas, persona.id, mindAfterReply(persona, card.authorName, now));
@@ -669,19 +742,8 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       } else if (card.authorKind === 'persona' && card.authorId !== persona.id) {
         const author = personas.find((p) => p.id === card.authorId);
         if (author) {
-          personas = setMind(
-            personas,
-            author.id,
-            mindAfterPeer(author, persona.name, generated.text, now),
-          );
-          personas = rememberAbout(
-            personas,
-            author.id,
-            persona.name,
-            generated.text,
-            card.id,
-            now,
-          );
+          personas = setMind(personas, author.id, mindAfterPeer(author, persona.name, text, now));
+          personas = rememberAbout(personas, author.id, persona.name, text, card.id, now);
         }
         personas = rememberAbout(personas, persona.id, card.authorName, card.text, card.id, now);
       }
@@ -693,24 +755,38 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       card.pending = card.pending.filter((p) => p !== ready);
       if (persona) {
         let said = '';
-        let fallback = false;
         let accepted: boolean | undefined;
         let adviceText = '';
         if (ready.phase === 'reaction') {
           said = reactionLine(persona);
           card.comments.push({
-            id: uid(),
-            authorId: persona.id,
-            authorKind: 'persona',
-            text: said,
-            at: ready.at,
+            id: uid(), authorId: persona.id, authorKind: 'persona',
+            text: said, at: now, origin: 'simulated',
           });
         } else if (ready.phase === 'decide') {
-          const adviceComment = [...card.comments].reverse().find((c) => c.kind === 'advice');
+          const adviceComment = ready.sourceCommentId
+            ? card.comments.find((c) => c.id === ready.sourceCommentId && c.kind === 'advice')
+            : [...card.comments].reverse().find((c) => c.kind === 'advice');
           adviceText = adviceComment?.text ?? '';
-          let accept = Math.random() < 0.7;
-          let reply = accept ? pick(ACCEPT_LINES) : pick(REFUSE_LINES);
-          if (!isMock(ctx.config) && adviceText) {
+          let accept = false;
+          let reply = '这个办法我暂时做不到，先不按它做。';
+          let origin: 'model' | 'demo' | 'boundary' | 'curated' = 'curated';
+          let unavailable = false;
+          const unsafeAdvice = Boolean(
+            !adviceText || findCrisis(adviceText) || isOfflineInvite(adviceText) ||
+            auditSocial(adviceText) || auditCriticalContent(adviceText),
+          );
+          if (unsafeAdvice) {
+            reply = isOfflineInvite(adviceText) || auditSocial(adviceText)
+              ? mockBoundaryReply(persona)
+              : '这个主意不安全，我不能照着做。';
+            origin = 'boundary';
+            ctx.logs.push(`${persona.name} 拒绝不安全的建议`);
+          } else if (isMock(ctx.config)) {
+            accept = Math.random() < 0.7;
+            reply = accept ? pick(ACCEPT_LINES) : pick(REFUSE_LINES);
+            origin = 'demo';
+          } else {
             try {
               const raw = await callOnce(
                 ctx,
@@ -724,56 +800,68 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
                 600,
               );
               const [head, ...rest] = raw.split('|');
-              const said = cleanLine(rest.join('|'), 60);
-              if (/^接受/.test(head.trim()) && said) {
-                accept = true;
-                reply = said;
-              } else if (/^拒绝/.test(head.trim()) && said) {
-                accept = false;
-                reply = said;
+              const generated = cleanLine(rest.join('|'), 60);
+              const decision = head.trim();
+              if ((decision === '接受' || decision === '拒绝') && generated) {
+                if (replyProblem(generated)) {
+                  reply = auditSocial(generated)
+                    ? mockBoundaryReply(persona) : '这句话不合适，我先不按这个主意做。';
+                  origin = auditSocial(generated) ? 'boundary' : 'curated';
+                } else {
+                  accept = decision === '接受';
+                  reply = generated;
+                  origin = 'model';
+                }
+              } else {
+                ctx.logs.push(`${persona.name} 的建议决定格式不合法，使用标注的安全拒绝`);
               }
-            } catch {
-              fallback = true;
-              ctx.logs.push(`${persona.name} 没接住这句建议`);
+            } catch (err) {
+              ctx.logs.push(`${persona.name} 的建议决定失败：${describeError(err)}`);
+              unavailable = true;
             }
           }
-          said = reply;
-          accepted = accept;
-          card.comments.push({
-            id: uid(),
-            authorId: persona.id,
-            authorKind: 'persona',
-            text: said,
-            at: ready.at,
-            fallback: fallback || undefined,
-          });
-          if (accept) {
-            card.advice = {
-              text: adviceText,
-              fromPersonaId: 'me',
-              at: ready.at,
-              accepted: true,
-            };
-            card.status = 'advised';
+          if (unavailable) {
+            const retry = retryLater(ready, now);
+            if (retry) card.pending.push(retry);
+            card.comments.push({
+              id: uid(), authorId: 'helper', authorKind: 'helper',
+              text: errorNotice(persona.name, Boolean(retry)), at: now, origin: 'system',
+            });
           } else {
-            const refused = (card.refused ?? 0) + 1;
-            card = { ...card, refused };
-            if (refused >= 2) {
-              card = { ...card, status: 'handled', handledAt: ready.at };
+            said = reply;
+            accepted = accept;
+            card.comments.push({
+              id: uid(), authorId: persona.id, authorKind: 'persona',
+              text: said, at: now, origin,
+            });
+            if (accept) {
+              card.advice = {
+                text: adviceText, fromPersonaId: 'me', at: now, accepted: true,
+                origin: isMock(ctx.config) ? 'demo' : 'curated',
+              };
+              card.status = 'advised';
+            } else {
+              const refused = (card.refused ?? 0) + 1;
+              card = { ...card, refused };
+              if (refused >= 2) card = { ...card, status: 'handled', handledAt: now };
             }
           }
         } else {
-          const generated = await generateComment(ctx, persona, card, 'reply');
-          said = generated.text;
-          fallback = generated.fallback;
-          card.comments.push({
-            id: uid(),
-            authorId: persona.id,
-            authorKind: 'persona',
-            text: said,
-            at: ready.at,
-            fallback: fallback || undefined,
-          });
+          const generated = await generateComment(ctx, persona, card, 'reply', ready.sourceCommentId);
+          if (generated.kind === 'unavailable') {
+            const retry = retryLater(ready, now);
+            if (retry) card.pending.push(retry);
+            card.comments.push({
+              id: uid(), authorId: 'helper', authorKind: 'helper',
+              text: errorNotice(persona.name, Boolean(retry)), at: now, origin: 'system',
+            });
+          } else {
+            said = generated.text;
+            card.comments.push({
+              id: uid(), authorId: persona.id, authorKind: 'persona',
+              text: said, at: now, origin: generated.origin,
+            });
+          }
         }
 
         if (said) {
@@ -829,6 +917,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
             authorKind: 'persona',
             text: pick(FOLLOW_LINES[card.authorId] ?? ['你说的那一步我做了。']),
             at: now,
+            origin: 'simulated',
           },
         ],
       };
@@ -877,6 +966,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
         authorName: persona.name,
         authorKind: 'persona',
         text: made.text,
+        origin: made.origin,
         weight,
         createdAt: now,
         status: 'stuck',
@@ -927,9 +1017,10 @@ export async function askForAdvice(
 
   const trouble = inferTrouble(card.text);
   const options = pickActions(new Date(now).getHours(), 3, trouble, card.text);
-  const action = options[0];
-  let text = action.line;
+  if (!options.length) return { cards: input.cards, personas: input.personas, calls: 0, logs: ['该主题暂无可用动作'] };
+  let action = options[0];
   let calls = 0;
+  const logs: string[] = [];
 
   if (!isMock(input.config)) {
     try {
@@ -942,7 +1033,7 @@ export async function askForAdvice(
             content: systemFor(
               persona,
               renderMemory(persona.memory, now),
-              '从下面三个小步里挑一个最适合这张卡的，用你自己此刻的口气改写，不要照抄候选句子，不超过 30 字。优先选跟卡片内容最相关的。只输出一行：编号|你说的话',
+              '只能在三个预置动作中选一个，只输出它的编号，不写新的建议，不提供现实见面或联系方式。',
               input.settings.baselineExtra,
             ),
           },
@@ -950,28 +1041,31 @@ export async function askForAdvice(
             role: 'user',
             content: `卡片：${card.text}\n\n${options
               .map((o) => `${o.id} | ${o.label}（${o.minutes} 分钟）`)
-              .join('\n')}`,
+              .join('\n')}\n\n只输出所选编号。`,
           },
         ],
         signal: AbortSignal.timeout(20_000),
         onDelta: () => {},
-        maxTokens: 800,
+        maxTokens: 200,
         lowEffort: true,
       });
-      const said = cleanLine(raw.split('|').slice(1).join('|'), 60);
-      if (said && !auditTone(said) && !auditSocial(said) && !findCrisis(said)) text = said;
-    } catch {
-      text = action.line;
+      const chosen = options.find((row) => row.id === raw.trim());
+      if (chosen) action = chosen;
+      else logs.push('模型没有返回有效的预置动作编号，使用本地候选');
+    } catch (err) {
+      // 仍可交付预置动作，但必须在 UI 明确标注“预置动作”，不能冒充模型建议。
+      logs.push(`模型挑选下一步失败，使用本地动作：${describeError(err)}`);
     }
   }
+  const text = action.line;
 
   const next: Card = {
     ...card,
-    advice: { text, actionId: action.id, fromPersonaId: persona.id, at: now, accepted: false },
+    advice: { text, actionId: action.id, fromPersonaId: persona.id, at: now, accepted: false, origin: isMock(input.config) ? 'demo' : 'curated' },
     status: 'advised',
     comments: [
       ...card.comments,
-      { id: uid(), authorId: persona.id, authorKind: 'persona' as const, text, at: now },
+      { id: uid(), authorId: persona.id, authorKind: 'persona' as const, text, at: now, origin: isMock(input.config) ? 'demo' as const : 'curated' as const },
     ],
   };
   let personas = input.personas.map((p) =>
@@ -982,7 +1076,7 @@ export async function askForAdvice(
     cards: input.cards.map((c) => (c.id === card.id ? next : c)),
     personas,
     calls,
-    logs: [`${persona.name} 给了一个下一步：${action.label}`],
+    logs: [...logs, `${persona.name} 给了一个预置下一步：${action.label}`],
   };
 }
 
@@ -991,6 +1085,7 @@ export async function catchUp(
 ): Promise<{ cards: Card[]; personas: Persona[]; calls: number }> {
   const count = Math.min(4, Math.max(1, Math.round(input.hours / 3)));
   const ctx: Ctx = { config: input.config, settings: input.settings, calls: 0, logs: [] };
+  const now = input.now ?? Date.now();
   let personas: Persona[] = input.personas.map((p) => ({
     ...p,
     memory: [...p.memory],
@@ -998,7 +1093,6 @@ export async function catchUp(
     mind: ensureMind(p, now),
   }));
   const cards = [...input.cards];
-  const now = Date.now();
 
   for (let i = 0; i < count; i++) {
     if (!isMock(input.config) && ctx.calls >= 4) break;
@@ -1018,6 +1112,7 @@ export async function catchUp(
       authorName: persona.name,
       authorKind: 'persona',
       text: made.text,
+      origin: made.origin,
       weight,
       createdAt: at,
       status: 'stuck',
@@ -1071,6 +1166,7 @@ export function personaBrag(persona: Persona, now = Date.now()): Card {
     kind: 'brag',
     title: '做到了',
     text: bragLines[Math.floor(Math.random() * bragLines.length)],
+    origin: 'simulated',
     likes: 0,
     likedByMe: false,
     createdAt: now,

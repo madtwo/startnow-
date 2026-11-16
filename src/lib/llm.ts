@@ -13,6 +13,7 @@ export type LlmErrorKind =
   | 'notfound'
   | 'rate'
   | 'network'
+  | 'timeout'
   | 'server';
 
 export class LlmError extends Error {
@@ -70,6 +71,28 @@ const parseServerError = (
     return new LlmError('rate', `请求太频繁或额度用完了（429）。稍后再试，或换个模型。${detail}`);
   }
   return new LlmError('server', `服务端返回 ${status}。${detail}`);
+};
+
+const requestError = (err: unknown, signal?: AbortSignal): Error => {
+  const reason = signal?.reason as { name?: string } | undefined;
+  if ((err as Error)?.name === 'TimeoutError' || reason?.name === 'TimeoutError') {
+    return new LlmError('timeout', '模型响应超时，可以稍后重试。');
+  }
+  if ((err as Error)?.name === 'AbortError' || signal?.aborted) {
+    return new LlmError('network', '请求已取消。');
+  }
+  return networkError();
+};
+
+const extractText = (content: unknown): string => {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map((row) =>
+      row && typeof row === 'object' && 'text' in row && typeof row.text === 'string'
+        ? row.text : '',
+    ).join('');
+  }
+  return '';
 };
 
 const networkError = () =>
@@ -165,8 +188,7 @@ export async function streamChat(opts: {
   try {
     res = await sendChat(config, messages, signal, sessionId, true, maxTokens, lowEffort);
   } catch (err) {
-    if ((err as Error)?.name === 'AbortError') throw err;
-    throw networkError();
+    throw requestError(err, signal);
   }
 
   if (!res.ok) {
@@ -182,7 +204,7 @@ export async function streamChat(opts: {
   const contentType = res.headers.get('content-type') ?? '';
   if (contentType.includes('application/json')) {
     const data = await res.json().catch(() => null);
-    const text: string = data?.choices?.[0]?.message?.content ?? '';
+    const text = extractText(data?.choices?.[0]?.message?.content);
     if (!text.trim()) {
       throw new LlmError('server', '模型没有返回任何文字，换个模型试试。');
     }
@@ -196,32 +218,47 @@ export async function streamChat(opts: {
   const decoder = new TextDecoder();
   let buffer = '';
   let full = '';
+  const parseLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data:')) return;
+    const payload = trimmed.slice(5).trim();
+    if (!payload || payload === '[DONE]') return;
+    let json: any;
+    try {
+      json = JSON.parse(payload);
+    } catch {
+      throw new LlmError('server', '模型返回了无法解析的流式数据。');
+    }
+    if (json?.error) {
+      throw new LlmError('server', `模型返回错误：${String(json.error?.message ?? 'stream error').slice(0, 160)}`);
+    }
+    const delta = extractText(json?.choices?.[0]?.delta?.content ?? json?.choices?.[0]?.message?.content);
+    if (delta) {
+      full += delta;
+      if (full.length > 20_000) throw new LlmError('server', '模型输出超过安全长度限制。');
+      onDelta(delta);
+    }
+  };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    let newline = buffer.indexOf('\n');
-    while (newline >= 0) {
-      const line = buffer.slice(0, newline).trim();
-      buffer = buffer.slice(newline + 1);
-      newline = buffer.indexOf('\n');
-
-      if (!line.startsWith('data:')) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === '[DONE]') continue;
-      try {
-        const json = JSON.parse(payload);
-        const delta: string = json?.choices?.[0]?.delta?.content ?? '';
-        if (delta) {
-          full += delta;
-          onDelta(delta);
-        }
-      } catch {
-        // 一行被截断时忽略，下一次 read 会补齐
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newline = buffer.indexOf('\n');
+      while (newline >= 0) {
+        parseLine(buffer.slice(0, newline));
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf('\n');
       }
     }
+    buffer += decoder.decode();
+    if (buffer.trim()) parseLine(buffer); // 不丢弃末尾没有换行的最后一帧
+  } catch (err) {
+    if (err instanceof LlmError) throw err;
+    throw requestError(err, signal);
+  } finally {
+    reader.releaseLock();
   }
 
   if (!full.trim()) throw new LlmError('server', '模型没有返回任何文字，换个模型试试。');
@@ -236,9 +273,12 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
 
   let res: Response;
   try {
+    const safeSignal = signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(20_000)])
+      : AbortSignal.timeout(20_000);
     res = await fetch(endpoint(config.baseUrl), {
       method: 'POST',
-      signal,
+      signal: safeSignal,
       headers: chatHeaders(config),
       body: JSON.stringify({
         model: config.model.trim(),
@@ -248,8 +288,7 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
       }),
     });
   } catch (err) {
-    if ((err as Error)?.name === 'AbortError') throw err;
-    throw networkError();
+    throw requestError(err, signal);
   }
 
   if (!res.ok) {
@@ -264,8 +303,8 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
 
   const data = await res.json().catch(() => null);
   if (!data) throw new LlmError('server', '返回的不是合法 JSON，这个地址可能不是 OpenAI 兼容接口。');
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string' || !content.trim()) {
+  const content = extractText(data?.choices?.[0]?.message?.content);
+  if (!content.trim()) {
     throw new LlmError(
       'server',
       '接口通了，但模型没有返回文字。它可能把 token 全用在 reasoning 上，换一个模型或调高 max_tokens。',
@@ -321,6 +360,7 @@ export async function fetchOpenCodeModels(
 export function describeError(err: unknown): string {
   if (err instanceof LlmError) return err.message;
   if ((err as Error)?.name === 'AbortError') return '已停止';
+  if ((err as Error)?.name === 'TimeoutError') return '模型响应超时';
   return `出了点问题：${err instanceof Error ? err.message : String(err)}`;
 }
 

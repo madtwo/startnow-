@@ -93,7 +93,8 @@ export interface Comment {
   at: number;
   kind?: 'comment' | 'advice';
   peer?: string;
-  fallback?: boolean;
+  // 不给本地生成或审查回退的台词伪装成真实模型输出。
+  origin?: 'model' | 'demo' | 'boundary' | 'curated' | 'simulated' | 'system';
 }
 
 export interface Advice {
@@ -102,6 +103,7 @@ export interface Advice {
   fromPersonaId: string;
   at: number;
   accepted: boolean;
+  origin?: 'curated' | 'demo';
 }
 
 export interface Note {
@@ -115,12 +117,15 @@ export interface Note {
 export interface PlannedArrival {
   personaId: string;
   at: number;
+  attempt?: number;
 }
 
 export interface PendingReply {
   personaId: string;
   at: number;
+  attempt?: number;
   phase: 'reply' | 'reaction' | 'decide';
+  sourceCommentId?: string; // 精确关联触发此次待回复的玩家评论，旧存档可为空。
 }
 
 export interface Todo {
@@ -137,6 +142,7 @@ export interface Card {
   authorKind: 'player' | 'persona' | 'helper';
   title?: string;
   kind?: 'worry' | 'brag' | 'guide';
+  origin?: 'model' | 'demo' | 'simulated';
   likes?: number;
   helperAt?: number;
   likedByMe?: boolean;

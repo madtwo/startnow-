@@ -18,6 +18,11 @@ interface Props {
   initialPeer?: string;
 }
 
+const originLabels: Record<NonNullable<Comment['origin']>, string> = {
+  model: '模型回复', demo: '演示台词', boundary: '线上边界', curated: '预置回复',
+  simulated: '模拟情节', system: '系统提示',
+};
+
 const clock = (at: number) => {
   const date = new Date(at);
   const now = new Date();
@@ -115,6 +120,9 @@ export default function CardDetail({
             <p className="page-author">
               {card.authorName}
               {!mine && !isGuide && <span className="thread-badge">AI</span>}
+              {card.origin && (
+                <span className="thread-badge">{card.origin === 'model' ? '模型生成' : card.origin === 'simulated' ? '模拟情节' : '演示内容'}</span>
+              )}
               {mine && <span className="me-badge">你</span>}
             </p>
             <p className="page-sub">{isGuide ? '论坛的说明' : author ? 'AI 同伴' : '你的卡'}</p>
@@ -134,6 +142,7 @@ export default function CardDetail({
             <span className="advice-hint">做不到就再小一级</span>
           </div>
           <p className="advice-label">{card.advice.text}</p>
+          {card.advice.origin && <small>{card.advice.origin === 'demo' ? '演示动作' : '预置动作'}</small>}
           {mine && !card.advice.accepted && (
             <div className="advice-actions">
               <button className="btn btn-ghost" onClick={onShrink}>
@@ -218,13 +227,8 @@ export default function CardDetail({
                 <span className="forum-comment-time">{clock(comment.at)}</span>
                 {repliedTo && <span className="forum-comment-reply">回复 {repliedTo}</span>}
                 {comment.kind === 'advice' && <span className="advice-tag">下一步</span>}
-                {comment.fallback && (
-                  <span
-                    className="fallback-tag"
-                    title="真实模型这次没有接上，使用了本地安全回复"
-                  >
-                    演示兜底
-                  </span>
+                {comment.origin && originLabels[comment.origin] && (
+                  <span className="advice-tag">{originLabels[comment.origin]}</span>
                 )}
                 {selected && <span className="forum-comment-target">正在回复</span>}
               </div>
