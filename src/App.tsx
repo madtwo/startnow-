@@ -3,6 +3,7 @@ import AdminPanel from './components/AdminPanel';
 import Avatar from './components/Avatar';
 import CardDetail from './components/CardDetail';
 import CardRow from './components/CardRow';
+import NoteDrawer from './components/NoteDrawer';
 import PostForm from './components/PostForm';
 import Tour from './components/Tour';
 import CrisisCard from './components/CrisisCard';
@@ -38,6 +39,7 @@ import {
   loadIdentity,
   loadPersonas,
   loadSettings,
+  loadTodos,
   loadWorld,
   needsUpgrade,
   saveCards,
@@ -45,6 +47,7 @@ import {
   saveIdentity,
   savePersonas,
   saveSettings,
+  saveTodos,
   saveWorld,
 } from './lib/store';
 import type {
@@ -53,6 +56,7 @@ import type {
   LlmConfig,
   MemoryEntry,
   Persona,
+  Todo,
   World,
   WorldSettings,
 } from './types';
@@ -95,6 +99,11 @@ export default function App() {
   const [settingsNotice, setSettingsNotice] = useState('');
   const [adminOpen, setAdminOpen] = useState(false);
   const [crisis, setCrisis] = useState('');
+  const [todos, setTodos] = useState<Todo[]>(() => loadTodos());
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [bragTodo, setBragTodo] = useState<Todo | null>(null);
+  const [bragText, setBragText] = useState('');
+  const [bragTitle, setBragTitle] = useState('');
   const brandClicks = useRef<number[]>([]);
   const busy = useRef(false);
 
@@ -103,6 +112,7 @@ export default function App() {
   useEffect(() => saveWorld(world), [world]);
   useEffect(() => saveSettings(settings), [settings]);
   useEffect(() => saveIdentity(identity), [identity]);
+  useEffect(() => saveTodos(todos), [todos]);
 
   const ready = isReady(config);
   const latest = useRef({ cards, personas, world, settings, config, working });
@@ -181,6 +191,49 @@ export default function App() {
     setImage('');
     setView('home');
     setToast('正在寻找心友，可以去看看别人的卡');
+  };
+
+  const like = (card: Card) =>
+    patch(card.id, (c) => ({
+      ...c,
+      likedByMe: !c.likedByMe,
+      likes: Math.max(0, (c.likes ?? 0) + (c.likedByMe ? -1 : 1)),
+    }));
+
+  const addTodo = (text: string) =>
+    setTodos((prev) => [{ id: crypto.randomUUID(), text, at: Date.now() }, ...prev]);
+
+  const toggleTodo = (id: string) =>
+    setTodos((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, doneAt: t.doneAt ? undefined : Date.now() } : t)),
+    );
+
+  const openBrag = (todo: Todo) => {
+    setDrawerOpen(false);
+    setBragTodo(todo);
+    setBragText(`做到了：${todo.text}`);
+    setBragTitle('');
+  };
+
+  const submitBrag = () => {
+    if (!bragTodo || !bragText.trim()) return;
+    const card = createPlayerCard(
+      bragText.trim(),
+      identity.name,
+      personas,
+      settings,
+      bragTitle,
+      Date.now(),
+      'brag',
+    );
+    setCards((prev) => [card, ...prev]);
+    setTodos((prev) =>
+      prev.map((t) => (t.id === bragTodo.id ? { ...t, doneAt: t.doneAt ?? Date.now() } : t)),
+    );
+    setBragTodo(null);
+    setDrawerOpen(false);
+    setView('home');
+    setToast('炫耀帖发出去了');
   };
 
   const openCard = (card: Card) => {
@@ -345,6 +398,9 @@ export default function App() {
     .filter((c) => c.advice?.accepted && c.advice.fromPersonaId === 'me')
     .sort((a, b) => b.createdAt - a.createdAt);
   const detailCard = cards.find((c) => c.id === detailId);
+  const noteCount =
+    todos.filter((t) => !t.doneAt).length +
+    cards.filter((c) => c.note && c.status === 'noted').length;
 
   return (
     <div className="shell">
@@ -389,6 +445,7 @@ export default function App() {
             <span className="masthead-date">
               {personas.length} 位同伴 · 今天 {todays.length} 张卡
             </span>
+            <span className="masthead-sub">这里不保证长期，只负责此刻能做的那一件小事。</span>
           </div>
 
           {activeMine && (
@@ -414,7 +471,13 @@ export default function App() {
             <section className="board">
               <h2 className="board-title">今天</h2>
               {todays.map((card) => (
-                <CardRow key={card.id} card={card} personas={personas} onClick={() => openCard(card)} />
+                <CardRow
+                  key={card.id}
+                  card={card}
+                  personas={personas}
+                  onClick={() => openCard(card)}
+                  onLike={() => like(card)}
+                />
               ))}
             </section>
           )}
@@ -423,7 +486,13 @@ export default function App() {
             <section className="board">
               <h2 className="board-title">更早</h2>
               {earlier.map((card) => (
-                <CardRow key={card.id} card={card} personas={personas} onClick={() => openCard(card)} />
+                <CardRow
+                  key={card.id}
+                  card={card}
+                  personas={personas}
+                  onClick={() => openCard(card)}
+                  onLike={() => like(card)}
+                />
               ))}
             </section>
           )}
@@ -463,6 +532,7 @@ export default function App() {
             onDone={() => patch(detailCard.id, (c) => completeCard(c, Date.now(), settings.speed))}
             onCloseCard={() => patch(detailCard.id, (c) => closeCard(c))}
             onBack={() => setView('home')}
+            onLike={() => like(detailCard)}
           />
         </main>
       )}
@@ -477,7 +547,13 @@ export default function App() {
           </div>
           {myCards.length === 0 && <p className="view-empty">你还没放过卡。</p>}
           {myCards.map((card) => (
-            <CardRow key={card.id} card={card} personas={personas} onClick={() => openCard(card)} />
+            <CardRow
+                  key={card.id}
+                  card={card}
+                  personas={personas}
+                  onClick={() => openCard(card)}
+                  onLike={() => like(card)}
+                />
           ))}
           {myCards.length > 0 && <p className="view-empty">点开任意一张，可以继续聊或贴便签。</p>}
         </main>
@@ -565,6 +641,63 @@ export default function App() {
 
       {toast && <div className="toast">{toast}</div>}
 
+      <button className="drawer-tab" onClick={() => setDrawerOpen(true)}>
+        便签{noteCount > 0 ? ` · ${noteCount}` : ''}
+      </button>
+
+      {drawerOpen && (
+        <NoteDrawer
+          todos={todos}
+          cards={cards}
+          personas={personas}
+          onAdd={addTodo}
+          onToggle={toggleTodo}
+          onBrag={openBrag}
+          onOpenCard={(card) => {
+            setDrawerOpen(false);
+            openCard(card);
+          }}
+          onClose={() => setDrawerOpen(false)}
+        />
+      )}
+
+      {bragTodo && (
+        <div
+          className="scrim"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setBragTodo(null);
+          }}
+        >
+          <div className="sheet brag-sheet" role="dialog" aria-modal="true" aria-label="发个炫耀">
+            <div className="sheet-head">
+              <div>
+                <h2>发个炫耀</h2>
+                <p>做到了「{bragTodo.text}」。要不要让店里的人看见？</p>
+              </div>
+              <button className="icon-btn" onClick={() => setBragTodo(null)} aria-label="关闭">
+                ×
+              </button>
+            </div>
+            <label className="field">
+              <span className="field-label">标题（可以不写）</span>
+              <input value={bragTitle} onChange={(e) => setBragTitle(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">想说的话</span>
+              <textarea rows={3} value={bragText} onChange={(e) => setBragText(e.target.value)} />
+            </label>
+            <div className="sheet-actions">
+              <button className="btn btn-ghost" onClick={() => setBragTodo(null)}>
+                算了
+              </button>
+              <button className="btn btn-primary" onClick={submitBrag} disabled={!bragText.trim()}>
+                发出去
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <nav className="tabbar">
         {(
           [
@@ -597,6 +730,7 @@ export default function App() {
       <footer className="foot">
         <div className="foot-inner">
           <p className="foot-brand">StartNow论坛</p>
+          <p>StartNow 不保证长期陪伴，只帮你看清当下能做的最小一步。</p>
           <p>
             这里的同伴都是 AI。如有伤害自己的念头，请拨打 <strong>12356</strong> 心理援助热线。
           </p>

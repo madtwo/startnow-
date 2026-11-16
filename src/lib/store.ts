@@ -1,4 +1,4 @@
-import type { Card, Identity, LlmConfig, Persona, World, WorldSettings } from '../types';
+import type { Card, Identity, LlmConfig, Persona, Todo, World, WorldSettings } from '../types';
 import { defaultConfig, PRESETS } from '../config/providers';
 import { defaultPersonas } from './personas';
 import { buildSeedCards } from './seed';
@@ -9,6 +9,7 @@ const KEYS = {
   personas: 'shudong.personas.v2',
   world: 'shudong.world.v1',
   settings: 'shudong.settings.v1',
+  todos: 'shudong.todos.v1',
   identity: 'shudong.identity.v2',
   identityLegacy: 'shudong.identity.v1',
 };
@@ -94,6 +95,9 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     authorName: typeof raw.authorName === 'string' ? raw.authorName : '我',
     authorKind: raw.authorKind === 'persona' ? 'persona' : 'player',
     title: typeof raw.title === 'string' ? raw.title : undefined,
+    kind: raw.kind === 'brag' ? 'brag' : 'worry',
+    likes: typeof raw.likes === 'number' ? raw.likes : 0,
+    likedByMe: Boolean(raw.likedByMe),
     text: raw.text,
     createdAt,
     status: raw.status ?? 'stuck',
@@ -201,6 +205,17 @@ export function loadSettings(): WorldSettings {
 }
 
 export const saveSettings = (settings: WorldSettings) => write(KEYS.settings, settings);
+
+export function loadTodos(): Todo[] {
+  const saved = read(KEYS.todos);
+  if (!Array.isArray(saved)) return [];
+  return saved
+    .filter((t): t is Todo => Boolean(t) && typeof t.text === 'string')
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 60);
+}
+
+export const saveTodos = (todos: Todo[]) => write(KEYS.todos, todos.slice(0, 60));
 
 export function loadIdentity(): Identity {
   const saved = read(KEYS.identity) as Partial<Identity> | null;

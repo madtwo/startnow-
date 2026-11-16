@@ -16,15 +16,22 @@ interface Props {
   card: Card;
   personas: Persona[];
   onClick: () => void;
+  onLike: () => void;
 }
 
-export default function CardRow({ card, personas, onClick }: Props) {
+export default function CardRow({ card, personas, onClick, onLike }: Props) {
   const author = personas.find((p) => p.id === card.authorId);
   const mine = card.authorId === 'me';
   const unseen = !card.seenAt;
+  const brag = card.kind === 'brag';
 
   return (
-    <button className="thread-card" onClick={onClick}>
+    <div
+      className={`thread-card ${brag ? 'is-brag' : ''}`}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+    >
       <div className="thread-top">
         {author ? (
           <Avatar avatarKey={author.avatarKey} color={author.color} size="xs" />
@@ -34,6 +41,7 @@ export default function CardRow({ card, personas, onClick }: Props) {
         <span className="thread-author">{card.authorName}</span>
         {!mine && <span className="thread-badge">AI</span>}
         {mine && <span className="me-badge">你</span>}
+        {brag && <span className="brag-badge">做到了</span>}
         <time className="thread-time">{timeLabel(card.createdAt)}</time>
         {unseen && <span className="unread-dot" title="还没点开过" />}
       </div>
@@ -43,9 +51,18 @@ export default function CardRow({ card, personas, onClick }: Props) {
 
       <div className="thread-bottom">
         <span>{card.comments.length ? `${card.comments.length} 条回应` : '还没有人说话'}</span>
-        {card.status === 'done' && <span className="thread-done">做到了</span>}
         {card.status === 'handled' && <span className="thread-handled">已处理</span>}
+        <button
+          className={`like ${card.likedByMe ? 'on' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onLike();
+          }}
+          aria-label="点赞"
+        >
+          ♥ {card.likes ?? 0}
+        </button>
       </div>
-    </button>
+    </div>
   );
 }

@@ -59,6 +59,7 @@ export function createPlayerCard(
   settings: WorldSettings,
   title?: string,
   now = Date.now(),
+  kind: 'worry' | 'brag' = 'worry',
 ): Card {
   const cap = Math.max(1, settings.maxArrivals);
   const n = Math.min(cap, 1 + (Math.random() < 0.6 ? 1 : 0) + (Math.random() < 0.2 ? 1 : 0));
@@ -75,6 +76,9 @@ export function createPlayerCard(
     authorName: identityName,
     authorKind: 'player',
     title: title?.trim() || undefined,
+    kind,
+    likes: 0,
+    likedByMe: false,
     text,
     createdAt: now,
     status: 'stuck',

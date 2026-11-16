@@ -110,12 +110,22 @@ export interface PendingReply {
   phase: 'reply' | 'reaction' | 'decide';
 }
 
+export interface Todo {
+  id: string;
+  text: string;
+  at: number;
+  doneAt?: number;
+}
+
 export interface Card {
   id: string;
   authorId: string;
   authorName: string;
   authorKind: 'player' | 'persona';
   title?: string;
+  kind?: 'worry' | 'brag';
+  likes?: number;
+  likedByMe?: boolean;
   text: string;
   weight?: 1 | 2 | 3;
   image?: string;

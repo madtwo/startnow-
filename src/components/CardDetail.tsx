@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Card, Comment, Identity, Persona } from '../types';
 import Avatar from './Avatar';
 
@@ -14,6 +14,7 @@ interface Props {
   onDone: () => void;
   onCloseCard: () => void;
   onBack: () => void;
+  onLike: () => void;
 }
 
 interface Thread {
@@ -34,9 +35,12 @@ export default function CardDetail({
   onDone,
   onCloseCard,
   onBack,
+  onLike,
 }: Props) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [modes, setModes] = useState<Record<string, 'comment' | 'advice'>>({});
+  const [activeThread, setActiveThread] = useState('');
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const author = personas.find((p) => p.id === card.authorId);
   const mine = card.authorId === 'me';
   const giver = card.advice ? personas.find((p) => p.id === card.advice?.fromPersonaId) : undefined;
@@ -99,6 +103,7 @@ export default function CardDetail({
         </div>
       </header>
 
+      {card.kind === 'brag' && <span className="brag-badge">做到了</span>}
       {card.title && <h1 className="page-title">{card.title}</h1>}
       <p className="page-text">{card.text}</p>
       {card.image && <img className="card-image" src={card.image} alt="卡里配的图" />}
@@ -121,6 +126,12 @@ export default function CardDetail({
           )}
         </div>
       )}
+
+      <div className="page-like-row">
+        <button className={`like ${card.likedByMe ? 'on' : ''}`} onClick={onLike}>
+          ♥ {card.likes ?? 0}
+        </button>
+      </div>
 
       {card.note && card.status === 'noted' && (
         <div className="sticky-note">
@@ -157,7 +168,15 @@ export default function CardDetail({
               const persona = personas.find((p) => p.id === c.authorId);
               const isMe = c.authorKind === 'player';
               return (
-                <div key={c.id} className={`comment ${isMe ? 'mine' : ''} lineless`}>
+                <div
+                  key={c.id}
+                  className={`comment ${isMe ? 'mine' : ''} lineless`}
+                  onClick={() => {
+                    if (!thread.persona || closed) return;
+                    setActiveThread(thread.key);
+                    inputRefs.current[thread.key]?.focus();
+                  }}
+                >
                   <div className="comment-main">
                     <span className="comment-name">
                       {isMe ? '你' : thread.persona ? '' : persona?.name}
@@ -182,6 +201,10 @@ export default function CardDetail({
                   {modes[thread.key] === 'advice' ? '建议中' : '给建议'}
                 </button>
                 <input
+                  ref={(el) => {
+                    inputRefs.current[thread.key] = el;
+                  }}
+                  className={activeThread === thread.key ? 'active' : ''}
                   value={drafts[thread.key] ?? ''}
                   placeholder={`回 ${thread.persona.name} 一句`}
                   onChange={(e) => setDrafts((prev) => ({ ...prev, [thread.key]: e.target.value }))}
