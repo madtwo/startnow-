@@ -5,11 +5,13 @@ import Avatar from './Avatar';
 
 interface Props {
   value: string;
+  title: string;
   image: string;
   busy: boolean;
   ready: boolean;
   personas: Persona[];
   onChange: (value: string) => void;
+  onTitle: (value: string) => void;
   onImage: (image: string) => void;
   onSubmit: () => void;
   onOpenSettings: () => void;
@@ -17,11 +19,13 @@ interface Props {
 
 export default function PostForm({
   value,
+  title,
   image,
   busy,
   ready,
   personas,
   onChange,
+  onTitle,
   onImage,
   onSubmit,
   onOpenSettings,
@@ -41,6 +45,14 @@ export default function PostForm({
     <section className="post-form">
       <h2>放一张卡</h2>
       <p className="post-form-hint">一两句就行，说清卡在哪。可以配一张图。</p>
+
+      <input
+        className="post-form-title"
+        value={title}
+        placeholder="标题（可以不写）"
+        onChange={(e) => onTitle(e.target.value)}
+        aria-label="标题，可以不写"
+      />
 
       <textarea
         className="post-form-input"

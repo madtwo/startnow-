@@ -57,6 +57,7 @@ export function createPlayerCard(
   identityName: string,
   personas: Persona[],
   settings: WorldSettings,
+  title?: string,
   now = Date.now(),
 ): Card {
   const cap = Math.max(1, settings.maxArrivals);
@@ -73,6 +74,7 @@ export function createPlayerCard(
     authorId: 'me',
     authorName: identityName,
     authorKind: 'player',
+    title: title?.trim() || undefined,
     text,
     createdAt: now,
     status: 'stuck',

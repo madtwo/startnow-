@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdminPanel from './components/AdminPanel';
 import Avatar from './components/Avatar';
+import CardDetail from './components/CardDetail';
+import CardRow from './components/CardRow';
 import PostForm from './components/PostForm';
 import Tour from './components/Tour';
-import CardView from './components/CardView';
-import CardDetail from './components/CardDetail';
 import CrisisCard from './components/CrisisCard';
 import SettingsDialog from './components/SettingsDialog';
 import { configLabel, isReady } from './config/providers';
@@ -59,7 +59,7 @@ import type {
 
 const TICK_MS = 4000;
 
-type View = 'home' | 'post' | 'mine' | 'history' | 'profile';
+type View = 'home' | 'post' | 'mine' | 'profile' | 'detail';
 
 export default function App() {
   const [boot] = useState(() => {
@@ -82,6 +82,7 @@ export default function App() {
   const [settings, setSettings] = useState<WorldSettings>(() => loadSettings());
   const [identity, setIdentity] = useState<Identity>(() => loadIdentity());
   const [draft, setDraft] = useState('');
+  const [draftTitle, setDraftTitle] = useState('');
   const [image, setImage] = useState('');
   const [working, setWorking] = useState(false);
   const [toast, setToast] = useState('');
@@ -89,12 +90,11 @@ export default function App() {
     () => localStorage.getItem('startnow.onboarded') !== '1',
   );
   const [view, setView] = useState<View>('home');
-  const [deckIndex, setDeckIndex] = useState(0);
+  const [detailId, setDetailId] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState('');
   const [adminOpen, setAdminOpen] = useState(false);
   const [crisis, setCrisis] = useState('');
-  const [detailId, setDetailId] = useState('');
   const brandClicks = useRef<number[]>([]);
   const busy = useRef(false);
 
@@ -121,7 +121,9 @@ export default function App() {
         settings: cur.settings,
         config: cur.config,
       });
-      const before = new Map(cur.cards.filter((c) => c.authorId === 'me').map((c) => [c.id, c.comments.length]));
+      const before = new Map(
+        cur.cards.filter((c) => c.authorId === 'me').map((c) => [c.id, c.comments.length]),
+      );
       const fresh = out.cards.find(
         (c) => c.authorId === 'me' && (before.get(c.id) ?? 0) < c.comments.length,
       );
@@ -170,14 +172,21 @@ export default function App() {
       return;
     }
     if (findCrisis(text)) setCrisis(text);
-    const card = createPlayerCard(text, identity.name, personas, settings);
+    const card = createPlayerCard(text, identity.name, personas, settings, draftTitle);
     if (image) card.image = image;
     setPersonas((prev) => notePlayerShare(prev, text));
     setCards((prev) => [card, ...prev]);
     setDraft('');
+    setDraftTitle('');
     setImage('');
     setView('home');
     setToast('正在寻找心友，可以去看看别人的卡');
+  };
+
+  const openCard = (card: Card) => {
+    setDetailId(card.id);
+    if (!card.seenAt) patch(card.id, (c) => markSeen(c));
+    setView('detail');
   };
 
   const comment = (card: Card, text: string, kind: 'comment' | 'advice', peer?: string) => {
@@ -323,64 +332,19 @@ export default function App() {
     setWorld(emptyWorld());
   };
 
-  const now = Date.now();
-  const todayAi = useMemo(
-    () =>
-      cards
-        .filter((c) => c.authorKind === 'persona' && now - c.createdAt < 24 * 60 * 60_000)
-        .sort((a, b) => b.createdAt - a.createdAt),
-    [cards, now],
-  );
-  const olderAi = useMemo(
-    () =>
-      cards
-        .filter((c) => c.authorKind === 'persona' && now - c.createdAt >= 24 * 60 * 60_000)
-        .sort((a, b) => b.createdAt - a.createdAt),
-    [cards, now],
-  );
+  const feed = useMemo(() => [...cards].sort((a, b) => b.createdAt - a.createdAt), [cards]);
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  const todays = feed.filter((c) => c.createdAt >= todayStart);
+  const earlier = feed.filter((c) => c.createdAt < todayStart);
   const myCards = useMemo(
     () => cards.filter((c) => c.authorId === 'me').sort((a, b) => b.createdAt - a.createdAt),
     [cards],
   );
   const activeMine = myCards.find((c) => c.status !== 'done' && c.status !== 'handled');
-  const deck = todayAi;
-  const current = deck[Math.min(deckIndex, Math.max(0, deck.length - 1))];
   const helped = cards
     .filter((c) => c.advice?.accepted && c.advice.fromPersonaId === 'me')
     .sort((a, b) => b.createdAt - a.createdAt);
-
-  useEffect(() => {
-    if (deckIndex > deck.length - 1) setDeckIndex(Math.max(0, deck.length - 1));
-  }, [deck.length, deckIndex]);
-
-  useEffect(() => {
-    if (!current) return;
-    const timer = window.setTimeout(() => {
-      if (!current.seenAt) patch(current.id, (c) => markSeen(c));
-    }, 2000);
-    return () => window.clearTimeout(timer);
-  }, [current?.id]);
-
-  useEffect(() => {
-    if (view !== 'home') return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') setDeckIndex((i) => Math.min(i + 1, deck.length - 1));
-      if (e.key === 'ArrowLeft') setDeckIndex((i) => Math.max(i - 1, 0));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [view, deck.length]);
-
-  const cardHandlers = (card: Card) => ({
-    onComment: (text: string, kind: 'comment' | 'advice', peer?: string) =>
-      comment(card, text, kind, peer),
-    onAdvice: () => void advice(card),
-    onShrink: () => patch(card.id, (c) => shrinkAdvice(c)),
-    onAccept: () => patch(card.id, (c) => acceptAdvice(c)),
-    onDone: () => patch(card.id, (c) => completeCard(c, Date.now(), settings.speed)),
-    onCloseCard: () => patch(card.id, (c) => closeCard(c)),
-    onOpenDetail: () => setDetailId(card.id),
-  });
+  const detailCard = cards.find((c) => c.id === detailId);
 
   return (
     <div className="shell">
@@ -423,7 +387,7 @@ export default function App() {
           <div className="masthead">
             <p className="masthead-title">卡住了没关系，先动一下</p>
             <span className="masthead-date">
-              {personas.length} 位同伴 · 今天 {todayAi.length} 张卡
+              {personas.length} 位同伴 · 今天 {todays.length} 张卡
             </span>
           </div>
 
@@ -439,59 +403,28 @@ export default function App() {
 
           {crisis && <CrisisCard onClose={() => setCrisis('')} />}
 
-          {current ? (
-            <section className="deck">
-              <div className="deck-bar">
-                <button
-                  className="deck-nav"
-                  onClick={() => setDeckIndex((i) => Math.max(0, i - 1))}
-                  disabled={deckIndex === 0}
-                >
-                  ←
-                </button>
-                <span className="deck-progress">
-                  {Math.min(deckIndex + 1, deck.length)} / {deck.length}
-                </span>
-                <button
-                  className="deck-nav"
-                  onClick={() => setDeckIndex((i) => Math.min(deck.length - 1, i + 1))}
-                  disabled={deckIndex >= deck.length - 1}
-                >
-                  →
-                </button>
-              </div>
-              <CardView
-                card={current}
-                me={identity}
-                personas={personas}
-                busy={working}
-                {...cardHandlers(current)}
-              />
-              {deck.length > 1 && (
-                <div className="deck-dots">
-                  {deck.map((c, i) => (
-                    <button
-                      key={c.id}
-                      className={`deck-dot ${i === deckIndex ? 'on' : ''} ${c.seenAt ? 'seen' : ''}`}
-                      onClick={() => setDeckIndex(i)}
-                      aria-label={`第 ${i + 1} 张`}
-                    />
-                  ))}
-                </div>
-              )}
+          {feed.length === 0 && (
+            <div className="empty">
+              <h2>还没有人卡住</h2>
+              <p>去「发一张」写一句，四位同伴会陆续过来。</p>
+            </div>
+          )}
+
+          {todays.length > 0 && (
+            <section className="board">
+              <h2 className="board-title">今天</h2>
+              {todays.map((card) => (
+                <CardRow key={card.id} card={card} personas={personas} onClick={() => openCard(card)} />
+              ))}
             </section>
-          ) : (
-            <section className="deck-end">
-              <p>今天看完了。</p>
-              <p className="deck-end-sub">要不要说说你自己的？</p>
-              <div className="deck-end-actions">
-                <button className="btn btn-ghost" onClick={() => setView('history')}>
-                  看历史烦恼
-                </button>
-                <button className="btn btn-primary" onClick={() => setView('mine')}>
-                  说说我的
-                </button>
-              </div>
+          )}
+
+          {earlier.length > 0 && (
+            <section className="board">
+              <h2 className="board-title">更早</h2>
+              {earlier.map((card) => (
+                <CardRow key={card.id} card={card} personas={personas} onClick={() => openCard(card)} />
+              ))}
             </section>
           )}
         </main>
@@ -501,18 +434,36 @@ export default function App() {
         <main className="feed">
           <PostForm
             value={draft}
+            title={draftTitle}
             image={image}
             busy={working}
             ready={ready}
             personas={personas}
             onChange={setDraft}
+            onTitle={setDraftTitle}
             onImage={setImage}
             onSubmit={send}
             onOpenSettings={() => openSettings()}
           />
-          <p className="view-empty">
-            放出去之后不用守着。有人来会在这里出现，也会提示你。
-          </p>
+          <p className="view-empty">标题可以不写。放出去之后不用守着，有人来会提示你。</p>
+        </main>
+      )}
+
+      {view === 'detail' && detailCard && (
+        <main className="feed">
+          <CardDetail
+            card={detailCard}
+            me={identity}
+            personas={personas}
+            busy={working}
+            onComment={(text, kind, peer) => comment(detailCard, text, kind, peer)}
+            onAdvice={() => void advice(detailCard)}
+            onShrink={() => patch(detailCard.id, (c) => shrinkAdvice(c))}
+            onAccept={() => patch(detailCard.id, (c) => acceptAdvice(c))}
+            onDone={() => patch(detailCard.id, (c) => completeCard(c, Date.now(), settings.speed))}
+            onCloseCard={() => patch(detailCard.id, (c) => closeCard(c))}
+            onBack={() => setView('home')}
+          />
         </main>
       )}
 
@@ -526,37 +477,9 @@ export default function App() {
           </div>
           {myCards.length === 0 && <p className="view-empty">你还没放过卡。</p>}
           {myCards.map((card) => (
-            <CardView
-              key={card.id}
-              card={card}
-              me={identity}
-              personas={personas}
-              busy={working}
-              {...cardHandlers(card)}
-            />
+            <CardRow key={card.id} card={card} personas={personas} onClick={() => openCard(card)} />
           ))}
-        </main>
-      )}
-
-      {view === 'history' && (
-        <main className="feed">
-          <div className="view-head">
-            <button className="link" onClick={() => setView('home')}>
-              ← 回去看卡
-            </button>
-            <h2>历史烦恼</h2>
-          </div>
-          {olderAi.length === 0 && <p className="view-empty">还没有更早的卡。</p>}
-          {olderAi.map((card) => (
-            <CardView
-              key={card.id}
-              card={card}
-              me={identity}
-              personas={personas}
-              busy={working}
-              {...cardHandlers(card)}
-            />
-          ))}
+          {myCards.length > 0 && <p className="view-empty">点开任意一张，可以继续聊或贴便签。</p>}
         </main>
       )}
 
@@ -615,9 +538,6 @@ export default function App() {
               <button className="btn btn-ghost" onClick={() => openSettings()}>
                 API 设置
               </button>
-              <button className="btn btn-ghost" onClick={() => setView('history')}>
-                历史烦恼
-              </button>
               <button className="btn btn-ghost" onClick={() => setAdminOpen(true)}>
                 作者后台
               </button>
@@ -666,7 +586,7 @@ export default function App() {
 
       {onboardOpen && (
         <Tour
-          onNavigate={setView}
+          onNavigate={(next) => setView(next)}
           onClose={() => {
             localStorage.setItem('startnow.onboarded', '1');
             setOnboardOpen(false);
@@ -683,23 +603,7 @@ export default function App() {
         </div>
       </footer>
 
-      {detailId && cards.find((c) => c.id === detailId) && (() => {
-        const card = cards.find((c) => c.id === detailId)!;
-        return (
-          <CardDetail
-            card={card}
-            me={identity}
-            personas={personas}
-            busy={working}
-            onComment={(text, kind, peer) => comment(card, text, kind, peer)}
-            onShrink={() => patch(card.id, (c) => shrinkAdvice(c))}
-            onAccept={() => patch(card.id, (c) => acceptAdvice(c))}
-            onDone={() => patch(card.id, (c) => completeCard(c, Date.now(), settings.speed))}
-            onCloseCard={() => patch(card.id, (c) => closeCard(c))}
-            onClose={() => setDetailId('')}
-          />
-        );
-      })()}
+      {detailCard && view !== 'detail' && null}
 
       {settingsOpen && (
         <SettingsDialog

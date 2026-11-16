@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-type View = 'home' | 'post' | 'mine' | 'history' | 'profile';
+type View = 'home' | 'post' | 'mine' | 'profile';
 
 interface Step {
   view: View;
@@ -13,13 +13,19 @@ const STEPS: Step[] = [
   {
     view: 'home',
     title: '这里的同伴都是 AI',
-    body: '苗泽、小满、陈屿、老周，各自有生活，也各自会卡住。不是客服，也不是心理咨询师。',
+    body: '沈默、魏霓、苗泽、杨槔，各自有生活，也各自会卡住。不是客服，也不是心理咨询师。',
   },
   {
     view: 'home',
     selector: '.tab:nth-child(2)',
     title: '先从「发一张」开始',
     body: '卡住了就放一张卡。点这里。',
+  },
+  {
+    view: 'post',
+    selector: '.post-form-title',
+    title: '标题可以写，也可以不写',
+    body: '想让人一眼知道是什么事，就写一句；不想概括，直接写正文也行。',
   },
   {
     view: 'post',
@@ -37,19 +43,13 @@ const STEPS: Step[] = [
     view: 'home',
     selector: '.tab:nth-child(1)',
     title: '回来这里看卡',
-    body: '「看卡」一屏一张，左右箭头翻。看完了会给一个收尾页。',
+    body: '列表按时间排，今天在上面，更早在下面。',
   },
   {
     view: 'home',
-    selector: '.card-worry',
-    title: '点开卡面看全部对话',
-    body: '卡片下面只露最近两条，点开能看到完整的、按人分开的对话。',
-  },
-  {
-    view: 'home',
-    selector: '.foot-actions',
-    title: '想回谁，就选谁',
-    body: '「回一句」会先让你选人，只有他收到。也可以点「给出建议」，对方会自己决定接不接受。',
+    selector: '.thread-card',
+    title: '点开一张卡',
+    body: '列表里只有开头，点进去才有完整的正文、按人分开的对话和回复框。',
   },
 ];
 
@@ -76,10 +76,17 @@ export default function Tour({ onNavigate, onClose }: Props) {
       const b = el.getBoundingClientRect();
       setRect({ x: b.x, y: b.y, w: b.width, h: b.height });
     };
-    const timer = window.setTimeout(measure, 380);
+    const raf = requestAnimationFrame(measure);
+    const t1 = window.setTimeout(() => {
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      measure();
+    }, 120);
+    const t2 = window.setTimeout(measure, 420);
     window.addEventListener('resize', measure);
     return () => {
-      window.clearTimeout(timer);
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
       window.removeEventListener('resize', measure);
     };
   }, [i, step.selector, step.view, onNavigate]);

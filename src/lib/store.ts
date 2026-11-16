@@ -93,6 +93,7 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     authorId: typeof raw.authorId === 'string' ? raw.authorId : 'me',
     authorName: typeof raw.authorName === 'string' ? raw.authorName : '我',
     authorKind: raw.authorKind === 'persona' ? 'persona' : 'player',
+    title: typeof raw.title === 'string' ? raw.title : undefined,
     text: raw.text,
     createdAt,
     status: raw.status ?? 'stuck',

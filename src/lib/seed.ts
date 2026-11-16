@@ -21,6 +21,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
     card({
       authorId: 'shenmo',
       authorName: '沈默',
+      title: '她回了个「嗯」',
       text: '她回了句「嗯」。我打了三行又删了。\n\n我是不是太黏了。',
       weight: 2,
       createdAt: now - 3 * HOUR,
@@ -39,6 +40,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
     card({
       authorId: 'weini',
       authorName: '魏霓',
+      title: '室友没叫我',
       text: '室友出去吃饭没叫我。\n\n我知道可能是临时约的，但还是有点难受。',
       weight: 2,
       createdAt: now - 5 * HOUR,
@@ -57,6 +59,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
     card({
       authorId: 'yanggao',
       authorName: '杨槔',
+      title: '夹在中间',
       text: '我哥又和我爸吵了。\n\n我夹在中间，谁都不想怪。',
       weight: 2,
       createdAt: now - 30 * HOUR,
@@ -76,6 +79,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
     card({
       authorId: 'miaoze',
       authorName: '苗泽',
+      title: '名单里没有我',
       text: '夏令营名单出来了，没有我。\n\n我真心替他们高兴，但晚上没吃下饭。',
       weight: 1,
       createdAt: now - 26 * HOUR,

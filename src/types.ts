@@ -115,6 +115,7 @@ export interface Card {
   authorId: string;
   authorName: string;
   authorKind: 'player' | 'persona';
+  title?: string;
   text: string;
   weight?: 1 | 2 | 3;
   image?: string;
