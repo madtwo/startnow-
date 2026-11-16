@@ -3777,6 +3777,105 @@ button {
   background: color-mix(in srgb, var(--pc) 5%, transparent);
 }
 
+/* ---------- 论坛式平铺回应 ---------- */
+
+.forum-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 18px;
+}
+
+.forum-comment {
+  --pc: var(--warm-silver);
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--pc) 16%, var(--border));
+  border-left: 3px solid color-mix(in srgb, var(--pc) 60%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--pc) 4%, var(--surface));
+  cursor: pointer;
+  transition:
+    background var(--ease),
+    box-shadow var(--ease);
+}
+
+.forum-comment:hover {
+  background: color-mix(in srgb, var(--pc) 8%, var(--surface));
+}
+
+.forum-comment.mine,
+.forum-comment.helper {
+  cursor: default;
+}
+
+.forum-comment.selected {
+  background: color-mix(in srgb, var(--pc) 11%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pc) 45%, transparent);
+}
+
+.forum-comment:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--pc) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.forum-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.forum-comment-name {
+  color: color-mix(in srgb, var(--pc) 62%, var(--ink));
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.forum-comment-time,
+.forum-comment-reply {
+  color: var(--tertiary);
+  font-size: 10.5px;
+}
+
+.forum-comment-target {
+  margin-left: auto;
+  color: var(--accent-ink);
+  font-size: 10px;
+}
+
+.forum-comment-text {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+}
+
+/* 输入栏固定在底部导航之上，像论坛一样随滚动可见 */
+.card-page.has-composer {
+  padding-bottom: 200px;
+}
+
+.page-composer {
+  position: fixed;
+  left: 50%;
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  z-index: 45;
+  width: min(calc(100vw - 32px), calc(var(--maxw) - 40px));
+  margin: 0;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 -10px 30px rgba(20, 20, 19, 0.08);
+}
+
+@media (max-width: 640px) {
+  .page-composer {
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    width: calc(100vw - 24px);
+  }
+}
+
 .page-thread-head span {
   color: color-mix(in srgb, var(--pc) 60%, var(--ink));
 }

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import type { Card, Comment, Identity, Persona } from '../types';
 import Avatar from './Avatar';
 
@@ -18,11 +18,13 @@ interface Props {
   initialPeer?: string;
 }
 
-interface Thread {
-  key: string;
-  persona?: Persona;
-  rows: Comment[];
-}
+const clock = (at: number) => {
+  const date = new Date(at);
+  const now = new Date();
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  if (date.toDateString() === now.toDateString()) return time;
+  return `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, '0')} ${time}`;
+};
 
 export default function CardDetail({
   card,
@@ -39,54 +41,58 @@ export default function CardDetail({
   onLike,
   initialPeer,
 }: Props) {
+  const defaultTarget = card.authorKind === 'persona' ? card.authorId : '';
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<'comment' | 'advice'>('comment');
-  const [replyTo, setReplyTo] = useState(
-    initialPeer || (card.authorKind === 'persona' ? card.authorId : ''),
-  );
+  const [targetId, setTargetId] = useState(initialPeer || defaultTarget);
+  const [targetComment, setTargetComment] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
   const author = personas.find((p) => p.id === card.authorId);
   const mine = card.authorId === 'me';
   const giver = card.advice ? personas.find((p) => p.id === card.advice?.fromPersonaId) : undefined;
   const closed = card.status === 'done' || card.status === 'handled';
   const isGuide = card.kind === 'guide';
-  const target = personas.find((p) => p.id === replyTo);
+  const target = personas.find((p) => p.id === targetId);
+  const targetIsOp = Boolean(targetId) && targetId === card.authorId;
+  const replyLabel = targetId
+    ? targetIsOp
+      ? '回复楼主'
+      : `回复：${target?.name ?? '对方'}`
+    : mine
+      ? '说点什么'
+      : '回复楼主';
 
-  const threads = useMemo<Thread[]>(() => {
-    const map = new Map<string, Comment[]>();
-    card.comments.forEach((c) => {
-      const key = c.authorKind === 'persona' ? c.authorId : c.peer ?? '_';
-      map.set(key, [...(map.get(key) ?? []), c]);
-    });
-    const rows = [...map.entries()].map(([key, list]) => ({
-      key,
-      persona: key === '_' ? undefined : personas.find((p) => p.id === key),
-      rows: list,
-    }));
-    card.arrivals.forEach((id) => {
-      if (!rows.some((t) => t.key === id)) {
-        const persona = personas.find((p) => p.id === id);
-        if (persona) rows.push({ key: id, persona, rows: [] });
-      }
-    });
-    return rows;
-  }, [card, personas]);
+  const peerName = (id?: string) => {
+    if (!id) return '';
+    if (id === 'me') return '你';
+    if (id === 'helper') return '论坛小助手';
+    return personas.find((p) => p.id === id)?.name ?? '对方';
+  };
 
   const send = () => {
     const text = draft.trim();
     if (!text || busy) return;
-    onComment(text, mode === 'advice' ? 'advice' : 'comment', replyTo);
+    onComment(text, mode === 'advice' ? 'advice' : 'comment', targetId);
     setDraft('');
     setMode('comment');
+    setTargetComment('');
   };
 
-  const pick = (peerId: string) => {
-    setReplyTo(peerId);
+  const pick = (comment: Comment) => {
+    if (comment.authorKind !== 'persona') return;
+    setTargetId(comment.authorId);
+    setTargetComment(comment.id);
+    inputRef.current?.focus();
+  };
+
+  const resetTarget = () => {
+    setTargetId(defaultTarget);
+    setTargetComment('');
     inputRef.current?.focus();
   };
 
   return (
-    <article className="card-page">
+    <article className={`card-page ${!isGuide && !closed ? 'has-composer' : ''}`}>
       <div className="page-top">
         <button className="link" onClick={onBack}>
           ← 回去
@@ -169,64 +175,64 @@ export default function CardDetail({
 
       <h2 className="page-comments-title">{card.comments.length} 条回应</h2>
 
-      <div className="page-threads">
-        {threads.length === 0 && (
+      <div className="forum-comments">
+        {card.comments.length === 0 && (
           <p className="view-empty">还没有人说话。等一会儿，或者在下面先回楼主一句。</p>
         )}
-        {threads.map((thread) => (
-          <section
-            key={thread.key}
-            className={`page-thread ${replyTo === thread.key ? 'targeted' : ''}`}
-            style={thread.persona ? ({ '--pc': thread.persona.color } as CSSProperties) : undefined}
-          >
-            {thread.persona && (
-              <div className="page-thread-head">
-                <Avatar avatarKey={thread.persona.avatarKey} color={thread.persona.color} size="xs" />
-                <span>{thread.persona.name}</span>
-                {replyTo === thread.persona.id && <em>正在回复</em>}
+        {card.comments.map((comment) => {
+          const persona = personas.find((p) => p.id === comment.authorId);
+          const isMe = comment.authorKind === 'player';
+          const isHelper = comment.authorKind === 'helper';
+          const selected = targetComment === comment.id;
+          const repliedTo =
+            comment.peer && comment.peer !== card.authorId ? peerName(comment.peer) : '';
+          const pc = persona?.color ?? (isMe ? '#c96442' : 'var(--warm-silver)');
+          return (
+            <div
+              key={comment.id}
+              className={`forum-comment ${isMe ? 'mine' : ''} ${isHelper ? 'helper' : ''} ${
+                selected ? 'selected' : ''
+              }`}
+              style={{ '--pc': pc } as CSSProperties}
+              role={persona ? 'button' : undefined}
+              tabIndex={persona ? 0 : undefined}
+              onClick={() => pick(comment)}
+              onKeyDown={(e) => {
+                if (persona && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  pick(comment);
+                }
+              }}
+            >
+              <div className="forum-comment-head">
+                {persona ? (
+                  <Avatar avatarKey={persona.avatarKey} color={persona.color} size="xs" />
+                ) : isHelper ? (
+                  <Avatar avatarKey="lamp" color="#c96442" size="xs" />
+                ) : (
+                  <Avatar avatarKey={me.avatarKey} className="me" size="xs" />
+                )}
+                <span className="forum-comment-name">
+                  {isMe ? '你' : isHelper ? '论坛小助手' : persona?.name ?? 'AI 同伴'}
+                </span>
+                <span className="forum-comment-time">{clock(comment.at)}</span>
+                {repliedTo && <span className="forum-comment-reply">回复 {repliedTo}</span>}
+                {comment.kind === 'advice' && <span className="advice-tag">下一步</span>}
+                {selected && <span className="forum-comment-target">正在回复</span>}
               </div>
-            )}
-            {thread.rows.map((c) => {
-              const persona = personas.find((p) => p.id === c.authorId);
-              const isMe = c.authorKind === 'player';
-              return (
-                <div
-                  key={c.id}
-                  className={`comment ${isMe ? 'mine' : ''} lineless clickable`}
-                  onClick={() => {
-                    if (thread.persona) pick(thread.persona.id);
-                    else if (c.peer) pick(c.peer);
-                  }}
-                >
-                  <div className="comment-main">
-                    <span className="comment-name">
-                      {isMe
-                        ? '你'
-                        : c.authorId === 'helper'
-                          ? '论坛小助手'
-                          : thread.persona
-                            ? ''
-                            : persona?.name}
-                      {c.kind === 'advice' && <span className="advice-tag">下一步</span>}
-                    </span>
-                    <p className="comment-text">{c.text}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </section>
-        ))}
+              <p className="forum-comment-text">{comment.text}</p>
+            </div>
+          );
+        })}
       </div>
 
       {!isGuide && !closed && (
         <div className="page-composer">
           <div className="page-composer-head">
-            <span className="page-composer-to">
-              {target ? `给 ${target.name} 回复` : mine ? '说一句（不指定人）' : '回复楼主'}
-            </span>
-            {target && (
-              <button className="page-composer-reset" onClick={() => setReplyTo('')}>
-                {mine ? '改成自己说' : '取消指定'}
+            <span className="page-composer-to">{replyLabel}</span>
+            {!targetIsOp && targetId && (
+              <button className="page-composer-reset" onClick={resetTarget}>
+                {mine ? '不指定人' : '回到楼主'}
               </button>
             )}
             <button
@@ -240,7 +246,15 @@ export default function CardDetail({
             <input
               ref={inputRef}
               value={draft}
-              placeholder={target ? `给 ${target.name} 回复…` : mine ? '说一句…' : '回复楼主…'}
+              placeholder={
+                targetId
+                  ? targetIsOp
+                    ? '回复楼主…'
+                    : `回复 ${target?.name ?? '对方'}…`
+                  : mine
+                    ? '说一句…'
+                    : '回复楼主…'
+              }
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') send();

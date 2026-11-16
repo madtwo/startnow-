@@ -70,7 +70,7 @@ const STEPS: Step[] = [
     tab: 'forum',
     selector: '.deck-card, .thread-card',
     title: '点开一张卡',
-    body: '正文、按人分开的对话、下一步都在里面。点谁的评论，下面的回复栏就会变成「给 XX 回复」。',
+    body: '正文、一条条回应和下一步都在里面。点谁的回应，底部输入栏就会变成「回复：某某」；不点就是回复楼主。',
   },
   {
     view: 'home',
