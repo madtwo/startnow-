@@ -19,27 +19,28 @@ const card = (row: Partial<Card> & { text: string; authorId: string; authorName:
 export function buildSeedCards(now = Date.now()): Card[] {
   return [
     card({
-      authorId: 'miaoze',
-      authorName: '苗泽',
-      text: '明天材料物理小测，书才背到第三章。\n\n室友在打游戏，我戴着耳机也听不进去。',
+      authorId: 'shenmo',
+      authorName: '沈默',
+      text: '她回了句「嗯」。我打了三行又删了。\n\n我是不是太黏了。',
+      weight: 2,
       createdAt: now - 3 * HOUR,
       status: 'talking',
-      arrivals: ['chenyu'],
+      arrivals: ['weini'],
       comments: [
         {
           id: crypto.randomUUID(),
-          authorId: 'chenyu',
+          authorId: 'weini',
           authorKind: 'persona',
-          text: '是背不进去，还是背了又怕忘。',
+          text: '她可能就是累了……你先别一直发。嗯，我也不太会。',
           at: now - 3 * HOUR + 40 * MIN,
         },
       ],
-      seenAt: undefined,
     }),
     card({
-      authorId: 'xiaoman',
-      authorName: '小满',
-      text: '组会 PPT 还是空的，明天就要讲。\n\n我是不是真的不适合做这个。',
+      authorId: 'weini',
+      authorName: '魏霓',
+      text: '室友出去吃饭没叫我。\n\n我知道可能是临时约的，但还是有点难受。',
+      weight: 2,
       createdAt: now - 5 * HOUR,
       status: 'talking',
       arrivals: ['miaoze'],
@@ -48,51 +49,52 @@ export function buildSeedCards(now = Date.now()): Card[] {
           id: crypto.randomUUID(),
           authorId: 'miaoze',
           authorKind: 'persona',
-          text: '我每次也这样，越到 deadline 越觉得自己不行。',
+          text: '你们上次是谁组织的？先别急着下结论，可能就是临时约的。',
           at: now - 5 * HOUR + 30 * MIN,
         },
       ],
     }),
     card({
-      authorId: 'laozhou',
-      authorName: '老周',
-      text: '导师今天第三次催进度，数据还是不对。\n\n不知道该从哪改。',
+      authorId: 'yanggao',
+      authorName: '杨槔',
+      text: '我哥又和我爸吵了。\n\n我夹在中间，谁都不想怪。',
+      weight: 2,
       createdAt: now - 30 * HOUR,
       status: 'handled',
       handledAt: now - 20 * HOUR,
-      arrivals: ['xiaoman'],
+      arrivals: ['shenmo'],
       comments: [
         {
           id: crypto.randomUUID(),
-          authorId: 'xiaoman',
+          authorId: 'shenmo',
           authorKind: 'persona',
-          text: '数据不对最烦了，我上周也重跑了一遍。',
+          text: '夹在中间最累了。\n\n你先吃饭了吗。',
           at: now - 30 * HOUR + 25 * MIN,
         },
       ],
     }),
     card({
-      authorId: 'chenyu',
-      authorName: '陈屿',
-      text: '论文卡了两周，今天把第一段写了。',
+      authorId: 'miaoze',
+      authorName: '苗泽',
+      text: '夏令营名单出来了，没有我。\n\n我真心替他们高兴，但晚上没吃下饭。',
       weight: 1,
       createdAt: now - 26 * HOUR,
       status: 'done',
       doneAt: now - 25 * HOUR,
-      arrivals: ['miaoze', 'laozhou'],
+      arrivals: ['yanggao', 'shenmo'],
       comments: [
         {
           id: crypto.randomUUID(),
-          authorId: 'miaoze',
+          authorId: 'yanggao',
           authorKind: 'persona',
-          text: '第一段？那你今天赢了。',
+          text: '没吃下饭可不行。\n\n下楼，我请你喝瓶水。',
           at: now - 25 * HOUR,
         },
         {
           id: crypto.randomUUID(),
-          authorId: 'laozhou',
+          authorId: 'shenmo',
           authorKind: 'persona',
-          text: '够了。第一段，够了。',
+          text: '名单这种事，有时候真不是实力问题。\n\n先吃饭吧。',
           at: now - 25 * HOUR + 12 * MIN,
         },
       ],
@@ -108,31 +110,31 @@ export function seedMemories(personas: Persona[], now = Date.now()): Persona[] {
       week: string[];
     }
   > = {
+    shenmo: {
+      memory: [
+        { at: now - 4 * DAY, about: '你', what: '上次你说我回消息太用力了', weight: 'deep' },
+        { at: now - 5 * HOUR, about: '魏霓', what: '室友没叫她吃饭，她有点难受', weight: 'light' },
+      ],
+      week: ['病理小测没背完', '给韩东发的消息撤回了两次'],
+    },
+    weini: {
+      memory: [
+        { at: now - 3 * HOUR, about: '沈默', what: '她回了「嗯」，他打了三行又删了', weight: 'light' },
+      ],
+      week: ['室友临时约饭没叫她', '小组汇报的 PPT 改到第五遍'],
+    },
     miaoze: {
       memory: [
-        { at: now - 3 * DAY, about: '你', what: '上次组会前，是你让我先把标题页做了', weight: 'deep' },
-        { at: now - 2 * DAY, about: '小满', what: '组会前一晚还在拖 PPT', weight: 'light' },
+        { at: now - 5 * HOUR, about: '魏霓', what: '室友出去吃饭没叫她', weight: 'light' },
       ],
-      week: ['材料物理小测没考好，选择题错了一半', '在操场遇到那个女生，打了个招呼就跑了'],
+      week: ['又看了三个岗位，要求差很多', '夏令营名单没自己'],
     },
-    xiaoman: {
+    yanggao: {
       memory: [
-        { at: now - 4 * HOUR, about: '苗泽', what: '为材料物理小测焦虑', weight: 'light' },
+        { at: now - 26 * HOUR, about: '苗泽', what: '夏令营没选上，晚上没吃饭', weight: 'light' },
+        { at: now - 4 * DAY, about: '你', what: '你也在为一件小事卡着', weight: 'light' },
       ],
-      week: ['和妈妈打电话，又吵了考公的事'],
-    },
-    chenyu: {
-      memory: [
-        { at: now - 3 * HOUR, about: '苗泽', what: '书背不进去，室友在打游戏', weight: 'light' },
-      ],
-      week: ['投了一个实习，第二天就后悔了'],
-    },
-    laozhou: {
-      memory: [
-        { at: now - 5 * HOUR, about: '小满', what: '组会 PPT 还没做', weight: 'light' },
-        { at: now - 3 * DAY, about: '你', what: '你也在为论文卡着', weight: 'light' },
-      ],
-      week: ['实验数据又不对，重跑了一遍'],
+      week: ['妈妈下周要去复查', '和哥哥因为爸爸吵了一架'],
     },
   };
   return personas.map((p) => {

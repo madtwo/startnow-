@@ -215,21 +215,21 @@ interface Ctx {
 
 function mockComment(persona: Persona, _card: Card, phase: 'arrival' | 'reply'): string {
   const pool: Record<string, { arrival: string[]; reply: string[] }> = {
+    shenmo: {
+      arrival: ['怎么了？你说，我听着。呃……要不要先吃饭？', '在的。我刚好背完一页，你说。'],
+      reply: ['我也这样，等一条消息能等一晚上。', '我懂那种，明明没多大事，就是放不下。'],
+    },
+    weini: {
+      arrival: ['嗯……我在。你要讲的话，我可以听。不会往外说的。', '那个……你先说，我不急。'],
+      reply: ['我也有点怕说错话。', '嗯……听起来你不是不在意，是不知道怎么开口。'],
+    },
     miaoze: {
-      arrival: ['我也这样。你是从什么时候开始卡的？', '在的。先说说，不急着解决。'],
-      reply: ['我懂那种，坐下来就开始想别的。', '我上次也是这样，越想越慌，最后跑了两圈才好一点。'],
+      arrival: ['什么方面？要是能说清楚是哪一件，可能就好处理点。', '在的。先说说，不急着解决。'],
+      reply: ['我这两天也这样，越想越乱。', '要不先拆成两件事看看？'],
     },
-    xiaoman: {
-      arrival: ['来了来了。怎么了这是。', '在的，说吧，我今晚也没干什么正事。'],
-      reply: ['我这两天也这样，坐那儿半小时啥也没干，然后更慌。', '真的，越想越不想动，越不想动越烦。'],
-    },
-    chenyu: {
-      arrival: ['先问一句：是打不开，还是根本不想打开。', '嗯，我听着。'],
-      reply: ['那你现在最想逃开的是哪一步？', '这件事里，最让你不想碰的是哪一块。'],
-    },
-    laozhou: {
-      arrival: ['我在。你慢慢说。', '嗯，先不急着解决。'],
-      reply: ['先说说这两天是怎么过的。', '听起来是拖久了，人反而更沉。'],
+    yanggao: {
+      arrival: ['哎你来了！谁惹你了？', '在在在，怎么了。'],
+      reply: ['走，先下楼买瓶喝的，边走边说。', '别闷着，你说，我听着呢。'],
     },
   };
   const rows = pool[persona.id] ?? { arrival: ['我看到了。'], reply: ['嗯，我在听。'] };
@@ -239,10 +239,10 @@ function mockComment(persona: Persona, _card: Card, phase: 'arrival' | 'reply'):
 
 function reactionLine(persona: Persona, label: string): string {
   const pool: Record<string, string[]> = {
-    miaoze: [`${label}？真的做了啊。我这边还一个字没动。`, `${label}，挺好的。我也该去跑两圈了。`],
-    xiaoman: [`${label}？真做了？那你今晚赢了。`, `可以啊${label}，我都替你高兴。`],
-    chenyu: [`${label}的时候，跟你想的一样吗。`, `做到了${label}，现在感觉怎么样。`],
-    laozhou: [`够了。${label}，够了。`, `${label}做了就行，不用再加别的。`],
+    shenmo: [`${label}？可以啊。我这边还一个字没背。`, `${label}，那今晚能睡踏实点了。`],
+    weini: [`${label}……挺好的。`, `嗯，${label}，我也想做点自己的事了。`],
+    miaoze: [`${label}？真做了？那你今晚赢了。`, `可以啊${label}，我都替你高兴。`],
+    yanggao: [`${label}？行啊你！走，庆祝一下。`, `我就说你能行。${label}，漂亮。`],
   };
   const list = pool[persona.id] ?? [`${label}，挺好啊。`];
   return list[Math.floor(Math.random() * list.length)];

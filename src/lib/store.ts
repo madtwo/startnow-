@@ -5,7 +5,7 @@ import { defaultPersonas } from './personas';
 const KEYS = {
   config: 'shudong.config.v1',
   cards: 'shudong.cards.v1',
-  personas: 'shudong.personas.v1',
+  personas: 'shudong.personas.v2',
   world: 'shudong.world.v1',
   settings: 'shudong.settings.v1',
   identity: 'shudong.identity.v2',
