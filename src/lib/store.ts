@@ -5,7 +5,7 @@ import { buildSeedCards } from './seed';
 
 const KEYS = {
   config: 'shudong.config.v1',
-  cards: 'shudong.cards.v4',
+  cards: 'shudong.cards.v5',
   personas: 'shudong.personas.v3',
   world: 'shudong.world.v1',
   settings: 'shudong.settings.v1',
@@ -73,7 +73,7 @@ const legacyAny = () =>
   LEGACY_POST_KEYS.some((key) => localStorage.getItem(key) !== null);
 
 const hasLegacyCards = () =>
-  ['shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'].some(
+  ['shudong.cards.v4', 'shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'].some(
     (key) => localStorage.getItem(key) !== null,
   );
 
@@ -128,7 +128,10 @@ export function loadCards(): Card[] {
   }
   // 旧版卡片：保留你自己开的卡，AI 的卡换成新种子
   const legacy =
-    read('shudong.cards.v3') ?? read('shudong.cards.v2') ?? read('shudong.cards.v1');
+    read('shudong.cards.v4') ??
+    read('shudong.cards.v3') ??
+    read('shudong.cards.v2') ??
+    read('shudong.cards.v1');
   if (Array.isArray(legacy)) {
     const mine = legacy
       .map(normalizeCard)
