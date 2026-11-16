@@ -1134,3 +1134,25 @@ test('评论线程用角色名字而不是内部 ID', () => {
   assert.match(prompt,/杨槔：先写三行也行/);
   assert.doesNotMatch(prompt,/weini：|yanggao：/);
 });
+
+test('主模型失败自动切备用模型', async () => {
+  const before=global.fetch;
+  const models=[];
+  global.fetch=async(_url,init)=>{
+    models.push(JSON.parse(String(init.body)).model);
+    if (models.length===1) {
+      return new Response(JSON.stringify({error:{message:'rate limited'}}),{status:429,headers:{'content-type':'application/json'}});
+    }
+    return modelResult('备用模型的回复');
+  };
+  try {
+    const out=await streamChat({
+      config:{...live,model:'primary-model',fallbackModel:'backup-model'},
+      messages:[{role:'user',content:'hi'}],
+      signal:new AbortController().signal,
+      onDelta:()=>{},
+    });
+    assert.equal(out,'备用模型的回复');
+    assert.deepEqual(models,['primary-model','backup-model']);
+  } finally {global.fetch=before;}
+});

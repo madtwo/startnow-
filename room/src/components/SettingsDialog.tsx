@@ -54,6 +54,7 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
       baseUrl: next.baseUrl,
       model: next.model,
       apiKey: keepKey ? draft.apiKey : '',
+      fallbackModel: next.fallbackModel ?? '',
     });
     setResult(null);
     setError('');
@@ -97,6 +98,7 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
       baseUrl: draft.baseUrl.trim(),
       model: draft.model.trim(),
       apiKey: draft.apiKey.trim(),
+      fallbackModel: (draft.fallbackModel ?? '').trim(),
     });
   };
 
@@ -233,6 +235,19 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
                 </button>
               </div>
               <span className="field-hint">只保存在本机浏览器，不会上传。公共电脑上请勿保存。</span>
+            </label>
+
+            <label className="field">
+              <span className="field-label">备用模型（可选）</span>
+              <input
+                value={draft.fallbackModel ?? ''}
+                onChange={(e) => setDraft({ ...draft, fallbackModel: e.target.value })}
+                placeholder="例如 deepseek-v4.1-flash"
+                spellCheck={false}
+              />
+              <span className="field-hint">
+                主模型空流、超时、429 或服务端失败时，用同一个接口和 Key 再试一次这个模型；留空关闭。
+              </span>
             </label>
           </>
         ) : (

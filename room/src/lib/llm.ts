@@ -135,7 +135,7 @@ const chatHeaders = (config: LlmConfig, sessionId?: string) => {
   return headers;
 };
 
-export async function streamChat(opts: {
+type StreamChatOptions = {
   config: LlmConfig;
   messages: ChatMessage[];
   signal: AbortSignal;
@@ -143,7 +143,9 @@ export async function streamChat(opts: {
   onDelta: (text: string) => void;
   maxTokens?: number;
   lowEffort?: boolean;
-}): Promise<string> {
+};
+
+async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
   const { config, messages, signal, sessionId, onDelta } = opts;
   const maxTokens = opts.maxTokens ?? 600;
   const lowEffort = opts.lowEffort ?? true;
@@ -211,6 +213,30 @@ export async function streamChat(opts: {
 
   if (!full.trim()) throw new LlmError('server', '模型没有返回任何文字，换个模型试试。');
   return full;
+}
+
+/** 主模型失败时自动尝试备用模型；已输出半句后断流不重试，避免重复。 */
+export async function streamChat(opts: StreamChatOptions): Promise<string> {
+  const fallback = opts.config.fallbackModel?.trim();
+  if (!fallback || fallback === opts.config.model.trim()) return streamChatOnce(opts);
+
+  let emitted = false;
+  try {
+    return await streamChatOnce({
+      ...opts,
+      onDelta: (text) => {
+        if (text) emitted = true;
+        opts.onDelta(text);
+      },
+    });
+  } catch (err) {
+    if (emitted || opts.signal.aborted) throw err;
+    if (!(err instanceof LlmError) || err.kind === 'auth' || err.kind === 'config') throw err;
+    return streamChatOnce({
+      ...opts,
+      config: { ...opts.config, model: fallback },
+    });
+  }
 }
 
 export async function testConnection(config: LlmConfig, signal?: AbortSignal): Promise<string> {

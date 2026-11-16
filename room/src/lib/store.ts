@@ -78,6 +78,10 @@ export function loadConfig(): LlmConfig {
     baseUrl: typeof saved.baseUrl === 'string' ? saved.baseUrl : defaultConfig.baseUrl,
     model: typeof saved.model === 'string' ? saved.model : defaultConfig.model,
     apiKey: typeof saved.apiKey === 'string' ? saved.apiKey : '',
+    fallbackModel:
+      typeof saved.fallbackModel === 'string'
+        ? saved.fallbackModel
+        : PRESETS.find((p) => p.id === providerId)?.fallbackModel ?? '',
   };
 }
 

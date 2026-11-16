@@ -5,6 +5,7 @@ export interface ProviderPreset {
   name: string;
   baseUrl: string;
   model: string;
+  fallbackModel?: string;
   hint: string;
   needsKey: boolean;
 }
@@ -63,6 +64,7 @@ export const PRESETS: ProviderPreset[] = [
     name: 'OpenCode Go · 订阅套餐',
     baseUrl: '/api/opencode-go/v1',
     model: 'glm-5.3-flash',
+    fallbackModel: 'deepseek-v4.1-flash',
     hint: 'Go / Go Plus 订阅的 Key 走这里。用成按量付费会报 402。',
     needsKey: true,
   },

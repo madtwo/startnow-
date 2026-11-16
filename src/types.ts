@@ -14,6 +14,7 @@ export interface LlmConfig {
   baseUrl: string;
   model: string;
   apiKey: string;
+  fallbackModel?: string;
 }
 
 export type Gender = 'female' | 'male' | 'none';
