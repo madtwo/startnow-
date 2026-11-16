@@ -124,3 +124,63 @@ export function cleanLine(text: string, max = 120): string {
   if (out.length > max) out = `${out.slice(0, max)}…`;
   return out;
 }
+
+/* ------------------------------------------------------------------ *
+ * 群聊
+ * ------------------------------------------------------------------ */
+
+export const ROOM_RULES = `这是几个大学生凑在一块儿的群聊。你在群里说话，不是在发帖，也不是在答问卷。
+
+怎么说话：
+- 一次 1–3 句，20–60 字，像在手机上随手打的；不写邮件、不写总结、不列清单。
+- 可以说半句、说「嗯」「啊？」、说自己刚走神了。群里不需要每句都有用。
+- 可以回任何人，也可以只顺着自己的心事说一句；可以插话，也可以不接。
+- 别人说了自己做了什么，应一声就够了，别夸成「你真棒」「太厉害了」。
+- 不要同时回答好几个人；不要总结大家刚才说了什么；不用「首先」「总之」「希望对你有帮助」。
+- 你不是客服、不是心理咨询师、不是人生导师：可以给一个具体的小办法，也可以不给。
+- 一次只露一点自己的事，像真的在认识人。
+- 不主动提自己是 AI；被问到就承认。`;
+
+export interface RoomLine {
+  name: string;
+  text: string;
+}
+
+/** 群聊里这一句的上下文。说话的人是谁，在 system 里由 buildPersonaPrompt 给。 */
+export const roomPrompt = (
+  cast: Persona[],
+  recent: RoomLine[],
+  opts: {
+    mode: 'reply' | 'peer' | 'ambient' | 'react';
+    replyName?: string;
+    topic?: string;
+  },
+): string => {
+  const who = cast.map((p) => `${p.name}（${p.tagline}）`).join('、');
+  const history = recent.length
+    ? recent.map((m) => `${m.name}：${m.text}`).join('\n')
+    : '（群里刚安静下来，还没有人说话）';
+  const task =
+    opts.mode === 'reply'
+      ? `你正要回 ${opts.replyName ?? '对方'} 那句。`
+      : opts.mode === 'peer'
+        ? `你正要接 ${opts.replyName ?? '群里另一个人'} 的话。可以同意、可以不同意、也可以扯到自己身上。`
+        : opts.mode === 'react'
+          ? '群里有人刚说自己做完了一件很小的事。应一声就好，一句话，别夸成大事。'
+          : '没人跟你说话。你可以随口说一句自己此刻的事，也可以只发半句；不要点名要谁回答。';
+  const mood = opts.topic ? `\n【群里现在在说的大概是】${opts.topic}` : '';
+  return `【群里还有谁】${who}${mood}
+【最近几句】
+${history}
+
+${task}
+只输出你要说的那一句：不要加名字前缀，不要加引号，不要解释你在做什么。`;
+};
+
+/** 给 AI 自己排的那条下一步：让它偶尔也照做、也可能不做。 */
+export const stepDonePrompt = (text: string) =>
+  `你照着自己那件小事做了一次：${text}\n\n说一句结果，20 字以内。可以很普通，甚至没做成。不要写成「真有效」。`;
+
+export const adoptStepPrompt = (cast: Persona[]) =>
+  `群里这些人：${cast.map((p) => p.name).join('、')}。你要说一句自己最近卡在哪，30 字以内，具体一点（哪门课、几点、谁），不要求助，不要总结。只输出这一句。`;
+

@@ -1,1079 +1,289 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import AdminPanel from './components/AdminPanel';
-import Avatar from './components/Avatar';
-import CardDetail from './components/CardDetail';
-import CardRow from './components/CardRow';
-import CardDeck from './components/CardDeck';
-import GuideCard from './components/GuideCard';
-import NoteDrawer from './components/NoteDrawer';
-import PostForm from './components/PostForm';
-import StepBoard from './components/StepBoard';
-import Tour from './components/Tour';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import ArchivePanel from './components/ArchivePanel';
+import ChatRoom from './components/ChatRoom';
 import CrisisCard from './components/CrisisCard';
+import RoomPanel from './components/RoomPanel';
 import SettingsDialog from './components/SettingsDialog';
+import StepPanel from './components/StepPanel';
 import { configLabel, isReady } from './config/providers';
+import { pickCast } from './lib/personas';
+import {
+  addStep,
+  catchUpRoom,
+  completeStep,
+  dropStep,
+  newRoom,
+  postPlayerMessage,
+  requestStep as askStep,
+  rerollRoom,
+  shrinkStep,
+  tickRoom,
+  usedToday,
+} from './lib/room';
 import { findCrisis } from './lib/safety';
 import {
-  acceptAdvice,
-  addPlayerComment,
-  askForAdvice,
-  catchUp,
-  closeCard,
-  completeCard,
-  createPlayerCard,
-  notePlayerShare,
-  personaBrag,
-  personaCard,
-  shrinkAdvice,
-  summonPersona,
-  tickCards,
-} from './lib/cards';
-import { buildGuideCard, buildSeedCards, seedMemories } from './lib/seed';
-import { ensureMinds } from './lib/mind';
-import { defaultPersonas } from './lib/personas';
-import {
-  clearAll,
-  dayKey,
-  defaultSettings,
-  emptyWorld,
-  exportBundle,
-  importBundle,
-  isFirstRun,
-  loadCards,
+  loadArchives,
   loadConfig,
   loadIdentity,
-  loadPersonas,
-  loadSettings,
-  loadTodos,
-  loadWorld,
-  needsUpgrade,
-  saveCards,
+  loadRoom,
+  loadRoomSettings,
+  saveArchives,
   saveConfig,
-  saveIdentity,
-  savePersonas,
-  saveSettings,
-  saveTodos,
-  saveWorld,
+  saveRoom,
+  saveRoomSettings,
 } from './lib/store';
-import type {
-  Card,
-  Comment,
-  Identity,
-  LlmConfig,
-  MemoryEntry,
-  Persona,
-  Todo,
-  World,
-  WorldSettings,
-} from './types';
+import type { Room, RoomSettings } from './types';
 
 const TICK_MS = 4000;
 
-type View = 'home' | 'post' | 'mine' | 'profile' | 'detail';
+type Panel = 'none' | 'steps' | 'room' | 'archive' | 'api';
 
 export default function App() {
-  const [boot] = useState(() => {
-    const withGuide = (cards: Card[]) => {
-      const guide = buildGuideCard();
-      if (!cards.some((c) => c.kind === 'guide')) return [guide, ...cards];
-      return cards.map((c) =>
-        c.kind === 'guide'
-          ? {
-              ...c,
-              title: guide.title,
-              text: guide.text,
-              comments: c.comments.length ? c.comments : guide.comments,
-            }
-          : c,
-      );
-    };
-    if (isFirstRun()) {
-      return {
-        cards: buildSeedCards(),
-        personas: ensureMinds(seedMemories(defaultPersonas())),
-      };
-    }
-    if (needsUpgrade()) {
-      const personas = loadPersonas();
-      const seeded = personas.every((p) => p.memory.length === 0)
-        ? seedMemories(personas)
-        : personas;
-      return { cards: withGuide(loadCards()), personas: ensureMinds(seeded) };
-    }
-    return { cards: withGuide(loadCards()), personas: ensureMinds(loadPersonas()) };
-  });
-  const [config, setConfig] = useState<LlmConfig>(() => loadConfig());
-  const [cards, setCards] = useState<Card[]>(boot.cards);
-  const [personas, setPersonas] = useState<Persona[]>(boot.personas);
-  const [world, setWorld] = useState<World>(() => loadWorld());
-  const [settings, setSettings] = useState<WorldSettings>(() => loadSettings());
-  const [identity, setIdentity] = useState<Identity>(() => loadIdentity());
-  const [draft, setDraft] = useState('');
-  const [draftTitle, setDraftTitle] = useState('');
-  const [image, setImage] = useState('');
+  const [identity] = useState(() => loadIdentity());
+  const [config, setConfig] = useState(() => loadConfig());
+  const [roomSettings, setRoomSettings] = useState<RoomSettings>(() => loadRoomSettings());
+  const [archives, setArchives] = useState<Room[]>(() => loadArchives());
+  const [room, setRoom] = useState<Room>(() => loadRoom() ?? newRoom(pickCast(4)));
+  const [panel, setPanel] = useState<Panel>('none');
   const [working, setWorking] = useState(false);
   const [toast, setToast] = useState('');
-  const [onboardOpen, setOnboardOpen] = useState(
-    () => localStorage.getItem('startnow.onboarded') !== '1',
-  );
-  const [view, setView] = useState<View>('home');
-  const [mode, setMode] = useState<'card' | 'list'>(
-    () => (localStorage.getItem('startnow.mode') === 'list' ? 'list' : 'card'),
-  );
-  const [homeTab, setHomeTab] = useState<'step' | 'forum'>(
-    () => (localStorage.getItem('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
-  );
-  const [deckIndex, setDeckIndex] = useState(0);
-  const [timeMenu, setTimeMenu] = useState(false);
-  const [bellOpen, setBellOpen] = useState(false);
-  const [detailPeer, setDetailPeer] = useState('');
-  const [justAdvanced, setJustAdvanced] = useState('');
-  const [detailId, setDetailId] = useState('');
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsNotice, setSettingsNotice] = useState('');
-  const [adminOpen, setAdminOpen] = useState(false);
   const [crisis, setCrisis] = useState('');
-  const [todos, setTodos] = useState<Todo[]>(() => loadTodos());
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [brag, setBrag] = useState<{ id?: string; text: string } | null>(null);
-  const [bragText, setBragText] = useState('');
-  const [bragTitle, setBragTitle] = useState('');
-  const brandClicks = useRef<number[]>([]);
-  const busy = useRef(false);
-
-  useEffect(() => saveCards(cards), [cards]);
-  useEffect(() => savePersonas(personas), [personas]);
-  useEffect(() => saveWorld(world), [world]);
-  useEffect(() => saveSettings(settings), [settings]);
-  useEffect(() => saveIdentity(identity), [identity]);
-  useEffect(() => saveTodos(todos), [todos]);
-  useEffect(() => localStorage.setItem('startnow.mode', mode), [mode]);
-  useEffect(() => localStorage.setItem('startnow.homeTab', homeTab), [homeTab]);
+  const [notice, setNotice] = useState('');
+  const [now, setNow] = useState(() => Date.now());
 
   const ready = isReady(config);
-  const latest = useRef({ cards, personas, world, settings, config, working });
-  latest.current = { cards, personas, world, settings, config, working };
+  const busy = useRef(false);
+  const caughtUp = useRef(false);
+  const latest = useRef({ room, roomSettings, config });
+  latest.current = { room, roomSettings, config };
 
-  const tick = useCallback(async (override?: { cards?: Card[] }) => {
+  /* ---- UI 时钟：只为了「正在输入」和用量数字 ---- */
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  /* ---- 落盘 ---- */
+  useEffect(() => {
+    const id = window.setTimeout(() => saveRoom(room), 500);
+    return () => window.clearTimeout(id);
+  }, [room]);
+  useEffect(() => saveArchives(archives), [archives]);
+  useEffect(() => saveRoomSettings(roomSettings), [roomSettings]);
+  useEffect(() => saveConfig(config), [config]);
+
+  /* ---- 一次 tick ---- */
+  const tick = async () => {
     if (busy.current) return;
     const cur = latest.current;
-    if (cur.settings.paused || !isReady(cur.config)) return;
-    if (cur.world.callsToday >= cur.settings.dailyCalls) return;
+    if (!isReady(cur.config)) return;
+    if (usedToday(cur.room) >= cur.roomSettings.dailyMessages) return;
     busy.current = true;
     try {
-      const out = await tickCards({
-        cards: override?.cards ?? cur.cards,
-        personas: cur.personas,
-        settings: cur.settings,
+      const out = await tickRoom({
+        room: cur.room,
+        settings: cur.roomSettings,
         config: cur.config,
       });
-      const before = new Map(
-        cur.cards.filter((c) => c.authorId === 'me').map((c) => [c.id, c.comments.length]),
-      );
-      const fresh = out.cards.find(
-        (c) => c.authorId === 'me' && (before.get(c.id) ?? 0) < c.comments.length,
-      );
-      if (fresh) {
-        const last = fresh.comments[fresh.comments.length - 1];
-        const who = cur.personas.find((p) => p.id === last?.authorId)?.name ?? '有人';
-        setToast(`${who} 来了你的卡`);
-      }
-      const nowTs = Date.now();
-      const lastBrag = cur.world.lastBragAt ?? 0;
-      const bragDue =
-        lastBrag > 0 && nowTs - lastBrag > 5 * 3_600_000 && cur.personas.length > 0;
-      const extra = bragDue
-        ? [personaBrag(cur.personas[Math.floor(Math.random() * cur.personas.length)], nowTs)]
-        : [];
-      setCards(extra.length ? [...out.cards, ...extra] : out.cards);
-      setPersonas(out.personas);
-      const day = dayKey(nowTs);
-      setWorld((w) => ({
-        ...w,
-        dayKey: day,
-        callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls,
-        lastTickAt: nowTs,
-        lastBragAt: extra.length ? nowTs : w.lastBragAt ?? nowTs,
-        logs: [...out.logs, ...w.logs].slice(0, 20),
-      }));
+      setRoom(out.room);
     } finally {
       busy.current = false;
     }
-  }, []);
+  };
 
   useEffect(() => {
     if (!ready) return;
-    const id = window.setInterval(() => void tick(), TICK_MS);
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void tick();
+    }, TICK_MS);
     void tick();
     return () => window.clearInterval(id);
-  }, [ready, tick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  /* ---- 回来时补算 ---- */
+  const runCatchUp = async () => {
+    const cur = latest.current;
+    if (!isReady(cur.config)) return;
+    const out = await catchUpRoom({
+      room: cur.room,
+      settings: cur.roomSettings,
+      config: cur.config,
+    });
+    setRoom(out.room);
+  };
+
+  useEffect(() => {
+    if (!ready) return;
+    // StrictMode 会把 effect 跑两遍，这里只补一次
+    if (caughtUp.current) return;
+    caughtUp.current = true;
+    void runCatchUp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        setRoom((prev) => ({ ...prev, lastSeenAt: Date.now() }));
+      } else if (isReady(latest.current.config)) {
+        void runCatchUp();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(''), 3600);
-    return () => window.clearTimeout(timer);
+    const id = window.setTimeout(() => setToast(''), 3200);
+    return () => window.clearTimeout(id);
   }, [toast]);
 
-  const patch = (id: string, fn: (card: Card) => Card) =>
-    setCards((prev) => prev.map((c) => (c.id === id ? fn(c) : c)));
+  /* ---- 玩家动作 ---- */
+  const send = (text: string, mentions: string[], replyTo?: string) => {
+    if (findCrisis(text)) setCrisis(text);
+    const at = Date.now();
+    setRoom((prev) =>
+      postPlayerMessage(prev, text, identity, mentions, replyTo, at, latest.current.roomSettings.liveliness),
+    );
+  };
 
-  const send = () => {
-    const text = draft.trim();
-    if (!text || working) return;
+  const requestOne = async () => {
+    if (working) return;
     if (!ready) {
-      setSettingsNotice('先接入一个 API，或者切到演示模式。');
-      setSettingsOpen(true);
+      setNotice('先接入一个模型，或者切到演示模式。');
+      setPanel('api');
       return;
     }
-    if (findCrisis(text)) setCrisis(text);
-    const card = createPlayerCard(text, identity.name, personas, settings, draftTitle);
-    if (image) card.image = image;
-    setPersonas((prev) => notePlayerShare(prev, text));
-    setCards((prev) => [card, ...prev]);
-    setDraft('');
-    setDraftTitle('');
-    setImage('');
-    setView('home');
-    setToast('正在寻找心友，可以去看看别人的卡');
-  };
-
-  const like = (card: Card) =>
-    patch(card.id, (c) => ({
-      ...c,
-      likedByMe: !c.likedByMe,
-      likes: Math.max(0, (c.likes ?? 0) + (c.likedByMe ? -1 : 1)),
-    }));
-
-  const addTodo = (text: string) =>
-    setTodos((prev) => [{ id: crypto.randomUUID(), text, at: Date.now() }, ...prev]);
-
-  const toggleTodo = (id: string) =>
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, doneAt: t.doneAt ? undefined : Date.now() } : t)),
-    );
-
-  const openBrag = (todo: Todo) => {
-    setDrawerOpen(false);
-    setBrag({ id: todo.id, text: todo.text });
-    setBragText(`做到了：${todo.text}`);
-    setBragTitle('');
-  };
-
-  const openCardBrag = (text: string) => {
-    setDrawerOpen(false);
-    setBrag({ text });
-    setBragText(`做到了：${text}`);
-    setBragTitle('');
-  };
-
-  const submitBrag = () => {
-    if (!brag || !bragText.trim()) return;
-    const card = createPlayerCard(
-      bragText.trim(),
-      identity.name,
-      personas,
-      settings,
-      bragTitle,
-      Date.now(),
-      'brag',
-    );
-    setCards((prev) => [card, ...prev]);
-    if (brag.id) {
-      setTodos((prev) =>
-        prev.map((t) => (t.id === brag.id ? { ...t, doneAt: t.doneAt ?? Date.now() } : t)),
-      );
-    }
-    setBrag(null);
-    setDrawerOpen(false);
-    setView('home');
-    setToast('炫耀帖发出去了');
-  };
-
-  const advance = async (hours: number) => {
-    const cur = latest.current;
-    const shift = hours * 3_600_000;
-    const shifted = cur.cards.map((c) => ({
-      ...c,
-      createdAt: c.createdAt - shift,
-      helperAt: c.helperAt ? c.helperAt - shift : undefined,
-      plan: c.plan.map((p) => ({ ...p, at: p.at - shift })),
-      pending: c.pending.map((p) => ({ ...p, at: p.at - shift })),
-      note: c.note ? { ...c.note, dueAt: c.note.dueAt - shift } : undefined,
-      comments: c.comments.map((x) => ({ ...x, at: x.at - shift })),
-    }));
-    setCards(shifted);
-    setTimeMenu(false);
-    busy.current = false;
-    let res: { cards: Card[]; personas: Persona[]; calls: number } = {
-      cards: shifted,
-      personas: cur.personas,
-      calls: 0,
-    };
-    try {
-      res = await catchUp({
-        cards: shifted,
-        personas: cur.personas,
-        settings: cur.settings,
-        config: cur.config,
-        hours,
-      });
-    } catch {
-      res = { cards: shifted, personas: cur.personas, calls: 0 };
-    }
-    setCards(res.cards);
-    setPersonas(res.personas);
-    if (res.calls) {
-      setWorld((w) => ({ ...w, callsToday: w.callsToday + res.calls }));
-    }
-    setDeckIndex(0);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setJustAdvanced(`已过 ${hours} 小时`);
-    window.setTimeout(() => setJustAdvanced(''), 3200);
-    setToast(
-      `过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`,
-    );
-    await tick({ cards: res.cards });
-  };
-
-  const openCard = (card: Card, peer?: string) => {
-    setDetailPeer(peer ?? '');
-    setDetailId(card.id);
-    patch(card.id, (c) => ({
-      ...c,
-      seenAt: c.seenAt ?? Date.now(),
-      readAt: Date.now(),
-    }));
-    setBellOpen(false);
-    setView('detail');
-  };
-
-  const comment = (card: Card, text: string, kind: 'comment' | 'advice', peer?: string) => {
-    if (findCrisis(text)) setCrisis(text);
-    setPersonas((prev) => notePlayerShare(prev, text));
-    patch(card.id, (c) => addPlayerComment(c, text, Date.now(), settings.speed, kind, peer));
-  };
-
-  const advice = async (card: Card) => {
     setWorking(true);
     try {
-      const cur = latest.current;
-      const out = await askForAdvice({
-        cards: cur.cards,
-        personas: cur.personas,
-        settings: cur.settings,
-        config: cur.config,
-        cardId: card.id,
-      });
-      setCards(out.cards);
-      setPersonas(out.personas);
-      if (out.calls) {
-        const day = dayKey(Date.now());
-        setWorld((w) => ({
-          ...w,
-          dayKey: day,
-          callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls,
-        }));
-      }
-      if (out.logs.length) {
-        setWorld((w) => ({ ...w, logs: [...out.logs, ...w.logs].slice(0, 20) }));
-      }
+      const out = await askStep(latest.current.room, { config: latest.current.config });
+      setRoom(out.room);
+      setToast('有人给了一个下一步');
     } finally {
       setWorking(false);
     }
   };
 
-  const nudge = async () => {
-    const cur = latest.current;
-    const now = Date.now();
-    let best: { cardId: string; kind: 'plan' | 'pending'; idx: number; at: number } | null = null;
-    cur.cards.forEach((c) => {
-      c.plan.forEach((p, idx) => {
-        if (!best || p.at < best.at) best = { cardId: c.id, kind: 'plan', idx, at: p.at };
-      });
-      c.pending.forEach((p, idx) => {
-        if (!best || p.at < best.at) best = { cardId: c.id, kind: 'pending', idx, at: p.at };
-      });
-    });
-    if (!best) return;
-    const target = best as { cardId: string; kind: 'plan' | 'pending'; idx: number };
-    const next = cur.cards.map((c) => {
-      if (c.id !== target.cardId) return c;
-      if (target.kind === 'plan') {
-        return { ...c, plan: c.plan.map((p, i) => (i === target.idx ? { ...p, at: now - 1 } : p)) };
-      }
-      return {
-        ...c,
-        pending: c.pending.map((p, i) => (i === target.idx ? { ...p, at: now - 1 } : p)),
-      };
-    });
-    setCards(next);
-    busy.current = false;
-    await tick({ cards: next });
+  const finish = (id: string) => {
+    setRoom((prev) => completeStep(prev, id, Date.now(), latest.current.roomSettings.liveliness));
+    setToast('做完了。群里会看到。');
   };
 
-  const openSettings = (notice = '') => {
-    setSettingsNotice(notice);
-    setSettingsOpen(true);
+  const reroll = () => {
+    if (!window.confirm('这 4 位会离开，聊天记录会收进「旧群聊」，只能看不能再回。继续？')) return;
+    const { room: next, archived } = rerollRoom(latest.current.room, Date.now());
+    setRoom(next);
+    setArchives((prev) => [archived, ...prev].slice(0, 8));
+    setPanel('none');
+    setToast('换了一批群友');
   };
 
-  const bumpBrand = () => {
-    const now = Date.now();
-    brandClicks.current = brandClicks.current.filter((t) => now - t < 6000);
-    brandClicks.current.push(now);
-    if (brandClicks.current.length >= 5) {
-      brandClicks.current = [];
-      setAdminOpen(true);
-    }
+  /* ---- 派生 ---- */
+  const typingName = useMemo(() => {
+    const due = room.scheduled
+      .filter((s) => s.at > now && s.at - now < 3_000)
+      .sort((a, b) => a.at - b.at)[0];
+    if (!due) return '';
+    return room.cast.find((p) => p.id === due.personaId)?.name ?? '';
+  }, [room.scheduled, room.cast, now]);
+
+  const stepCount = room.steps.filter((s) => s.ownerId === 'me' && !s.doneAt).length;
+  const used = usedToday(room, now);
+
+  const saveConfigAndClose = (next: typeof config) => {
+    setConfig(next);
+    setPanel('none');
+    setToast('已保存');
   };
-
-  const summon = (personaId: string) => {
-    const target = [...cards]
-      .filter((c) => c.authorId === 'me' && c.status !== 'done' && c.status !== 'handled')
-      .sort((a, b) => b.createdAt - a.createdAt)[0];
-    if (!target) return;
-    patch(target.id, (c) => summonPersona(c, personaId));
-  };
-
-  const postAs = (personaId: string) => {
-    const persona = personas.find((p) => p.id === personaId);
-    if (!persona) return;
-    setCards((prev) => [personaCard(persona), ...prev]);
-  };
-
-  const patchPersona = (next: Persona) =>
-    setPersonas((prev) => prev.map((p) => (p.id === next.id ? next : p)));
-
-  const setMemory = (personaId: string, memory: MemoryEntry[]) =>
-    setPersonas((prev) => prev.map((p) => (p.id === personaId ? { ...p, memory } : p)));
-
-  const doExport = () => {
-    const raw = exportBundle({ cards, personas, world, settings, identity });
-    const d = new Date();
-    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(
-      d.getDate(),
-    ).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
-    const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `startnow-${stamp}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const doImport = (raw: string) => {
-    const bundle = importBundle(raw);
-    if (!bundle) {
-      alert('这份 JSON 读不了，检查一下是不是本页导出的。');
-      return;
-    }
-    setCards(
-      bundle.cards.some((c) => c.kind === 'guide') ? bundle.cards : [buildGuideCard(), ...bundle.cards],
-    );
-    setPersonas(ensureMinds(bundle.personas));
-    setWorld(bundle.world);
-    setSettings(bundle.settings);
-    setIdentity(bundle.identity);
-    setAdminOpen(false);
-  };
-
-  const doClear = () => {
-    clearAll();
-    setCards([buildGuideCard()]);
-    setPersonas(ensureMinds(defaultPersonas()));
-    setWorld(emptyWorld());
-    setSettings({ ...defaultSettings });
-    setIdentity(loadIdentity());
-    setAdminOpen(false);
-    setView('home');
-  };
-
-  const doReseed = () => {
-    setCards(buildSeedCards());
-    setPersonas((prev) => ensureMinds(seedMemories(prev)));
-    setWorld(emptyWorld());
-  };
-
-  const guide = cards.find((c) => c.kind === 'guide');
-  const feed = useMemo(
-    () =>
-      cards
-        .filter((c) => c.kind !== 'guide')
-        .sort((a, b) => b.createdAt - a.createdAt),
-    [cards],
-  );
-  const todayStart = new Date().setHours(0, 0, 0, 0);
-  const todays = feed.filter((c) => c.createdAt >= todayStart);
-  const earlier = feed.filter((c) => c.createdAt < todayStart);
-  const myCards = useMemo(
-    () => cards.filter((c) => c.authorId === 'me').sort((a, b) => b.createdAt - a.createdAt),
-    [cards],
-  );
-  const helped = cards
-    .filter((c) => c.advice?.accepted && c.advice.fromPersonaId === 'me')
-    .sort((a, b) => b.createdAt - a.createdAt);
-  const detailCard = cards.find((c) => c.id === detailId);
-  const notices = useMemo(() => {
-    const out: { card: Card; comment: Comment; persona?: Persona }[] = [];
-    cards.forEach((c) => {
-      if (c.kind === 'guide') return;
-      const since = c.readAt ?? 0;
-      const latest = [...c.comments]
-        .reverse()
-        .find(
-          (x) => x.authorKind === 'persona' && x.authorId !== 'helper' && x.at > since,
-        );
-      const participated =
-        c.authorId === 'me' || c.comments.some((x) => x.authorKind === 'player');
-      if (!latest || !participated) return;
-      out.push({
-        card: c,
-        comment: latest,
-        persona: personas.find((p) => p.id === latest.authorId),
-      });
-    });
-    return out.sort((a, b) => b.comment.at - a.comment.at);
-  }, [cards, personas]);
-
-  useEffect(() => {
-    if (view !== 'home' || mode !== 'card') return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') setDeckIndex((i) => Math.min(i + 1, feed.length - 1));
-      if (e.key === 'ArrowLeft') setDeckIndex((i) => Math.max(i - 1, 0));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [view, mode, feed.length]);
-
-  useEffect(() => {
-    if (deckIndex > feed.length - 1) setDeckIndex(Math.max(0, feed.length - 1));
-  }, [feed.length, deckIndex]);
-
-
-  const noteCount =
-    todos.filter((t) => !t.doneAt).length +
-    cards.filter((c) => c.note && c.status === 'noted').length;
 
   return (
-    <div className="shell">
-      <header className="top">
-        <div className="brand" onClick={bumpBrand} title="StartNow">
-          <span className="mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 19V6M12 6l-4.4 4.4M12 6l4.4 4.4"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M5.5 19.5h13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </span>
-          <div className="brand-text">
-            <h1>StartNow论坛</h1>
-            <p>谁卡住了，就放一张卡</p>
-          </div>
-        </div>
-        <div className="top-actions">
-          <div className="bell-wrap">
-            <button
-              className="bell-btn"
-              onClick={() => setBellOpen((v) => !v)}
-              aria-label="回复通知"
-            >
-              <svg viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M6.8 16.4V11a5.2 5.2 0 0 1 10.4 0v5.4l1.4 1.8H5.4l1.4-1.8Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-                <path d="M10.2 20.2a2 2 0 0 0 3.6 0" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-              {notices.length > 0 && (
-                <span className="bell-dot">{notices.length > 9 ? '9+' : notices.length}</span>
-              )}
-            </button>
-            {bellOpen && (
-              <div className="bell-panel">
-                <p className="bell-title">有人回了你</p>
-                {notices.length === 0 && <p className="bell-empty">还没有新的回复。</p>}
-                {notices.map((n) => (
-                  <button
-                    key={n.comment.id}
-                    className="bell-item"
-                    onClick={() => openCard(n.card, n.comment.authorId)}
-                  >
-                    <span className="bell-who">{n.persona?.name ?? '有人'}</span>
-                    <span className="bell-text">{n.comment.text}</span>
-                    <span className="bell-card">{n.card.title ?? n.card.text.slice(0, 12)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            className={`chip ${ready ? 'ok' : 'warn'}`}
-            onClick={() => openSettings()}
-            title="接入你自己的 API"
-          >
-            <span className="dot" />
-            {ready ? configLabel(config) : '未接入 API'}
-          </button>
-          <button className="avatar-btn" onClick={() => setView('profile')} aria-label="我的">
-            <Avatar avatarKey={identity.avatarKey} className="me" size="sm" />
+    <div className="shell shell-room">
+      {!ready && (
+        <div className="banner">
+          <p>还没接入模型。点右下角「未接入 API」，选「演示模式」也能完整走一遍。</p>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setPanel('api')}>
+            去接入
           </button>
         </div>
-      </header>
-
-      {view === 'home' && (
-        <main className="feed">
-          <div className="home-tabs" role="tablist" aria-label="首页">
-            <button
-              role="tab"
-              aria-selected={homeTab === 'step'}
-              className={homeTab === 'step' ? 'on' : ''}
-              onClick={() => setHomeTab('step')}
-            >
-              下一步
-            </button>
-            <button
-              role="tab"
-              aria-selected={homeTab === 'forum'}
-              className={homeTab === 'forum' ? 'on' : ''}
-              onClick={() => setHomeTab('forum')}
-            >
-              论坛
-            </button>
-          </div>
-
-          {crisis && <CrisisCard onClose={() => setCrisis('')} />}
-
-          {homeTab === 'step' && (
-            <StepBoard
-              cards={cards}
-              todos={todos}
-              personas={personas}
-              busy={working}
-              onOpenCard={openCard}
-              onAccept={(card) => patch(card.id, (c) => acceptAdvice(c))}
-              onDone={(card) => patch(card.id, (c) => completeCard(c, Date.now(), settings.speed))}
-              onAdvice={(card) => void advice(card)}
-              onWrite={() => setView('post')}
-              onForum={() => setHomeTab('forum')}
-              onAddTodo={addTodo}
-              onToggleTodo={toggleTodo}
-              onBrag={openBrag}
-              onBragCard={openCardBrag}
-              onOpenMine={() => setView('mine')}
-            />
-          )}
-
-          {homeTab === 'forum' && (
-            <>
-              <div className="masthead">
-                <p className="masthead-title">卡住了没关系，先动一下</p>
-                <span className="masthead-date">
-                  {personas.length} 位同伴 · 今天 {todays.length} 张卡
-                </span>
-                <span className="masthead-sub">
-                  这里不保证长期，只负责此刻能做的那一件小事。
-                </span>
-                <div className="masthead-tools">
-                  <div className="mode-switch">
-                    <button className={mode === 'card' ? 'on' : ''} onClick={() => setMode('card')}>
-                      卡片
-                    </button>
-                    <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')}>
-                      列表
-                    </button>
-                  </div>
-                  <div className="time-wrap">
-                    <button
-                      className="time-chip"
-                      onClick={() => void advance(1)}
-                      title="点一下：过 1 小时"
-                    >
-                      {justAdvanced || '下 1 小时后'}
-                    </button>
-                    <button className="time-caret" onClick={() => setTimeMenu((v) => !v)}>
-                      ▾
-                    </button>
-                    {timeMenu && (
-                      <div className="time-menu">
-                        {[1, 3, 12].map((h) => (
-                          <button key={h} onClick={() => advance(h)}>
-                            下 {h} 小时
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {guide && <GuideCard card={guide} onOpen={() => openCard(guide)} />}
-
-              {feed.length === 0 && (
-                <div className="empty">
-                  <h2>还没有人卡住</h2>
-                  <p>去「发一张」写一句，四位同伴会陆续过来。</p>
-                </div>
-              )}
-
-              {mode === 'card' && feed.length > 0 && (
-                <CardDeck
-                  cards={feed}
-                  personas={personas}
-                  index={deckIndex}
-                  onIndex={setDeckIndex}
-                  onOpen={openCard}
-                  onLike={like}
-                />
-              )}
-
-              {mode === 'list' && todays.length > 0 && (
-                <section className="board">
-                  <h2 className="board-title">今天</h2>
-                  {todays.map((card) => (
-                    <CardRow
-                      key={card.id}
-                      card={card}
-                      personas={personas}
-                      onClick={() => openCard(card)}
-                      onLike={() => like(card)}
-                    />
-                  ))}
-                </section>
-              )}
-
-              {mode === 'list' && earlier.length > 0 && (
-                <section className="board">
-                  <h2 className="board-title">更早</h2>
-                  {earlier.map((card) => (
-                    <CardRow
-                      key={card.id}
-                      card={card}
-                      personas={personas}
-                      onClick={() => openCard(card)}
-                      onLike={() => like(card)}
-                    />
-                  ))}
-                </section>
-              )}
-            </>
-          )}
-        </main>
       )}
 
-      {view === 'post' && (
-        <main className="feed">
-          <PostForm
-            value={draft}
-            title={draftTitle}
-            image={image}
-            busy={working}
-            ready={ready}
-            personas={personas}
-            onChange={setDraft}
-            onTitle={setDraftTitle}
-            onImage={setImage}
-            onSubmit={send}
-            onOpenSettings={() => openSettings()}
-          />
-          <p className="view-empty">标题可以不写。放出去之后不用守着，有人来会提示你。</p>
-        </main>
-      )}
+      {crisis && <CrisisCard onClose={() => setCrisis('')} />}
 
-      {view === 'detail' && detailCard && (
-        <main className="feed">
-          <CardDetail
-            card={detailCard}
-            me={identity}
-            initialPeer={detailPeer}
-            personas={personas}
-            busy={working}
-            onComment={(text, kind, peer) => comment(detailCard, text, kind, peer)}
-            onAdvice={() => void advice(detailCard)}
-            onShrink={() => patch(detailCard.id, (c) => shrinkAdvice(c))}
-            onAccept={() => patch(detailCard.id, (c) => acceptAdvice(c))}
-            onDone={() => patch(detailCard.id, (c) => completeCard(c, Date.now(), settings.speed))}
-            onCloseCard={() => patch(detailCard.id, (c) => closeCard(c))}
-            onBack={() => setView('home')}
-            onLike={() => like(detailCard)}
-          />
-        </main>
-      )}
+      <ChatRoom
+        room={room}
+        identity={identity}
+        typingName={typingName}
+        busy={working}
+        stepCount={stepCount}
+        usage={{ used, limit: roomSettings.dailyMessages }}
+        apiLabel={configLabel(config)}
+        apiReady={ready}
+        onSend={send}
+        onOpenSteps={() => setPanel('steps')}
+        onOpenRoom={() => setPanel('room')}
+        onOpenArchive={() => setPanel('archive')}
+        onOpenApi={() => setPanel('api')}
+      />
 
-      {view === 'mine' && (
-        <main className="feed">
-          <div className="view-head">
-            <button
-              className="link"
-              onClick={() => {
-                setHomeTab('step');
-                setView('home');
-              }}
-            >
-              ← 回到下一步
-            </button>
-            <h2>我的卡</h2>
-          </div>
-          {myCards.length === 0 && <p className="view-empty">你还没放过卡。</p>}
-          {myCards.map((card) => (
-            <CardRow
-                  key={card.id}
-                  card={card}
-                  personas={personas}
-                  onClick={() => openCard(card)}
-                  onLike={() => like(card)}
-                />
-          ))}
-          {myCards.length > 0 && <p className="view-empty">点开任意一张，可以继续聊或贴便签。</p>}
-        </main>
-      )}
-
-      {view === 'profile' && (
-        <main className="feed">
-          <div className="view-head">
-            <button className="link" onClick={() => setView('home')}>
-              ← 回去
-            </button>
-            <h2>我的</h2>
-          </div>
-
-          <section className="profile-block">
-            <div className="profile-row">
-              <Avatar avatarKey={identity.avatarKey} className="me" size="lg" />
-              <div>
-                <input
-                  className="profile-name"
-                  value={identity.name}
-                  onChange={(e) => setIdentity({ ...identity, name: e.target.value })}
-                />
-                <p className="profile-hint">这个名字会出现在你的卡上</p>
-              </div>
-            </div>
-            <div className="adm-marks">
-              {['moon', 'leaf', 'petal', 'wave', 'window', 'pebble'].map((key) => (
-                <button
-                  key={key}
-                  className={`adm-mark ${identity.avatarKey === key ? 'on' : ''}`}
-                  onClick={() => setIdentity({ ...identity, avatarKey: key })}
-                >
-                  <Avatar avatarKey={key} size="sm" />
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="profile-block">
-            <h3>我帮过的人</h3>
-            {helped.length === 0 && (
-              <p className="view-empty">
-                还没有。你在别人卡下给过建议、对方试了，就会出现在这里。
-              </p>
-            )}
-            {helped.map((c) => (
-              <div className="helped-row" key={c.id}>
-                <b>{c.authorName}</b>
-                <span>你给的下一步：{c.advice?.text}</span>
-              </div>
-            ))}
-          </section>
-
-          <section className="profile-block">
-            <h3>数据与应用</h3>
-            <div className="adm-actions">
-              <button className="btn btn-ghost" onClick={() => openSettings()}>
-                API 设置
-              </button>
-              <button className="btn btn-ghost" onClick={() => setAdminOpen(true)}>
-                作者后台
-              </button>
-              <button className="btn btn-ghost" onClick={() => setOnboardOpen(true)}>
-                怎么玩
-              </button>
-              <button className="btn btn-ghost" onClick={doExport}>
-                导出
-              </button>
-              <button
-                className="btn btn-ghost danger"
-                onClick={() => {
-                  if (confirm('清空本机所有数据？建议先导出。')) doClear();
-                }}
-              >
-                重置软件内容
-              </button>
-            </div>
-            <p className="view-empty">
-              这里的 {personas.length} 位同伴都是 AI。他们不是心理咨询师，内容不构成医疗建议。
-            </p>
-          </section>
-        </main>
-      )}
-
-      {toast && <div className="toast">{toast}</div>}
-
-      <button className="drawer-tab" onClick={() => setDrawerOpen(true)}>
-        便签{noteCount > 0 ? ` · ${noteCount}` : ''}
-      </button>
-
-      {drawerOpen && (
-        <NoteDrawer
-          todos={todos}
-          cards={cards}
-          personas={personas}
-          onAdd={addTodo}
-          onToggle={toggleTodo}
-          onBrag={openBrag}
-          onBragNote={openCardBrag}
-          onOpenCard={(card) => {
-            setDrawerOpen(false);
-            openCard(card);
-          }}
-          onClose={() => setDrawerOpen(false)}
-        />
-      )}
-
-      {brag && (
+      {panel !== 'none' && panel !== 'api' && (
         <div
-          className="scrim"
+          className="scrim scrim-side"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setBrag(null);
+            if (e.target === e.currentTarget) setPanel('none');
           }}
         >
-          <div className="sheet brag-sheet" role="dialog" aria-modal="true" aria-label="发个炫耀">
-            <div className="sheet-head">
-              <div>
-                <h2>发个炫耀</h2>
-                <p>做到了「{brag.text}」。要不要让论坛的人看见？</p>
-              </div>
-              <button className="icon-btn" onClick={() => setBrag(null)} aria-label="关闭">
-                ×
-              </button>
-            </div>
-            <label className="field">
-              <span className="field-label">标题（可以不写）</span>
-              <input value={bragTitle} onChange={(e) => setBragTitle(e.target.value)} />
-            </label>
-            <label className="field">
-              <span className="field-label">想说的话</span>
-              <textarea rows={3} value={bragText} onChange={(e) => setBragText(e.target.value)} />
-            </label>
-            <div className="sheet-actions">
-              <button className="btn btn-ghost" onClick={() => setBrag(null)}>
-                算了
-              </button>
-              <button className="btn btn-primary" onClick={submitBrag} disabled={!bragText.trim()}>
-                发出去
-              </button>
-            </div>
-          </div>
+          {panel === 'steps' && (
+            <StepPanel
+              room={room}
+              busy={working}
+              ready={ready}
+              onClose={() => setPanel('none')}
+              onAdd={(text, group) =>
+                setRoom((prev) => addStep(prev, text, group, identity, Date.now()))
+              }
+              onComplete={finish}
+              onDrop={(id) => setRoom((prev) => dropStep(prev, id))}
+              onShrink={(id) => setRoom((prev) => shrinkStep(prev, id))}
+              onRequest={() => void requestOne()}
+            />
+          )}
+          {panel === 'room' && (
+            <RoomPanel
+              settings={roomSettings}
+              used={used}
+              onChange={setRoomSettings}
+              onReroll={reroll}
+              onOpenApi={() => setPanel('api')}
+              onClose={() => setPanel('none')}
+            />
+          )}
+          {panel === 'archive' && <ArchivePanel archives={archives} onClose={() => setPanel('none')} />}
         </div>
       )}
 
-      <nav className="tabbar">
-        {(
-          [
-            ['step', '下一步'],
-            ['forum', '论坛'],
-            ['post', '发一张'],
-            ['profile', '我的'],
-          ] as [string, string][]
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            className={`tab ${
-              (id === 'step' && view === 'home' && homeTab === 'step') ||
-              (id === 'forum' && view === 'home' && homeTab === 'forum') ||
-              (id !== 'step' && id !== 'forum' && view === id)
-                ? 'on'
-                : ''
-            }`}
-            onClick={() => {
-              if (id === 'step') {
-                setHomeTab('step');
-                setView('home');
-              } else if (id === 'forum') {
-                setHomeTab('forum');
-                setView('home');
-              } else {
-                setView(id as View);
-              }
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
-
-      {onboardOpen && (
-        <Tour
-          onNavigate={(next, tab) => {
-            if (tab) setHomeTab(tab);
-            setView(next);
-          }}
-          onOpenGuide={() => {
-            if (guide) openCard(guide);
-          }}
+      {panel === 'api' && (
+        <SettingsDialog
+          config={config}
+          notice={notice}
+          onSave={saveConfigAndClose}
           onClose={() => {
-            localStorage.setItem('startnow.onboarded', '1');
-            setOnboardOpen(false);
+            setPanel('none');
+            setNotice('');
           }}
         />
       )}
 
       <footer className="foot">
-        <div className="foot-inner">
-          <p className="foot-brand">StartNow论坛</p>
-          <p>StartNow 不保证长期陪伴，只帮你看清当下能做的最小一步。</p>
-          <p>
-            这里的同伴都是 AI。如有伤害自己的念头，请拨打 <strong>12356</strong> 心理援助热线。
-          </p>
-        </div>
+        <p className="foot-brand">StartNow · 谁卡住了，就说一句</p>
+        <p>
+          这里的同伴都是 AI。如有伤害自己的念头，请拨打 <strong>12356</strong> 心理援助热线。
+        </p>
       </footer>
 
-      {detailCard && view !== 'detail' && null}
-
-      {settingsOpen && (
-        <SettingsDialog
-          config={config}
-          notice={settingsNotice}
-          onSave={(next) => {
-            setConfig(next);
-            saveConfig(next);
-            setSettingsOpen(false);
-            setSettingsNotice('');
-          }}
-          onClose={() => {
-            setSettingsOpen(false);
-            setSettingsNotice('');
-          }}
-        />
-      )}
-
-      {adminOpen && (
-        <AdminPanel
-          personas={personas}
-          settings={settings}
-          identity={identity}
-          world={world}
-          onChangePersona={patchPersona}
-          onChangeSettings={setSettings}
-          onChangeIdentity={setIdentity}
-          onMemory={setMemory}
-          onPersonas={setPersonas}
-          onTick={() => void nudge()}
-          onSummon={summon}
-          onPostAs={postAs}
-          onExport={doExport}
-          onImport={doImport}
-          onReseed={doReseed}
-          onClear={doClear}
-          onClose={() => setAdminOpen(false)}
-        />
-      )}
+      {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }

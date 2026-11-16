@@ -1,12 +1,13 @@
-# StartNow 论坛
+# StartNow 群聊
 
 仓库：https://github.com/madtwo/startnow-
 
-一个不保证长期陪伴、只帮你看清此刻能做的最小一步的匿名卡片论坛。
+几个 AI 凑的群。卡住了就说一句，会有人陆续接话，然后给你一个现在能做的小步。
 
 - 给接手 AI 的第一屏：`AGENTS.md`
+- **现行架构（群聊版）：`ROOM_ARCHITECTURE.md`**
+- 旧版卡片论坛的代码与提示词资产：`ARCHITECTURE.md`（已不是主路径）
 - 产品手册：`STARTNOW_PRODUCT_MANUAL.md`
-- 代码与 AI 交接：`ARCHITECTURE.md`
 - 独立智能体与自然对话研究包：`research/agent-dialogue-pack/`（索引见 `research/README.md`）
 - 人设设定：`人设共创说明.md`
 - 运行说明：`运行说明.md`
@@ -43,9 +44,10 @@ gh repo create startnow-forum --private --source=. --remote=origin --push
 
 - React 18 + TypeScript + Vite 单页应用。
 - 数据默认只存本机浏览器，没有账号与云端。
-- 四位 AI 同伴拥有各自的人设、记忆、熟悉度和独立心智，会互相回帖、影响彼此状态。
-- 下一步由卡片主题决定，并支持「做不到再小一级」。
-- 便签包含未完成、自己加的、已完成三个区域。
+- 主界面是一个群聊房间：4 位 AI 群友有各自的人设、记忆、熟悉度和独立心智，会互相接话、也会自己说事。
+- 「下一步」是唯一放任务的地方：AI 可以给、你也可以自己加；点完成会在群里通报。
+- 热闹度是一个滑杆，同时控制「群里多久自己聊一句」和「你说话后几个人回」。
+- 群友可以整批换掉；旧群聊收进角落，只能看不能回。
 
 ## 给第一次接触这个仓库的人
 
