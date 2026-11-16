@@ -3723,7 +3723,11 @@ button {
   margin-top: 0;
 }
 
-.speed-chip {
+.time-wrap {
+  position: relative;
+}
+
+.time-chip {
   padding: 5px 12px;
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   border-radius: 999px;
@@ -3731,6 +3735,36 @@ button {
   color: var(--accent-ink);
   font-size: 11.5px;
   cursor: pointer;
+}
+
+.time-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 30px rgba(20, 20, 19, 0.12);
+}
+
+.time-menu button {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-2);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.time-menu button:hover {
+  background: var(--sand-soft);
 }
 
 .page-thread {

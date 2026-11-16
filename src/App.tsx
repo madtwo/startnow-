@@ -114,6 +114,7 @@ export default function App() {
     () => (localStorage.getItem('startnow.mode') === 'list' ? 'list' : 'card'),
   );
   const [deckIndex, setDeckIndex] = useState(0);
+  const [timeMenu, setTimeMenu] = useState(false);
   const [detailId, setDetailId] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState('');
@@ -255,6 +256,25 @@ export default function App() {
     setDrawerOpen(false);
     setView('home');
     setToast('炫耀帖发出去了');
+  };
+
+  const advance = (hours: number) => {
+    const cur = latest.current;
+    const shift = hours * 3_600_000;
+    const shifted = cur.cards.map((c) => ({
+      ...c,
+      createdAt: c.createdAt - shift,
+      helperAt: c.helperAt ? c.helperAt - shift : undefined,
+      plan: c.plan.map((p) => ({ ...p, at: p.at - shift })),
+      pending: c.pending.map((p) => ({ ...p, at: p.at - shift })),
+      note: c.note ? { ...c.note, dueAt: c.note.dueAt - shift } : undefined,
+      comments: c.comments.map((x) => ({ ...x, at: x.at - shift })),
+    }));
+    setCards(shifted);
+    setTimeMenu(false);
+    setToast(`过了 ${hours} 小时`);
+    busy.current = false;
+    void tick({ cards: shifted });
   };
 
   const openCard = (card: Card) => {
@@ -501,18 +521,20 @@ export default function App() {
                   列表
                 </button>
               </div>
-              <button
-                className="speed-chip"
-                onClick={() =>
-                  setSettings((s) => ({
-                    ...s,
-                    speed: s.speed >= 20 ? 6 : s.speed >= 6 ? 20 : 1,
-                  }))
-                }
-                title="调整节奏：1× / 6× / 20×"
-              >
-                速度 ×{settings.speed}
-              </button>
+              <div className="time-wrap">
+                <button className="time-chip" onClick={() => setTimeMenu((v) => !v)}>
+                  下 1 小时后
+                </button>
+                {timeMenu && (
+                  <div className="time-menu">
+                    {[1, 3, 12].map((h) => (
+                      <button key={h} onClick={() => advance(h)}>
+                        下 {h} 小时
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
