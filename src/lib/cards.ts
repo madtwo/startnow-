@@ -243,6 +243,13 @@ function mockComment(persona: Persona, _card: Card, phase: 'arrival' | 'reply'):
   return list[Math.floor(Math.random() * list.length)];
 }
 
+const tentative: Record<string, string[]> = {
+  shenmo: ['呃……我也刚来，不太会回这个。你这是卡在什么事上？'],
+  weini: ['嗯……我可能也不太会说话。你先说说？'],
+  miaoze: ['我也说不准该怎么接……大概是哪件事卡住了？'],
+  yanggao: ['哎，我其实也不太懂这儿怎么玩。不过你说，我听着。'],
+};
+
 function reactionLine(persona: Persona, label: string): string {
   const pool: Record<string, string[]> = {
     shenmo: [`${label}？可以啊。我这边还一个字没背。`, `${label}，那今晚能睡踏实点了。`],
@@ -276,7 +283,13 @@ async function generateComment(
   card: Card,
   phase: 'arrival' | 'reply',
 ): Promise<string> {
-  if (isMock(ctx.config)) return mockComment(persona, card, phase);
+  if (isMock(ctx.config)) {
+    if (persona.intimacy < 22 && card.comments.length === 0) {
+      const pool = tentative[persona.id];
+      if (pool) return pool[Math.floor(Math.random() * pool.length)];
+    }
+    return mockComment(persona, card, phase);
+  }
   try {
     const text = await callOnce(
       ctx,
@@ -284,6 +297,10 @@ async function generateComment(
         persona,
         renderMemory(persona.memory, Date.now()),
         `${COMMENT_RULES}${
+          persona.intimacy < 22 && card.comments.length === 0
+            ? ' 你和这个人还不熟，也不太确定这里该怎么说话：句子短一点，别用亲昵称呼，别急着给建议，可以说「我也说不好」。'
+            : ''
+        }${
           persona.shareBoost
             ? ' 你刚听对方说了一件挺重的事。这一句可以带一点你自己的类似经历，但不要比较、不要说教。'
             : ''

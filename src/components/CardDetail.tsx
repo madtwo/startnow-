@@ -45,6 +45,7 @@ export default function CardDetail({
   const mine = card.authorId === 'me';
   const giver = card.advice ? personas.find((p) => p.id === card.advice?.fromPersonaId) : undefined;
   const closed = card.status === 'done' || card.status === 'handled';
+  const isGuide = card.kind === 'guide';
 
   const threads = useMemo<Thread[]>(() => {
     const map = new Map<string, Comment[]>();
@@ -89,6 +90,8 @@ export default function CardDetail({
         <div className="page-author-row">
           {author ? (
             <Avatar avatarKey={author.avatarKey} color={author.color} size="sm" />
+          ) : isGuide ? (
+            <Avatar avatarKey="lamp" color="#c96442" size="sm" />
           ) : (
             <Avatar avatarKey={me.avatarKey} className="me" size="sm" />
           )}
@@ -98,7 +101,7 @@ export default function CardDetail({
               {!mine && <span className="thread-badge">AI</span>}
               {mine && <span className="me-badge">你</span>}
             </p>
-            <p className="page-sub">{author ? `${author.tagline} · ${author.cohort}` : '一张卡'}</p>
+            <p className="page-sub">{isGuide ? '论坛的说明' : author ? 'AI 同伴' : '一张卡'}</p>
           </div>
         </div>
       </header>
@@ -108,7 +111,7 @@ export default function CardDetail({
       <p className="page-text">{card.text}</p>
       {card.image && <img className="card-image" src={card.image} alt="卡里配的图" />}
 
-      {card.advice && !closed && (
+      {!isGuide && card.advice && !closed && (
         <div className="advice">
           <div className="advice-head">
             <span className="advice-from">{giver ? `${giver.name}的办法` : '你的建议'}</span>
@@ -127,13 +130,15 @@ export default function CardDetail({
         </div>
       )}
 
+      {!isGuide && (
       <div className="page-like-row">
         <button className={`like ${card.likedByMe ? 'on' : ''}`} onClick={onLike}>
           ♥ {card.likes ?? 0}
         </button>
       </div>
+      )}
 
-      {card.note && card.status === 'noted' && (
+      {!isGuide && card.note && card.status === 'noted' && (
         <div className="sticky-note">
           <span className="sticky-tag">便签</span>
           <p>{card.note.text}</p>
@@ -143,7 +148,7 @@ export default function CardDetail({
         </div>
       )}
 
-      {mine && !card.advice && card.arrivals.length > 0 && !closed && (
+      {!isGuide && mine && !card.advice && card.arrivals.length > 0 && !closed && (
         <div className="card-actions">
           <button className="btn btn-ghost" onClick={onAdvice} disabled={busy}>
             直接给我个办法
@@ -151,6 +156,14 @@ export default function CardDetail({
         </div>
       )}
 
+      {isGuide ? (
+        <div className="page-close-row">
+          <button className="btn btn-ghost" onClick={onBack}>
+            知道了
+          </button>
+        </div>
+      ) : (
+      <>
       <h2 className="page-comments-title">{card.comments.length} 条回应</h2>
 
       <div className="page-threads">
@@ -231,6 +244,8 @@ export default function CardDetail({
             先这样吧
           </button>
         </div>
+      )}
+      </>
       )}
     </article>
   );

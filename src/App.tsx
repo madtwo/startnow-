@@ -4,6 +4,7 @@ import Avatar from './components/Avatar';
 import CardDetail from './components/CardDetail';
 import CardRow from './components/CardRow';
 import CardDeck from './components/CardDeck';
+import GuideCard from './components/GuideCard';
 import NoteDrawer from './components/NoteDrawer';
 import PostForm from './components/PostForm';
 import Tour from './components/Tour';
@@ -391,7 +392,14 @@ export default function App() {
     setWorld(emptyWorld());
   };
 
-  const feed = useMemo(() => [...cards].sort((a, b) => b.createdAt - a.createdAt), [cards]);
+  const guide = cards.find((c) => c.kind === 'guide');
+  const feed = useMemo(
+    () =>
+      cards
+        .filter((c) => c.kind !== 'guide')
+        .sort((a, b) => b.createdAt - a.createdAt),
+    [cards],
+  );
   const todayStart = new Date().setHours(0, 0, 0, 0);
   const todays = feed.filter((c) => c.createdAt >= todayStart);
   const earlier = feed.filter((c) => c.createdAt < todayStart);
@@ -489,6 +497,8 @@ export default function App() {
           )}
 
           {crisis && <CrisisCard onClose={() => setCrisis('')} />}
+
+          {guide && <GuideCard card={guide} onOpen={() => openCard(guide)} />}
 
           {feed.length === 0 && (
             <div className="empty">

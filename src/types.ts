@@ -76,7 +76,7 @@ export type CardStatus = 'stuck' | 'arrived' | 'talking' | 'advised' | 'noted' |
 export interface Comment {
   id: string;
   authorId: string;
-  authorKind: 'player' | 'persona';
+  authorKind: 'player' | 'persona' | 'helper';
   text: string;
   at: number;
   kind?: 'comment' | 'advice';
@@ -121,9 +121,9 @@ export interface Card {
   id: string;
   authorId: string;
   authorName: string;
-  authorKind: 'player' | 'persona';
+  authorKind: 'player' | 'persona' | 'helper';
   title?: string;
-  kind?: 'worry' | 'brag';
+  kind?: 'worry' | 'brag' | 'guide';
   likes?: number;
   likedByMe?: boolean;
   text: string;

@@ -93,9 +93,10 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
     authorId: typeof raw.authorId === 'string' ? raw.authorId : 'me',
     authorName: typeof raw.authorName === 'string' ? raw.authorName : '我',
-    authorKind: raw.authorKind === 'persona' ? 'persona' : 'player',
+    authorKind:
+      raw.authorKind === 'persona' ? 'persona' : raw.authorKind === 'helper' ? 'helper' : 'player',
     title: typeof raw.title === 'string' ? raw.title : undefined,
-    kind: raw.kind === 'brag' ? 'brag' : 'worry',
+    kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'guide' ? 'guide' : 'worry',
     likes: typeof raw.likes === 'number' ? raw.likes : 0,
     likedByMe: Boolean(raw.likedByMe),
     text: raw.text,

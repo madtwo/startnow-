@@ -3647,3 +3647,64 @@ button {
 .drawer-tab:hover {
   background: #f3e2d8;
 }
+
+/* ---------- 论坛小助手 ---------- */
+
+.guide-card {
+  display: block;
+  width: 100%;
+  margin: 8px 0 16px;
+  padding: 16px 18px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fdf7ee, #faf5e8);
+  text-align: left;
+  cursor: pointer;
+}
+
+.guide-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tertiary);
+  font-size: 11px;
+}
+
+.guide-name {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.guide-pin {
+  margin-left: auto;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 9.5px;
+}
+
+.guide-title {
+  margin: 9px 0 4px;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.guide-preview {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.8;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.guide-more {
+  display: inline-block;
+  margin-top: 9px;
+  color: var(--accent-ink);
+  font-size: 11px;
+}
