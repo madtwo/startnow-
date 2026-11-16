@@ -557,6 +557,14 @@ export default function App() {
     .filter((c) => c.advice?.accepted && c.advice.fromPersonaId === 'me')
     .sort((a, b) => b.createdAt - a.createdAt);
   const detailCard = cards.find((c) => c.id === detailId);
+  const clearNotices = () => {
+    const now = Date.now();
+    setCards((prev) =>
+      prev.map((c) => (c.kind === 'guide' ? c : { ...c, readAt: now })),
+    );
+    setBellOpen(false);
+  };
+
   const notices = useMemo(() => {
     const out: { card: Card; comment: Comment; persona?: Persona }[] = [];
     cards.forEach((c) => {
@@ -641,7 +649,14 @@ export default function App() {
             </button>
             {bellOpen && (
               <div className="bell-panel">
-                <p className="bell-title">有人回了你</p>
+                <div className="bell-head">
+                  <p className="bell-title">有人回了你</p>
+                  {notices.length > 0 && (
+                    <button className="bell-clear" onClick={clearNotices}>
+                      全部已读
+                    </button>
+                  )}
+                </div>
                 {notices.length === 0 && <p className="bell-empty">还没有新的回复。</p>}
                 {notices.map((n) => (
                   <button
