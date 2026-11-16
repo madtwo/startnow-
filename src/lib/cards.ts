@@ -321,7 +321,7 @@ async function generateComment(
 }
 
 function dailyQuota(personas: Persona[]) {
-  return Math.min(6, 2 + Math.max(0, personas.length - 4));
+  return Math.min(8, 4 + Math.max(0, personas.length - 4));
 }
 
 async function generateAiCard(
@@ -756,6 +756,36 @@ export async function catchUp(
 
 export function markSeen(card: Card, now = Date.now()): Card {
   return card.seenAt ? card : { ...card, seenAt: now };
+}
+
+const bragLines = [
+  '做到了：把简历投出去了。\n比想的简单一点。',
+  '做到了：去问了辅导员。\n排队排了四十分钟，但问到了。',
+  '做到了：把桌面收了。\n现在能看见桌垫了。',
+  '做到了：给家里打了电话。\n没吵架。',
+  '做到了：下楼走了两圈。\n风挺大，人清醒了。',
+];
+
+export function personaBrag(persona: Persona, now = Date.now()): Card {
+  return {
+    id: uid(),
+    authorId: persona.id,
+    authorName: persona.name,
+    authorKind: 'persona',
+    kind: 'brag',
+    title: '做到了',
+    text: bragLines[Math.floor(Math.random() * bragLines.length)],
+    likes: 0,
+    likedByMe: false,
+    createdAt: now,
+    status: 'handled',
+    handledAt: now,
+    arrivals: [],
+    plan: [],
+    pending: [],
+    comments: [],
+    readAt: undefined,
+  };
 }
 
 export const actionMeta = (id?: string) => ({

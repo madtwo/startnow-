@@ -200,6 +200,7 @@ export function loadWorld(now = Date.now()): World {
     lastTickAt: typeof saved.lastTickAt === 'number' ? saved.lastTickAt : now,
     dayKey: typeof saved.dayKey === 'string' ? saved.dayKey : dayKey(now),
     callsToday: typeof saved.callsToday === 'number' ? saved.callsToday : 0,
+    lastBragAt: typeof saved.lastBragAt === 'number' ? saved.lastBragAt : undefined,
     logs: Array.isArray(saved.logs) ? saved.logs.slice(0, 20) : [],
   };
 }

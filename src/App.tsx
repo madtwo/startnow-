@@ -21,6 +21,7 @@ import {
   completeCard,
   createPlayerCard,
   notePlayerShare,
+  personaBrag,
   personaCard,
   shrinkAdvice,
   summonPersona,
@@ -118,6 +119,7 @@ export default function App() {
   const [timeMenu, setTimeMenu] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [detailPeer, setDetailPeer] = useState('');
+  const [justAdvanced, setJustAdvanced] = useState('');
   const [detailId, setDetailId] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState('');
@@ -167,14 +169,21 @@ export default function App() {
         const who = cur.personas.find((p) => p.id === last?.authorId)?.name ?? '有人';
         setToast(`${who} 来了你的卡`);
       }
-      setCards(out.cards);
+      const nowTs = Date.now();
+      const lastBrag = cur.world.lastBragAt ?? 0;
+      const bragDue = nowTs - lastBrag > 5 * 3_600_000 && cur.personas.length > 0;
+      const extra = bragDue
+        ? [personaBrag(cur.personas[Math.floor(Math.random() * cur.personas.length)], nowTs)]
+        : [];
+      setCards(extra.length ? [...out.cards, ...extra] : out.cards);
       setPersonas(out.personas);
-      const day = dayKey(Date.now());
+      const day = dayKey(nowTs);
       setWorld((w) => ({
         ...w,
         dayKey: day,
         callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls,
-        lastTickAt: Date.now(),
+        lastTickAt: nowTs,
+        lastBragAt: extra.length ? nowTs : w.lastBragAt,
         logs: [...out.logs, ...w.logs].slice(0, 20),
       }));
     } finally {
@@ -276,19 +285,34 @@ export default function App() {
     setCards(shifted);
     setTimeMenu(false);
     busy.current = false;
-    const res = await catchUp({
+    let res: { cards: Card[]; personas: Persona[]; calls: number } = {
       cards: shifted,
       personas: cur.personas,
-      settings: cur.settings,
-      config: cur.config,
-      hours,
-    });
+      calls: 0,
+    };
+    try {
+      res = await catchUp({
+        cards: shifted,
+        personas: cur.personas,
+        settings: cur.settings,
+        config: cur.config,
+        hours,
+      });
+    } catch {
+      res = { cards: shifted, personas: cur.personas, calls: 0 };
+    }
     setCards(res.cards);
     setPersonas(res.personas);
     if (res.calls) {
       setWorld((w) => ({ ...w, callsToday: w.callsToday + res.calls }));
     }
-    setToast(`过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`);
+    setDeckIndex(0);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setJustAdvanced(`已过 ${hours} 小时`);
+    window.setTimeout(() => setJustAdvanced(''), 3200);
+    setToast(
+      `过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`,
+    );
     await tick({ cards: res.cards });
   };
 
@@ -601,8 +625,15 @@ export default function App() {
                 </button>
               </div>
               <div className="time-wrap">
-                <button className="time-chip" onClick={() => setTimeMenu((v) => !v)}>
-                  下 1 小时后
+                <button
+                  className="time-chip"
+                  onClick={() => void advance(1)}
+                  title="点一下：过 1 小时"
+                >
+                  {justAdvanced || '下 1 小时后'}
+                </button>
+                <button className="time-caret" onClick={() => setTimeMenu((v) => !v)}>
+                  ▾
                 </button>
                 {timeMenu && (
                   <div className="time-menu">

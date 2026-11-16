@@ -3978,3 +3978,25 @@ button {
   color: var(--tertiary);
   font-size: 10px;
 }
+
+.time-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.time-wrap .time-chip {
+  border-radius: 999px 0 0 999px;
+  border-right: 0;
+}
+
+.time-caret {
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+  background: var(--surface);
+  color: var(--accent-ink);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}

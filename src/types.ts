@@ -166,5 +166,6 @@ export interface World {
   lastTickAt: number;
   dayKey: string;
   callsToday: number;
+  lastBragAt?: number;
   logs: string[];
 }
