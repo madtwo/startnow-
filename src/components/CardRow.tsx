@@ -41,7 +41,7 @@ export default function CardRow({ card, personas, onClick, onLike }: Props) {
     >
       <div className="thread-top">
         {author ? (
-          <Avatar avatarKey={author.avatarKey} color={author.color} size="xs" />
+          <Avatar avatarKey={author.avatarKey} name={author.name} color={author.color} size="xs" />
         ) : (
           <Avatar avatarKey="petal" className="me" size="xs" />
         )}

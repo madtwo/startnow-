@@ -122,7 +122,7 @@ export default function AdminPanel(props: Props) {
                   className={`adm-person ${p.id === persona.id ? 'on' : ''}`}
                   onClick={() => setSelected(p.id)}
                 >
-                  <Avatar avatarKey={p.avatarKey} color={p.color} size="sm" />
+                  <Avatar avatarKey={p.avatarKey} name={p.name} color={p.color} size="sm" />
                   <span>{p.name}</span>
                 </button>
               ))}

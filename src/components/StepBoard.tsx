@@ -160,12 +160,12 @@ export default function StepBoard({
           <div className="companion-strip">
             <div className="companion-avatars">
               {personas.map((p) => (
-                <Avatar key={p.id} avatarKey={p.avatarKey} color={p.color} size="sm" />
+                <Avatar key={p.id} avatarKey={p.avatarKey} name={p.name} color={p.color} size="sm" />
               ))}
             </div>
             <div className="companion-strip-text">
-              <b>{personas.length} 位 AI 同伴都在</b>
-              <span>他们不是真人，但会认真听你说</span>
+              <b>{personas.map((p) => p.name).join('、')}</b>
+              <span>{personas.length} 位 AI 同伴都在 · 不是真人，但会认真听你说</span>
             </div>
           </div>
         </section>

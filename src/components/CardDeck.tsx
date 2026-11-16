@@ -63,7 +63,7 @@ export default function CardDeck({ cards, personas, index, onIndex, onOpen, onLi
       <article className={`deck-card ${brag ? 'is-brag' : ''}`} onClick={() => onOpen(card)}>
         <header className="deck-head">
           {author ? (
-            <Avatar avatarKey={author.avatarKey} color={author.color} size="sm" />
+            <Avatar avatarKey={author.avatarKey} name={author.name} color={author.color} size="sm" />
           ) : (
             <Avatar avatarKey="petal" className="me" size="sm" />
           )}

@@ -321,6 +321,39 @@ body {
   height: 32px;
 }
 
+.avatar-initial {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.avatar.xs .avatar-initial {
+  font-size: 10px;
+}
+
+.avatar.sm .avatar-initial {
+  font-size: 12px;
+}
+
+.avatar.lg .avatar-initial {
+  font-size: 18px;
+}
+
+.companion-avatars .avatar .avatar-initial {
+  font-size: 14px;
+}
+
+.deck-head .avatar .avatar-initial,
+.thread-top .avatar .avatar-initial,
+.forum-comment-head .avatar .avatar-initial {
+  font-size: 16px;
+}
+
+.page-author-row .avatar .avatar-initial {
+  font-size: 20px;
+}
+
 .user-chip-text {
   display: flex;
   flex-direction: column;
@@ -1315,8 +1348,19 @@ body {
 }
 
 .who-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
   color: var(--faint);
   font-size: 12px;
+  white-space: normal;
+}
+
+.who-text b {
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .compose-tip {
@@ -2112,6 +2156,12 @@ body {
   background: var(--coral-deep);
 }
 
+@media (min-width: 961px) and (max-width: 1239px) {
+  .page-wrap {
+    padding-right: 60px;
+  }
+}
+
 /* ---------- 提示与页脚 ---------- */
 
 .toast {
@@ -2435,5 +2485,11 @@ body {
 @media (max-width: 360px) {
   .tab {
     padding: 8px 6px;
+  }
+
+  .companion-strip {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
 }

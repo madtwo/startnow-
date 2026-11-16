@@ -88,11 +88,14 @@ export default function PostForm({
             <span className="who-avatars">
               {personas.map((p) => (
                 <span key={p.id} className="who-avatar" title={`${p.name} · ${p.tagline}`}>
-                  <Avatar avatarKey={p.avatarKey} color={p.color} size="xs" />
+                  <Avatar avatarKey={p.avatarKey} name={p.name} color={p.color} size="xs" />
                 </span>
               ))}
             </span>
-            <span className="who-text">{personas.length} 位同伴，来不来不一定</span>
+            <span className="who-text">
+              <b>{personas.map((p) => p.name).join('、')}</b>
+              <span>{personas.length} 位同伴，来不来不一定</span>
+            </span>
           </div>
           <div className="post-form-actions">
             <input

@@ -110,7 +110,7 @@ export default function CardDetail({
       <header className="detail-head">
         <div className="page-author-row">
           {author ? (
-            <Avatar avatarKey={author.avatarKey} color={author.color} size="sm" />
+            <Avatar avatarKey={author.avatarKey} name={author.name} color={author.color} size="sm" />
           ) : isGuide ? (
             <Avatar avatarKey="lamp" color="#c96442" size="sm" />
           ) : (
@@ -215,7 +215,7 @@ export default function CardDetail({
             >
               <div className="forum-comment-head">
                 {persona ? (
-                  <Avatar avatarKey={persona.avatarKey} color={persona.color} size="xs" />
+                  <Avatar avatarKey={persona.avatarKey} name={persona.name} color={persona.color} size="xs" />
                 ) : isHelper ? (
                   <Avatar avatarKey="lamp" color="#c96442" size="xs" />
                 ) : (
