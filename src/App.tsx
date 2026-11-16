@@ -3,6 +3,7 @@ import AdminPanel from './components/AdminPanel';
 import Avatar from './components/Avatar';
 import CardDetail from './components/CardDetail';
 import CardRow from './components/CardRow';
+import CardDeck from './components/CardDeck';
 import NoteDrawer from './components/NoteDrawer';
 import PostForm from './components/PostForm';
 import Tour from './components/Tour';
@@ -94,6 +95,10 @@ export default function App() {
     () => localStorage.getItem('startnow.onboarded') !== '1',
   );
   const [view, setView] = useState<View>('home');
+  const [mode, setMode] = useState<'card' | 'list'>(
+    () => (localStorage.getItem('startnow.mode') === 'list' ? 'list' : 'card'),
+  );
+  const [deckIndex, setDeckIndex] = useState(0);
   const [detailId, setDetailId] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState('');
@@ -113,6 +118,7 @@ export default function App() {
   useEffect(() => saveSettings(settings), [settings]);
   useEffect(() => saveIdentity(identity), [identity]);
   useEffect(() => saveTodos(todos), [todos]);
+  useEffect(() => localStorage.setItem('startnow.mode', mode), [mode]);
 
   const ready = isReady(config);
   const latest = useRef({ cards, personas, world, settings, config, working });
@@ -398,6 +404,22 @@ export default function App() {
     .filter((c) => c.advice?.accepted && c.advice.fromPersonaId === 'me')
     .sort((a, b) => b.createdAt - a.createdAt);
   const detailCard = cards.find((c) => c.id === detailId);
+
+  useEffect(() => {
+    if (view !== 'home' || mode !== 'card') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') setDeckIndex((i) => Math.min(i + 1, feed.length - 1));
+      if (e.key === 'ArrowLeft') setDeckIndex((i) => Math.max(i - 1, 0));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [view, mode, feed.length]);
+
+  useEffect(() => {
+    if (deckIndex > feed.length - 1) setDeckIndex(Math.max(0, feed.length - 1));
+  }, [feed.length, deckIndex]);
+
+
   const noteCount =
     todos.filter((t) => !t.doneAt).length +
     cards.filter((c) => c.note && c.status === 'noted').length;
@@ -446,6 +468,14 @@ export default function App() {
               {personas.length} 位同伴 · 今天 {todays.length} 张卡
             </span>
             <span className="masthead-sub">这里不保证长期，只负责此刻能做的那一件小事。</span>
+            <div className="mode-switch">
+              <button className={mode === 'card' ? 'on' : ''} onClick={() => setMode('card')}>
+                卡片
+              </button>
+              <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')}>
+                列表
+              </button>
+            </div>
           </div>
 
           {activeMine && (
@@ -467,7 +497,18 @@ export default function App() {
             </div>
           )}
 
-          {todays.length > 0 && (
+          {mode === 'card' && feed.length > 0 && (
+            <CardDeck
+              cards={feed}
+              personas={personas}
+              index={deckIndex}
+              onIndex={setDeckIndex}
+              onOpen={openCard}
+              onLike={like}
+            />
+          )}
+
+          {mode === 'list' && todays.length > 0 && (
             <section className="board">
               <h2 className="board-title">今天</h2>
               {todays.map((card) => (
@@ -482,7 +523,7 @@ export default function App() {
             </section>
           )}
 
-          {earlier.length > 0 && (
+          {mode === 'list' && earlier.length > 0 && (
             <section className="board">
               <h2 className="board-title">更早</h2>
               {earlier.map((card) => (

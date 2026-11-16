@@ -12,8 +12,8 @@ interface Step {
 const STEPS: Step[] = [
   {
     view: 'home',
-    title: '这里的同伴都是 AI',
-    body: '沈默、魏霓、苗泽、杨槔，各自有生活，也各自会卡住。这里不保证长期，只负责此刻你能做的那一件小事。',
+    title: 'StartNow 不保证长期',
+    body: '它只负责此刻你能做的那一件小事：做了就算数，做一半也算数，不做也没关系。身边这四位是 AI，各自有生活，也各自会卡住。',
   },
   {
     view: 'home',
@@ -47,9 +47,21 @@ const STEPS: Step[] = [
   },
   {
     view: 'home',
-    selector: '.thread-card',
+    selector: '.mode-switch',
+    title: '卡片或列表，随时切换',
+    body: '卡片一次看一张；列表像普通论坛。内容一样，顺手哪个用哪个。',
+  },
+  {
+    view: 'home',
+    selector: '.drawer-tab',
+    title: '右边是便签',
+    body: '别人给的办法、你自己加的小事都在这儿。勾掉之后，可以发一篇炫耀帖。',
+  },
+  {
+    view: 'home',
+    selector: '.deck-card, .thread-card',
     title: '点开一张卡',
-    body: '列表里只有开头，点进去才有完整的正文、按人分开的对话和回复框。',
+    body: '点进去才有完整的正文、按人分开的对话。点谁的评论，就算回复谁。',
   },
 ];
 
