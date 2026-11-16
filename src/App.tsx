@@ -26,7 +26,7 @@ import {
   summonPersona,
   tickCards,
 } from './lib/cards';
-import { buildSeedCards, seedMemories } from './lib/seed';
+import { buildGuideCard, buildSeedCards, seedMemories } from './lib/seed';
 import { defaultPersonas } from './lib/personas';
 import {
   clearAll,
@@ -69,6 +69,8 @@ type View = 'home' | 'post' | 'mine' | 'profile' | 'detail';
 
 export default function App() {
   const [boot] = useState(() => {
+    const withGuide = (cards: Card[]) =>
+      cards.some((c) => c.kind === 'guide') ? cards : [buildGuideCard(), ...cards];
     if (isFirstRun()) {
       return { cards: buildSeedCards(), personas: seedMemories(defaultPersonas()) };
     }
@@ -77,9 +79,9 @@ export default function App() {
       const seeded = personas.every((p) => p.memory.length === 0)
         ? seedMemories(personas)
         : personas;
-      return { cards: loadCards(), personas: seeded };
+      return { cards: withGuide(loadCards()), personas: seeded };
     }
-    return { cards: loadCards(), personas: loadPersonas() };
+    return { cards: withGuide(loadCards()), personas: loadPersonas() };
   });
   const [config, setConfig] = useState<LlmConfig>(() => loadConfig());
   const [cards, setCards] = useState<Card[]>(boot.cards);
@@ -367,7 +369,9 @@ export default function App() {
       alert('这份 JSON 读不了，检查一下是不是本页导出的。');
       return;
     }
-    setCards(bundle.cards);
+    setCards(
+      bundle.cards.some((c) => c.kind === 'guide') ? bundle.cards : [buildGuideCard(), ...bundle.cards],
+    );
     setPersonas(bundle.personas);
     setWorld(bundle.world);
     setSettings(bundle.settings);
@@ -377,7 +381,7 @@ export default function App() {
 
   const doClear = () => {
     clearAll();
-    setCards([]);
+    setCards([buildGuideCard()]);
     setPersonas(defaultPersonas());
     setWorld(emptyWorld());
     setSettings({ ...defaultSettings });

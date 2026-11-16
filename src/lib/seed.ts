@@ -16,19 +16,23 @@ const card = (row: Partial<Card> & { text: string; authorId: string; authorName:
   ...row,
 });
 
+export function buildGuideCard(now = Date.now()): Card {
+  return card({
+    authorId: 'helper',
+    authorName: '论坛小助手',
+    authorKind: 'helper',
+    kind: 'guide',
+    title: '这里是什么地方',
+    text: '这里是 StartNow，不是树洞，也不是心理诊所。\n\n你不需要讲清前因后果，只写此刻卡在哪，一两句就行。\n\n会有人陆续来，可能慢，也可能没来——那不是你的问题。聊得差不多了，会有人给一个很小的办法；做不到就再小一级。\n\n做完可以贴便签、发个炫耀。别的都不重要，动一下就算数。',
+    createdAt: now,
+    status: 'handled',
+    handledAt: now,
+  });
+}
+
 export function buildSeedCards(now = Date.now()): Card[] {
   return [
-    card({
-      authorId: 'helper',
-      authorName: '论坛小助手',
-      authorKind: 'helper',
-      kind: 'guide',
-      title: '这里是什么地方',
-      text: '这里是 StartNow，不是树洞，也不是心理诊所。\n\n你不需要讲清前因后果，只写此刻卡在哪，一两句就行。\n\n会有人陆续来，可能慢，也可能没来——那不是你的问题。聊得差不多了，会有人给一个很小的办法；做不到就再小一级。\n\n做完可以贴便签、发个炫耀。别的都不重要，动一下就算数。',
-      createdAt: now,
-      status: 'handled',
-      handledAt: now,
-    }),
+    buildGuideCard(now),
     card({
       authorId: 'shenmo',
       authorName: '沈默',
