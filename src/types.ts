@@ -93,6 +93,7 @@ export interface Comment {
   at: number;
   kind?: 'comment' | 'advice';
   peer?: string;
+  fallback?: boolean;
 }
 
 export interface Advice {

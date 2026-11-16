@@ -218,6 +218,14 @@ export default function CardDetail({
                 <span className="forum-comment-time">{clock(comment.at)}</span>
                 {repliedTo && <span className="forum-comment-reply">回复 {repliedTo}</span>}
                 {comment.kind === 'advice' && <span className="advice-tag">下一步</span>}
+                {comment.fallback && (
+                  <span
+                    className="fallback-tag"
+                    title="真实模型这次没有接上，使用了本地安全回复"
+                  >
+                    演示兜底
+                  </span>
+                )}
                 {selected && <span className="forum-comment-target">正在回复</span>}
               </div>
               <p className="forum-comment-text">{comment.text}</p>

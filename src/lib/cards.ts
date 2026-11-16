@@ -454,13 +454,15 @@ async function generateComment(
   persona: Persona,
   card: Card,
   phase: 'arrival' | 'reply',
-): Promise<string> {
+): Promise<{ text: string; fallback: boolean }> {
   if (isMock(ctx.config)) {
     if (persona.intimacy < 22 && card.comments.length === 0) {
       const line = TENTATIVE[persona.id];
-      if (line) return line(TOPIC_WORD[topicGroup(inferTrouble(card.text))]);
+      if (line) {
+        return { text: line(TOPIC_WORD[topicGroup(inferTrouble(card.text))]), fallback: false };
+      }
     }
-    return mockComment(persona, card, phase);
+    return { text: mockComment(persona, card, phase), fallback: false };
   }
   const latestPlayer = [...card.comments].reverse().find((c) => c.authorKind === 'player');
   const invited = Boolean(latestPlayer && isOfflineInvite(latestPlayer.text));
@@ -490,23 +492,26 @@ async function generateComment(
       auditSocial(line) || (shortContact && mentionsLocalVenue(line));
     if (invited) {
       if (line && !findCrisis(line) && !auditTone(line) && hasBoundaryCue(line)) {
-        return line;
+        return { text: line, fallback: false };
       }
       ctx.logs.push(`${persona.name} 接到线下邀请，换成线上边界`);
-      return mockBoundaryReply(persona);
+      return { text: mockBoundaryReply(persona), fallback: true };
     }
     if (line && !findCrisis(line) && !auditTone(line) && !socialBlocked) {
-      return line;
+      return { text: line, fallback: false };
     }
     if (line && !findCrisis(line) && !auditTone(line) && socialBlocked) {
       ctx.logs.push(`${persona.name} 的线下邀请被拦下，换成线上边界`);
-      return mockBoundaryReply(persona);
+      return { text: mockBoundaryReply(persona), fallback: true };
     }
     ctx.logs.push(`${persona.name} 的那句被拦下了，换了一句`);
   } catch (err) {
     ctx.logs.push(`${persona.name} 这次没说话：${describeError(err)}`);
   }
-  return invited ? mockBoundaryReply(persona) : mockComment(persona, card, phase);
+  return {
+    text: invited ? mockBoundaryReply(persona) : mockComment(persona, card, phase),
+    fallback: true,
+  };
 }
 
 function dailyQuota(personas: Persona[]) {
@@ -646,13 +651,14 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       const persona = personas.find((p) => p.id === item.personaId);
       card.plan = card.plan.filter((p) => p !== item);
       if (!persona) continue;
-      const text = await generateComment(ctx, persona, card, 'arrival');
+      const generated = await generateComment(ctx, persona, card, 'arrival');
       card.comments.push({
         id: uid(),
         authorId: persona.id,
         authorKind: 'persona',
-        text,
+        text: generated.text,
         at: item.at,
+        fallback: generated.fallback || undefined,
       });
       card.arrivals.push(persona.id);
       if (card.status === 'stuck') card.status = 'arrived';
@@ -663,8 +669,19 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       } else if (card.authorKind === 'persona' && card.authorId !== persona.id) {
         const author = personas.find((p) => p.id === card.authorId);
         if (author) {
-          personas = setMind(personas, author.id, mindAfterPeer(author, persona.name, text, now));
-          personas = rememberAbout(personas, author.id, persona.name, text, card.id, now);
+          personas = setMind(
+            personas,
+            author.id,
+            mindAfterPeer(author, persona.name, generated.text, now),
+          );
+          personas = rememberAbout(
+            personas,
+            author.id,
+            persona.name,
+            generated.text,
+            card.id,
+            now,
+          );
         }
         personas = rememberAbout(personas, persona.id, card.authorName, card.text, card.id, now);
       }
@@ -676,6 +693,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       card.pending = card.pending.filter((p) => p !== ready);
       if (persona) {
         let said = '';
+        let fallback = false;
         let accepted: boolean | undefined;
         let adviceText = '';
         if (ready.phase === 'reaction') {
@@ -715,6 +733,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
                 reply = said;
               }
             } catch {
+              fallback = true;
               ctx.logs.push(`${persona.name} 没接住这句建议`);
             }
           }
@@ -726,6 +745,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
             authorKind: 'persona',
             text: said,
             at: ready.at,
+            fallback: fallback || undefined,
           });
           if (accept) {
             card.advice = {
@@ -743,13 +763,16 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
             }
           }
         } else {
-          said = await generateComment(ctx, persona, card, 'reply');
+          const generated = await generateComment(ctx, persona, card, 'reply');
+          said = generated.text;
+          fallback = generated.fallback;
           card.comments.push({
             id: uid(),
             authorId: persona.id,
             authorKind: 'persona',
             text: said,
             at: ready.at,
+            fallback: fallback || undefined,
           });
         }
 
