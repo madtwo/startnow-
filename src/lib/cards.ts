@@ -438,7 +438,7 @@ async function callOnce(ctx: Ctx, system: string, user: string, maxTokens: numbe
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
-    signal: new AbortController().signal,
+    signal: AbortSignal.timeout(20_000),
     sessionId: `ses_c_${Math.random().toString(36).slice(2, 10)}`,
     onDelta: () => {},
     maxTokens,
@@ -477,7 +477,7 @@ async function generateComment(
         ctx.settings.baselineExtra,
       ),
       commentPrompt(card, persona),
-      400,
+      1200,
     );
     const line = cleanLine(text);
     const shortContact = latestPlayerIsShortContact(card);
@@ -514,7 +514,7 @@ async function generateAiCard(
       ctx,
       systemFor(persona, renderMemory(persona.memory, now), CARD_RULES, ctx.settings.baselineExtra),
       cardPrompt(recent, new Date(now), weight, persona.intimacy),
-      400,
+      1200,
     );
     const [body, fact] = text.split('|||');
     const card = cleanLine(body ?? text, 120);
@@ -691,7 +691,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
                   input.settings.baselineExtra,
                 ),
                 decidePrompt(card, adviceText),
-                200,
+                600,
               );
               const [head, ...rest] = raw.split('|');
               const said = cleanLine(rest.join('|'), 60);
@@ -918,9 +918,9 @@ export async function askForAdvice(
               .join('\n')}`,
           },
         ],
-        signal: new AbortController().signal,
+        signal: AbortSignal.timeout(20_000),
         onDelta: () => {},
-        maxTokens: 200,
+        maxTokens: 800,
         lowEffort: true,
       });
       const said = cleanLine(raw.split('|').slice(1).join('|'), 60);

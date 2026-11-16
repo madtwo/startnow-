@@ -183,7 +183,10 @@ export async function streamChat(opts: {
   if (contentType.includes('application/json')) {
     const data = await res.json().catch(() => null);
     const text: string = data?.choices?.[0]?.message?.content ?? '';
-    if (text) onDelta(text);
+    if (!text.trim()) {
+      throw new LlmError('server', '模型没有返回任何文字，换个模型试试。');
+    }
+    onDelta(text);
     return text;
   }
 
@@ -241,7 +244,7 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
         model: config.model.trim(),
         messages: [{ role: 'user', content: '只回复两个字：可以' }],
         stream: false,
-        max_tokens: 16,
+        max_tokens: 240,
       }),
     });
   } catch (err) {
@@ -261,6 +264,13 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
 
   const data = await res.json().catch(() => null);
   if (!data) throw new LlmError('server', '返回的不是合法 JSON，这个地址可能不是 OpenAI 兼容接口。');
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    throw new LlmError(
+      'server',
+      '接口通了，但模型没有返回文字。它可能把 token 全用在 reasoning 上，换一个模型或调高 max_tokens。',
+    );
+  }
   const servedModel = data?.model ?? config.model;
   return `连接成功 · ${servedModel}`;
 }
