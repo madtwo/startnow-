@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdminPanel from './components/AdminPanel';
 import Avatar from './components/Avatar';
 import PostForm from './components/PostForm';
-import Onboarding from './components/Onboarding';
+import Tour from './components/Tour';
 import CardView from './components/CardView';
 import CardDetail from './components/CardDetail';
 import CrisisCard from './components/CrisisCard';
@@ -658,7 +658,8 @@ export default function App() {
       </nav>
 
       {onboardOpen && (
-        <Onboarding
+        <Tour
+          onNavigate={setView}
           onClose={() => {
             localStorage.setItem('startnow.onboarded', '1');
             setOnboardOpen(false);

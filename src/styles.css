@@ -2921,3 +2921,88 @@ button {
     display: none;
   }
 }
+
+/* ---------- 手把手引导 ---------- */
+
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.tour-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 20, 19, 0.55);
+  pointer-events: auto;
+}
+
+.tour-spot {
+  position: absolute;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(20, 20, 19, 0.55);
+  outline: 2px solid rgba(250, 249, 245, 0.85);
+  pointer-events: none;
+  transition: all 0.25s ease;
+}
+
+.tour-tip {
+  position: absolute;
+  width: 320px;
+  padding: 16px 18px 14px;
+  border-radius: 12px;
+  background: #1a1917;
+  color: #faf9f5;
+  box-shadow: 0 24px 60px rgba(20, 20, 19, 0.45);
+  pointer-events: auto;
+}
+
+.tour-step {
+  margin: 0;
+  color: #8f8d85;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+}
+
+.tour-tip h3 {
+  margin: 6px 0 8px;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.tour-body {
+  margin: 0;
+  color: #dedbd2;
+  font-size: 12.5px;
+  line-height: 1.85;
+}
+
+.tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.tour-skip {
+  margin-right: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #b0aea5;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tour-prev {
+  padding: 6px 12px;
+  border: 1px solid rgba(250, 249, 245, 0.22);
+  border-radius: 999px;
+  background: none;
+  color: #faf9f5;
+  font-size: 12px;
+  cursor: pointer;
+}
