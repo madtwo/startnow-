@@ -4,8 +4,8 @@
   --coral: #e8634a;
   --coral-deep: #d14e36;
   --coral-soft: #fff0ea;
-  --ink-3: #6b635a;
-  --faint: #b5ada2;
+  --ink-3: #5f584f;
+  --faint: #767065;
   --green: #8fb78e;
   --blue: #7ba3c9;
   --purple: #a78bc4;
@@ -19,7 +19,7 @@
   --site-bg: #faf7f2;
   --site-fg: #1f1b16;
   --site-surface: #ffffff;
-  --site-muted: #8c847a;
+  --site-muted: #6a6258;
   --site-border: #f0ebe2;
   --site-accent: #e8634a;
   --site-on-accent: #ffffff;
@@ -30,8 +30,8 @@
   --surface-strong: #ffffff;
   --ink: #1f1b16;
   --ink-2: #3a342c;
-  --muted: #8c847a;
-  --tertiary: #b5ada2;
+  --muted: #6a6258;
+  --tertiary: #767065;
   --border: #f0ebe2;
   --border-soft: #f5f1ea;
   --accent: #e8634a;
@@ -44,7 +44,7 @@
   --moss-wash: #eef5ed;
   --crimson: #c0392b;
   --crimson-wash: #fdf1ec;
-  --warm-silver: #b5ada2;
+  --warm-silver: #8f877c;
   --focus: #d14e36;
   --radius-card: 20px;
   --radius-control: 14px;
@@ -424,6 +424,11 @@ body {
 }
 
 .link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 4px;
+  margin: 0 -4px;
   color: var(--muted);
   font-size: 13px;
   text-decoration: none;
@@ -737,6 +742,7 @@ body {
 .step-add input {
   flex: 1;
   min-width: 0;
+  min-height: 30px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -1057,6 +1063,8 @@ body {
 }
 
 .deck-open {
+  padding: 6px 8px;
+  margin: 4px -8px -4px 0;
   color: var(--coral-deep);
   font-size: 12px;
   font-weight: 600;
@@ -1070,11 +1078,21 @@ body {
 }
 
 .deck-dots {
+  gap: 8px;
   margin-top: 18px;
 }
 
 .deck-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
   background: var(--line-2);
+}
+
+.deck-dot::after {
+  content: '';
+  position: absolute;
+  inset: -8px -4px;
 }
 
 .deck-dot.seen {
@@ -2068,6 +2086,8 @@ body {
 }
 
 .drawer-brag {
+  min-height: 26px;
+  padding: 4px 10px;
   border-color: var(--coral-soft);
   background: var(--coral-soft);
   color: var(--coral-deep);
@@ -2149,6 +2169,8 @@ body {
 }
 
 .tour-skip {
+  padding: 6px;
+  margin-left: -6px;
   color: var(--muted);
 }
 
@@ -2407,5 +2429,11 @@ body {
   .bell-panel {
     right: -46px;
     width: min(300px, calc(100vw - 32px));
+  }
+}
+
+@media (max-width: 360px) {
+  .tab {
+    padding: 8px 6px;
   }
 }
