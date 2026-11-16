@@ -1,10 +1,11 @@
 import type { Card, Identity, LlmConfig, Persona, World, WorldSettings } from '../types';
 import { defaultConfig, PRESETS } from '../config/providers';
 import { defaultPersonas } from './personas';
+import { buildSeedCards } from './seed';
 
 const KEYS = {
   config: 'shudong.config.v1',
-  cards: 'shudong.cards.v1',
+  cards: 'shudong.cards.v2',
   personas: 'shudong.personas.v2',
   world: 'shudong.world.v1',
   settings: 'shudong.settings.v1',
@@ -70,11 +71,13 @@ export const saveConfig = (config: LlmConfig) => write(KEYS.config, config);
 const legacyAny = () =>
   LEGACY_POST_KEYS.some((key) => localStorage.getItem(key) !== null);
 
+const hasLegacyCards = () => localStorage.getItem('shudong.cards.v1') !== null;
+
 export const isFirstRun = () =>
-  localStorage.getItem(KEYS.cards) === null && !legacyAny();
+  localStorage.getItem(KEYS.cards) === null && !legacyAny() && !hasLegacyCards();
 
 export const needsUpgrade = () =>
-  localStorage.getItem(KEYS.cards) === null && legacyAny();
+  localStorage.getItem(KEYS.cards) === null && (legacyAny() || hasLegacyCards());
 
 const retention = (cards: Card[], now = Date.now()) =>
   cards
@@ -110,8 +113,19 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
 
 export function loadCards(): Card[] {
   const saved = read(KEYS.cards);
-  if (!Array.isArray(saved)) return [];
-  return retention(saved.map(normalizeCard).filter((c): c is Card => Boolean(c)));
+  if (Array.isArray(saved)) {
+    return retention(saved.map(normalizeCard).filter((c): c is Card => Boolean(c)));
+  }
+  // 旧版卡片：保留你自己开的卡，AI 的卡换成新种子
+  const legacy = read('shudong.cards.v1');
+  if (Array.isArray(legacy)) {
+    const mine = legacy
+      .map(normalizeCard)
+      .filter((c): c is Card => Boolean(c))
+      .filter((c) => c.authorId === 'me');
+    return retention([...mine, ...buildSeedCards()]);
+  }
+  return [];
 }
 
 export const saveCards = (cards: Card[]) => write(KEYS.cards, retention(cards));

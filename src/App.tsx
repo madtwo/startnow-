@@ -63,8 +63,15 @@ type View = 'home' | 'post' | 'mine' | 'history' | 'profile';
 
 export default function App() {
   const [boot] = useState(() => {
-    if (isFirstRun() || needsUpgrade()) {
+    if (isFirstRun()) {
       return { cards: buildSeedCards(), personas: seedMemories(defaultPersonas()) };
+    }
+    if (needsUpgrade()) {
+      const personas = loadPersonas();
+      const seeded = personas.every((p) => p.memory.length === 0)
+        ? seedMemories(personas)
+        : personas;
+      return { cards: loadCards(), personas: seeded };
     }
     return { cards: loadCards(), personas: loadPersonas() };
   });
