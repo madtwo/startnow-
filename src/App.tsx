@@ -171,7 +171,8 @@ export default function App() {
       }
       const nowTs = Date.now();
       const lastBrag = cur.world.lastBragAt ?? 0;
-      const bragDue = nowTs - lastBrag > 5 * 3_600_000 && cur.personas.length > 0;
+      const bragDue =
+        lastBrag > 0 && nowTs - lastBrag > 5 * 3_600_000 && cur.personas.length > 0;
       const extra = bragDue
         ? [personaBrag(cur.personas[Math.floor(Math.random() * cur.personas.length)], nowTs)]
         : [];
@@ -183,7 +184,7 @@ export default function App() {
         dayKey: day,
         callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls,
         lastTickAt: nowTs,
-        lastBragAt: extra.length ? nowTs : w.lastBragAt,
+        lastBragAt: extra.length ? nowTs : w.lastBragAt ?? nowTs,
         logs: [...out.logs, ...w.logs].slice(0, 20),
       }));
     } finally {
