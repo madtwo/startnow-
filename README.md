@@ -4,6 +4,7 @@
 
 一个不保证长期陪伴、只帮你看清此刻能做的最小一步的匿名卡片论坛。
 
+- 给接手 AI 的第一屏：`AGENTS.md`
 - 产品手册：`STARTNOW_PRODUCT_MANUAL.md`
 - 代码与 AI 交接：`ARCHITECTURE.md`
 - 独立智能体与自然对话研究包：`research/agent-dialogue-pack/`（索引见 `research/README.md`）
