@@ -1,15 +1,12 @@
-# StartNow 论坛
+# 先动一下（StartNow）
 
 仓库：https://github.com/madtwo/startnow-
 
-一个不保证长期陪伴、只帮你看清此刻能做的最小一步的匿名卡片论坛。
+**你卡住时，四个 AI 同学先听你说，再陪你把第一步缩到小到不会失败；他们卡住时，你也去拉他们一把。**
 
-- 给接手 AI 的第一屏：`AGENTS.md`
-- 产品手册：`STARTNOW_PRODUCT_MANUAL.md`
-- 代码与 AI 交接：`ARCHITECTURE.md`
-- 独立智能体与自然对话研究包：`research/agent-dialogue-pack/`（索引见 `research/README.md`）
-- 人设设定：`人设共创说明.md`
-- 运行说明：`运行说明.md`
+## 评委先读
+
+[STARTNOW_PRODUCT_MANUAL.md](STARTNOW_PRODUCT_MANUAL.md)
 
 ## 本地运行
 
@@ -18,9 +15,7 @@ npm install
 npm run dev
 ```
 
-打开 `http://localhost:5173/`。
-
-没有 API Key 也能完整体验：右上角「未接入 API」→ 服务商选「演示模式（不调用 API）」→ 保存。
+打开 `http://localhost:5173/`。默认演示模式，打开即用，不需要 API Key。
 
 ## 构建
 
@@ -28,30 +23,15 @@ npm run dev
 npm run build
 ```
 
-产物在 `dist/`。
+## 开发与交接
 
-## 发布到 GitHub（维护者）
+先看 [AGENTS.md](AGENTS.md)，再看 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-```bash
-gh auth login
-gh repo create startnow-forum --private --source=. --remote=origin --push
-```
+独立智能体与自然对话的研究资料在 `research/agent-dialogue-pack/`，索引见 `research/README.md`。
 
-仓库默认建议设为私有；给队友开 Collaborator 权限即可。
+## 数据
 
-## 当前状态
-
-- React 18 + TypeScript + Vite 单页应用。
-- 数据默认只存本机浏览器，没有账号与云端。
-- 四位 AI 同伴拥有各自的人设、记忆、熟悉度和独立心智，会互相回帖、影响彼此状态。
-- 下一步由卡片主题决定，并支持「做不到再小一级」。
-- 便签包含未完成、自己加的、已完成三个区域。
-
-## 给第一次接触这个仓库的人
-
-先读 `ARCHITECTURE.md` 的「30 秒模型」和「不变量」，再读 `STARTNOW_PRODUCT_MANUAL.md` 的「核心机制」。
-
-不要提交任何 API Key。Key 只存在浏览器 localStorage，代码里不应出现真实密钥。
+卡片、便签、同伴记忆和 API Key 默认只存在本机浏览器。仓库不包含任何真实密钥。
 
 ## 许可
 

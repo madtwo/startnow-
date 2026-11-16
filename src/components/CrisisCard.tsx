@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { EMERGENCY, HOTLINE } from '../lib/crisis';
 
 interface Props {
   onClose: () => void;
@@ -22,11 +23,11 @@ export default function CrisisCard({ onClose }: Props) {
         </button>
       </div>
       <p>
-        如果你现在有伤害自己的念头，请优先联系真人：<strong>12356</strong> 心理援助热线（24
-        小时），或 <strong>010-82951332</strong>。紧急情况请拨 <strong>120 / 110</strong>，也可以找身边可信任的人。
+        如果你现在有伤害自己的念头，请优先联系真人：<strong>{HOTLINE}</strong> 心理援助热线（24
+        小时）。紧急情况请拨 <strong>{EMERGENCY}</strong>，也可以找身边可信任的人。
       </p>
       <p className="crisis-dim">
-        你仍然可以把话说出来，这里的 AI 居民会陪你，但它们不是医生，也无法替代专业帮助。
+        这条内容没有发出去，也不会召集同伴。这里的 AI 居民不是医生，无法替代专业帮助。
       </p>
     </aside>
   );

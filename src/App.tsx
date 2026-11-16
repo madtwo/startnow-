@@ -11,7 +11,8 @@ import StepBoard from './components/StepBoard';
 import Tour from './components/Tour';
 import CrisisCard from './components/CrisisCard';
 import SettingsDialog from './components/SettingsDialog';
-import { configLabel, isReady } from './config/providers';
+import { isReady } from './config/providers';
+import { HOTLINE } from './lib/crisis';
 import { findCrisis } from './lib/safety';
 import {
   acceptAdvice,
@@ -124,10 +125,8 @@ export default function App() {
     () => (localStorage.getItem('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
   );
   const [deckIndex, setDeckIndex] = useState(0);
-  const [timeMenu, setTimeMenu] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [detailPeer, setDetailPeer] = useState('');
-  const [justAdvanced, setJustAdvanced] = useState('');
   const [detailId, setDetailId] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState('');
@@ -220,12 +219,15 @@ export default function App() {
   const send = () => {
     const text = draft.trim();
     if (!text || working) return;
+    if (findCrisis(text)) {
+      setCrisis(text);
+      return;
+    }
     if (!ready) {
       setSettingsNotice('先接入一个 API，或者切到演示模式。');
       setSettingsOpen(true);
       return;
     }
-    if (findCrisis(text)) setCrisis(text);
     const card = createPlayerCard(text, identity.name, personas, settings, draftTitle);
     if (image) card.image = image;
     setPersonas((prev) => notePlayerShare(prev, text));
@@ -268,6 +270,11 @@ export default function App() {
 
   const submitBrag = () => {
     if (!brag || !bragText.trim()) return;
+    if (findCrisis(bragText)) {
+      setBrag(null);
+      setCrisis(bragText);
+      return;
+    }
     const card = createPlayerCard(
       bragText.trim(),
       identity.name,
@@ -302,7 +309,6 @@ export default function App() {
       comments: c.comments.map((x) => ({ ...x, at: x.at - shift })),
     }));
     setCards(shifted);
-    setTimeMenu(false);
     busy.current = false;
     let res: { cards: Card[]; personas: Persona[]; calls: number } = {
       cards: shifted,
@@ -327,8 +333,6 @@ export default function App() {
     }
     setDeckIndex(0);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    setJustAdvanced(`已过 ${hours} 小时`);
-    window.setTimeout(() => setJustAdvanced(''), 3200);
     setToast(
       `过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`,
     );
@@ -348,7 +352,10 @@ export default function App() {
   };
 
   const comment = (card: Card, text: string, kind: 'comment' | 'advice', peer?: string) => {
-    if (findCrisis(text)) setCrisis(text);
+    if (findCrisis(text)) {
+      setCrisis(text);
+      return;
+    }
     setPersonas((prev) => notePlayerShare(prev, text));
     patch(card.id, (c) => addPlayerComment(c, text, Date.now(), settings.speed, kind, peer));
   };
@@ -570,8 +577,8 @@ export default function App() {
             </svg>
           </span>
           <div className="brand-text">
-            <h1>StartNow论坛</h1>
-            <p>谁卡住了，就放一张卡</p>
+            <h1>先动一下</h1>
+            <p>四个 AI 同学的互助小圈子</p>
           </div>
         </div>
         <div className="top-actions">
@@ -612,14 +619,6 @@ export default function App() {
               </div>
             )}
           </div>
-          <button
-            className={`chip ${ready ? 'ok' : 'warn'}`}
-            onClick={() => openSettings()}
-            title="接入你自己的 API"
-          >
-            <span className="dot" />
-            {ready ? configLabel(config) : '未接入 API'}
-          </button>
           <button className="avatar-btn" onClick={() => setView('profile')} aria-label="我的">
             <Avatar avatarKey={identity.avatarKey} className="me" size="sm" />
           </button>
@@ -646,8 +645,6 @@ export default function App() {
               论坛
             </button>
           </div>
-
-          {crisis && <CrisisCard onClose={() => setCrisis('')} />}
 
           {homeTab === 'step' && (
             <StepBoard
@@ -687,27 +684,6 @@ export default function App() {
                     <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')}>
                       列表
                     </button>
-                  </div>
-                  <div className="time-wrap">
-                    <button
-                      className="time-chip"
-                      onClick={() => void advance(1)}
-                      title="点一下：过 1 小时"
-                    >
-                      {justAdvanced || '下 1 小时后'}
-                    </button>
-                    <button className="time-caret" onClick={() => setTimeMenu((v) => !v)}>
-                      ▾
-                    </button>
-                    {timeMenu && (
-                      <div className="time-menu">
-                        {[1, 3, 12].map((h) => (
-                          <button key={h} onClick={() => advance(h)}>
-                            下 {h} 小时
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -915,6 +891,12 @@ export default function App() {
 
       {toast && <div className="toast">{toast}</div>}
 
+      {crisis && (
+        <div className="crisis-layer">
+          <CrisisCard onClose={() => setCrisis('')} />
+        </div>
+      )}
+
       <button className="drawer-tab" onClick={() => setDrawerOpen(true)}>
         便签{noteCount > 0 ? ` · ${noteCount}` : ''}
       </button>
@@ -1014,9 +996,6 @@ export default function App() {
             if (tab) setHomeTab(tab);
             setView(next);
           }}
-          onOpenGuide={() => {
-            if (guide) openCard(guide);
-          }}
           onClose={() => {
             localStorage.setItem('startnow.onboarded', '1');
             setOnboardOpen(false);
@@ -1026,10 +1005,10 @@ export default function App() {
 
       <footer className="foot">
         <div className="foot-inner">
-          <p className="foot-brand">StartNow论坛</p>
-          <p>StartNow 不保证长期陪伴，只帮你看清当下能做的最小一步。</p>
+          <p className="foot-brand">先动一下 · StartNow</p>
+          <p>不保证长期陪伴，只帮你看清当下能做的最小一步。</p>
           <p>
-            这里的同伴都是 AI。如有伤害自己的念头，请拨打 <strong>12356</strong> 心理援助热线。
+            这里的同伴都是 AI。如有伤害自己的念头，请拨打 <strong>{HOTLINE}</strong> 心理援助热线。
           </p>
         </div>
       </footer>
@@ -1065,6 +1044,7 @@ export default function App() {
           onMemory={setMemory}
           onPersonas={setPersonas}
           onTick={() => void nudge()}
+          onAdvance={(hours) => void advance(hours)}
           onSummon={summon}
           onPostAs={postAs}
           onExport={doExport}

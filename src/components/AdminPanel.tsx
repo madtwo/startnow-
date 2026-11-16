@@ -18,6 +18,7 @@ interface Props {
   onMemory: (personaId: string, memory: MemoryEntry[]) => void;
   onPersonas: (personas: Persona[]) => void;
   onTick: () => void;
+  onAdvance: (hours: number) => void;
   onSummon: (personaId: string) => void;
   onPostAs: (personaId: string) => void;
   onExport: () => void;
@@ -472,6 +473,18 @@ export default function AdminPanel(props: Props) {
               </label>
             </div>
 
+            <div className="adm-actions">
+              <span className="field-label">调试：推进时间（不在评委主界面出现）</span>
+              {[1, 3, 12].map((hours) => (
+                <button
+                  key={hours}
+                  className="btn btn-ghost"
+                  onClick={() => props.onAdvance(hours)}
+                >
+                  +{hours} 小时
+                </button>
+              ))}
+            </div>
             <div className="adm-actions">
               {personas.map((p) => (
                 <button

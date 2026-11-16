@@ -93,9 +93,9 @@ export const getPreset = (id: ProviderId): ProviderPreset =>
   PRESETS.find((p) => p.id === id) ?? PRESETS[0];
 
 export const defaultConfig: LlmConfig = {
-  providerId: 'deepseek',
-  baseUrl: 'https://api.deepseek.com/v1',
-  model: 'deepseek-chat',
+  providerId: 'mock',
+  baseUrl: '',
+  model: 'demo',
   apiKey: '',
 };
 

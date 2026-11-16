@@ -1,5 +1,5 @@
 import type { Card, Identity, LlmConfig, Persona, Todo, World, WorldSettings } from '../types';
-import { defaultConfig, PRESETS } from '../config/providers';
+import { defaultConfig, isReady, PRESETS } from '../config/providers';
 import { defaultPersonas } from './personas';
 import { buildSeedCards } from './seed';
 
@@ -59,12 +59,13 @@ export function loadConfig(): LlmConfig {
   const providerId = PRESETS.some((p) => p.id === saved.providerId)
     ? saved.providerId!
     : defaultConfig.providerId;
-  return {
+  const config: LlmConfig = {
     providerId,
     baseUrl: typeof saved.baseUrl === 'string' ? saved.baseUrl : defaultConfig.baseUrl,
     model: typeof saved.model === 'string' ? saved.model : defaultConfig.model,
     apiKey: typeof saved.apiKey === 'string' ? saved.apiKey : '',
   };
+  return isReady(config) ? config : defaultConfig;
 }
 
 export const saveConfig = (config: LlmConfig) => write(KEYS.config, config);

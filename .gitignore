@@ -4,6 +4,7 @@ dist
 .DS_Store
 .shots
 startnow-prototype.zip
+startnow-judges.zip
 
 __pycache__/
 *.pyc

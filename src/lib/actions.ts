@@ -8,6 +8,7 @@ export interface ActionItem {
   minutes: number;
   category: ActionCategory;
   topics: TroubleKind[];
+  variant?: 'study-exam' | 'study-writing';
   lateNight: boolean;
   smaller?: string;
   line: string;
@@ -19,6 +20,7 @@ const chain = (
   prefix: string,
   topics: TroubleKind[],
   rows: { label: string; minutes: number; lateNight: boolean; line: string }[],
+  variant?: ActionItem['variant'],
 ): ActionItem[] =>
   rows.map((row, i) => ({
     id: `${prefix}-${rows.length - i}`,
@@ -26,6 +28,7 @@ const chain = (
     minutes: row.minutes,
     category: 'self' as ActionCategory,
     topics,
+    variant,
     lateNight: row.lateNight,
     smaller: i < rows.length - 1 ? `${prefix}-${rows.length - i - 1}` : undefined,
     line: row.line,
@@ -191,7 +194,7 @@ export const ACTIONS: ActionItem[] = [
       },
       { label: '只把书翻开', minutes: 1, lateNight: true, line: '那就先只把书翻开，翻到哪页算哪页。' },
       { label: '把书从包里拿出来', minutes: 1, lateNight: true, line: '那就先把书从包里拿出来，放桌上。' },
-    ]),
+    ], 'study-exam'),
     'study',
   ),
   ...withCategory(
@@ -204,7 +207,7 @@ export const ACTIONS: ActionItem[] = [
       },
       { label: '拿出一张纸', minutes: 1, lateNight: true, line: '那就先拿出一张纸，放在书旁边。' },
       { label: '把笔记本翻开', minutes: 1, lateNight: true, line: '那就先把笔记本翻开，空白的也行。' },
-    ]),
+    ], 'study-exam'),
     'study',
   ),
   ...withCategory(
@@ -217,7 +220,43 @@ export const ACTIONS: ActionItem[] = [
       },
       { label: '把例题的题干读一遍', minutes: 1, lateNight: true, line: '那先把例题的题干读一遍，不用做。' },
       { label: '翻开到例题那一页', minutes: 1, lateNight: true, line: '那就先翻到例题那页，看一行也行。' },
-    ]),
+    ], 'study-exam'),
+    'study',
+  ),
+  ...withCategory(
+    chain('draft', ['study'], [
+      {
+        label: '把文档打开，只写标题和三个小标题',
+        minutes: 5,
+        lateNight: true,
+        line: '我会先把文档打开，只写标题和三个小标题，正文先不管。',
+      },
+      { label: '只打开文档', minutes: 1, lateNight: true, line: '那就先只把文档打开，别的不管。' },
+      { label: '找到那个文档', minutes: 1, lateNight: true, line: '那就先找到那个文档，放在桌面上。' },
+    ], 'study-writing'),
+    'study',
+  ),
+  ...withCategory(
+    chain('sentence', ['study'], [
+      {
+        label: '只写第一段的第一句',
+        minutes: 5,
+        lateNight: true,
+        line: '我会先写一句最丑的开头，写完再改。',
+      },
+      {
+        label: '在文档里打一行字',
+        minutes: 1,
+        lateNight: true,
+        line: '那就在文档里随便打一行字，写完再删也行。',
+      },
+      {
+        label: '把光标放到正文第一行',
+        minutes: 1,
+        lateNight: true,
+        line: '那就先把光标放到正文第一行。',
+      },
+    ], 'study-writing'),
     'study',
   ),
   ...withCategory(
@@ -312,10 +351,21 @@ const shuffle = <T,>(rows: T[]): T[] => {
   return rest;
 };
 
-export function pickActions(hour: number, count = 3, trouble?: TroubleKind): ActionItem[] {
+export function pickActions(
+  hour: number,
+  count = 3,
+  trouble?: TroubleKind,
+  text = '',
+): ActionItem[] {
   const night = hour >= 23 || hour < 6;
+  const writing = /论文|开题|报告|文档|写不出|写东西|一个字|稿/.test(text);
   const eligible = (a: ActionItem) =>
-    !smallerIds.has(a.id) && (night ? a.lateNight : true) && (!trouble || a.topics.includes(trouble));
+    !smallerIds.has(a.id) &&
+    (night ? a.lateNight : true) &&
+    (!trouble || a.topics.includes(trouble)) &&
+    (trouble !== 'study' ||
+      !a.variant ||
+      a.variant === (writing ? 'study-writing' : 'study-exam'));
   const matching = ACTIONS.filter(eligible);
   const specific = trouble ? matching.filter((a) => a.topics.length < UNIVERSAL.length) : [];
   const picked: ActionItem[] = [];

@@ -68,7 +68,7 @@ export default function StepBoard({
   return (
     <div className="step-board">
       <header className="step-head">
-        <h2>下一步该做什么</h2>
+        <h2>今天能做的一件小事</h2>
         <p>不用想清楚，只做此刻这一件。</p>
       </header>
 
@@ -134,10 +134,11 @@ export default function StepBoard({
         </section>
       ) : (
         <section className="step-hero is-empty" data-tour="step">
-          <h3>还没有下一步</h3>
+          <h3>写一句你卡住的事</h3>
           <p className="step-empty-text">
-            卡住了就写一句，会有人给你一个今晚能做的小步。不用讲清前因后果。
+            四个 AI 同学会先听你说，再陪你把它缩成一个现在能做的小动作。他们卡住时，你也可以去拉一把。
           </p>
+          <p className="step-ai-note">四位同伴都是 AI，会自己发帖，也会卡住。</p>
           <div className="step-actions">
             <button className="btn btn-primary" onClick={onWrite}>
               写一张卡

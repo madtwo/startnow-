@@ -49,8 +49,8 @@ npm run build     # tsc --noEmit && vite build，产物 dist/
 
 环境：Windows，Node 24；项目在 `D:\shenye-shudong`。
 
-演示模式：右上角「未接入 API」→「演示模式（不调用 API）」→ 保存。  
-真实模型：OpenAI 兼容 `/chat/completions`，Key 只存本机浏览器。
+默认演示模式，打开即用，不需要 API Key。  
+真实模型：OpenAI 兼容 `/chat/completions`，在「我的 → API 设置」切换，Key 只存本机浏览器。
 
 ---
 
@@ -58,7 +58,7 @@ npm run build     # tsc --noEmit && vite build，产物 dist/
 
 ```
 src/
-  App.tsx                 壳、导航、状态提升、tick、时间推进、发卡/炫耀
+  App.tsx                 壳、导航、状态提升、tick、发卡/炫耀；时间推进只在作者后台
   main.tsx                入口
   types.ts                全部数据类型（Card / Persona / PersonaMind / Comment / Todo / World）
   styles.css              全部样式（无 CSS 框架）
@@ -86,7 +86,7 @@ src/
     GuideCard.tsx         置顶说明卡
     NoteDrawer.tsx        便签：未完成 / 自己加的 / 已完成
     PostForm.tsx          发卡
-    Tour.tsx              10 步新手引导
+    Tour.tsx              3 步新手引导
     AdminPanel.tsx        作者后台：人设 / 心智 / 记忆 / 世界 / 数据
     SettingsDialog.tsx    API 设置
     CrisisCard.tsx        危机求助卡
@@ -212,17 +212,16 @@ mock 模式下，`mockComment` 有 35% 概率接上一条其他同伴的话；�
 不要退回到“全库随机抽动作”。当前逻辑：
 
 1. `inferTrouble(card.text)` → `study | future | people | love | family | self`
-2. `pickActions(hour, 3, trouble)`：
-   - 先取同主题的“第一档”动作
-   - 再补同主题动作
-   - 最后才补通用自我照顾动作
-3. 动作链三档，`smallerAction()` 只在同一条链内缩：
-   - 把书翻到要考的那一章 → 只把书翻开 → 把书从包里拿出来
-   - 打开岗位描述读第一段 → 找出岗位描述 → 打开招聘软件
-   - 在聊天框打一句想说的话 → 打开聊天框 → 找到头像
-4. 演示模式取第一条；真实模型在 3 条候选里选并改写，优先最相关。
+2. 学习类再区分考试/写作：`pickActions(hour, 3, trouble, text)` 会根据「论文/开题/报告/文档/写不出」选择 `study-writing`，否则选择 `study-exam`。
+3. 先取同主题的“第一档”动作，再补同主题动作，最后才补通用自我照顾动作。
+4. 动作链三档，`smallerAction()` 只在同一条链内缩：
+   - 考试：把书翻到要考的那一章 → 只把书翻开 → 把书从包里拿出来
+   - 写作：把文档打开，只写标题和三个小标题 → 只打开文档 → 找到那个文档
+   - 求职：打开岗位描述读第一段 → 找出岗位描述 → 打开招聘软件
+   - 人际：在聊天框打一句想说的话 → 打开聊天框 → 找到头像
+5. 演示模式取第一条；真实模型在 3 条候选里选并改写，优先最相关。
 
-增加动作：在 `ACTIONS` 里加一条 `chain(prefix, topics, rows)`，确保有 `smaller` 链和 `lateNight`。
+增加动作：在 `ACTIONS` 里加一条 `chain(prefix, topics, rows, variant?)`，确保有 `smaller` 链和 `lateNight`。学习动作必须标注 `study-exam` 或 `study-writing`。
 
 ---
 
@@ -270,8 +269,9 @@ mock 模式下，`mockComment` 有 35% 概率接上一条其他同伴的话；�
 8. 论坛默认线上，双方不同处一地；不邀请陌生人一起下楼，不虚构见面。
 9. 被评论不等于被求助；短语气词可以短回、困惑或不回，不强行辅导。
 10. 演示模式与真实模式不能有两条完全不同的产品语义；mock 也必须有上下文。
-11. 数据默认留在本机；不要提交 API Key、真实姓名或学校。
-12. 新增 UI 状态时，同时考虑空/等待/完成/过期四种情况。
+11. 危机词命中时：不创建卡片、不召集同伴、不生成回帖，只展示热线；不要把危机内容当普通重分享加熟悉度。
+12. 数据默认留在本机；不要提交 API Key、真实姓名或学校。
+13. 新增 UI 状态时，同时考虑空/等待/完成/过期四种情况。
 
 ---
 
@@ -289,7 +289,7 @@ mock 模式下，`mockComment` 有 35% 概率接上一条其他同伴的话；�
 
 - 只改 `actions.ts`；保持 `chain` 的 id 稳定（旧卡片存了 actionId）。
 - 新主题动作必须设置 `topics`，并写三档。
-- 改完用 `pickActions(14, 3, 'study')` 之类的方式抽查前三条是否相关。
+- 改完用 `pickActions(14, 3, 'study', '论文写不出来')` 和 `pickActions(14, 3, 'study', '明天小测')` 抽查前三条是否相关。
 
 ### 改回复节奏
 

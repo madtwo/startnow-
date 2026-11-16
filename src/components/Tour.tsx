@@ -8,95 +8,44 @@ interface Step {
   selector?: string;
   title: string;
   body: string;
-  openGuide?: boolean;
 }
 
 const STEPS: Step[] = [
   {
     view: 'home',
     tab: 'step',
-    title: 'StartNow 不保证长期',
-    body: '它只负责此刻你能做的那一件小事：做了算数，做一半也算，不做也没关系。先从这里开始——下一步该做什么。',
-  },
-  {
-    view: 'home',
-    tab: 'step',
-    selector: '[data-tour="step"]',
-    title: '没有下一步，也没关系',
-    body: '是不是也没有灵感？我们先去论坛看看别人卡在哪。',
-  },
-  {
-    view: 'home',
-    tab: 'forum',
-    selector: '.guide-card',
-    title: '这里是论坛',
-    body: '谁卡住了就放一张卡。先读一下置顶的说明，知道这里怎么玩。',
-  },
-  {
-    view: 'home',
-    tab: 'forum',
-    openGuide: true,
-    selector: '.page-text',
-    title: '卡不用讲清前因后果',
-    body: '只写此刻卡在哪，一两句就够。会有人陆续来——可能慢，也可能今天没人来，那不是你的问题。',
-  },
-  {
-    view: 'home',
-    tab: 'step',
-    selector: '[data-tour="step"]',
-    title: '会有人给一个很小的下一步',
-    body: '不用是彻底的解决，只是一件现在能做的小事。做不到就再小一级；贴到便签，做完勾掉。',
-  },
-  {
-    view: 'post',
-    selector: '.post-form-title',
-    title: '标题可以写，也可以不写',
-    body: '想让人一眼知道是什么事，就写一句；不想概括，直接写正文也行。',
+    title: '先动一下',
+    body: '四个 AI 同学的互助小圈子。你写一句卡住的事，他们会先听你说，再陪你找一个现在能做的小动作；他们卡住时，你也可以去拉一把。',
   },
   {
     view: 'post',
     selector: '.post-form-input',
-    title: '写清楚卡在哪',
-    body: '一两句就够，不用组织语言。比如「明天材料物理小测，书才背到第三章」。',
-  },
-  {
-    view: 'post',
-    selector: '.post-form-actions',
-    title: '写好了就放出去',
-    body: '放出去之后不用守着，有人来会提示你。',
+    title: '写一句卡住的事',
+    body: '不用讲清前因后果，一两句就够。写完放出去，之后不用守着。',
   },
   {
     view: 'home',
-    tab: 'forum',
-    selector: '.deck-card, .thread-card',
-    title: '点开一张卡',
-    body: '正文、一条条回应和下一步都在里面。点谁的回应，底部输入栏就会变成「回复：某某」；不点就是回复楼主。',
-  },
-  {
-    view: 'home',
-    tab: 'forum',
-    selector: '.drawer-tab',
-    title: '便签在右边',
-    body: '别人给的下一步、你自己加的小事都在这儿。勾掉之后，可以发一篇炫耀帖。',
+    tab: 'step',
+    selector: '.step-hero',
+    title: '拿到下一步，贴到便签',
+    body: '做不到就再小一级；做完可以发个炫耀。其余的慢慢来。',
   },
 ];
 
 interface Props {
   onNavigate: (view: View, tab?: 'step' | 'forum') => void;
-  onOpenGuide: () => void;
   onClose: () => void;
 }
 
-export default function Tour({ onNavigate, onOpenGuide, onClose }: Props) {
+export default function Tour({ onNavigate, onClose }: Props) {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const step = STEPS[i];
-  const actions = useRef({ onNavigate, onOpenGuide });
-  actions.current = { onNavigate, onOpenGuide };
+  const navigate = useRef(onNavigate);
+  navigate.current = onNavigate;
 
   useEffect(() => {
-    if (step.openGuide) actions.current.onOpenGuide();
-    else actions.current.onNavigate(step.view, step.tab);
+    navigate.current(step.view, step.tab);
     setRect(null);
     let el: Element | null = null;
     const measure = () => {

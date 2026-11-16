@@ -290,26 +290,32 @@ const TENTATIVE: Record<string, (word: string) => string> = {
 const MOCK_LINES: Record<MockTopic, Record<string, { arrival: string[]; reply: string[] }>> = {
   study: {
     shenmo: {
-      arrival: ['小测啊。我考前也这样，书翻两页就开始刷手机。', '是哪一科？先说说，不急着看。'],
+      arrival: [
+        '论文或考试都挺磨人的。我写报告也这样，打开文档先刷十分钟手机。',
+        '卡在哪一步？开题、找资料还是第一段？',
+      ],
       reply: [
-        '我复习不进去的时候，会先只翻到要考的那一章，别的不看。',
-        '嗯，越想着考不好越看不进去。先看一页也行。',
+        '我写不出来的时候，会先把标题和三个小标题打出来，别的不写。',
+        '嗯，越想着写完越开不了头。先写一行也行。',
       ],
     },
     weini: {
-      arrival: ['嗯……考试前一晚，我脑子也会一直转。你是哪一科？', '我可能也说不好，但我可以听。'],
+      arrival: [
+        '嗯……写不出来的时候，我脑子也会一直转。你卡在开头吗？',
+        '我可能也说不好，但我可以听。',
+      ],
       reply: [
-        '我复习不进去的时候，会把书翻到最简单的那一页，先看一行。',
-        '嗯……听起来你不是不想学，是太怕考不好了。',
+        '我写东西卡住时，会先把文档打开，写一句最丑的开头。',
+        '嗯……听起来你不是不会写，是太怕写不好。',
       ],
     },
     miaoze: {
-      arrival: ['是哪一科？要是能缩到一章，可能就没那么吓人。', '先说说考试范围，别急着看全书。'],
-      reply: ['先把范围缩到一章，再挑一道例题。', '我复习不进去就做一道最简单的题，做完就停。'],
+      arrival: ['卡在哪一步？开题、找资料还是写第一段？', '先说说要写多少字，别急着想整篇。'],
+      reply: ['我会先把提纲列三行，写完一行再说。', '写不出来就先写标题，标题不用好。'],
     },
     yanggao: {
-      arrival: ['高数真的烦！你是哪一科？', '哎，考试周啊。先别想整本，挑一页看。'],
-      reply: ['我考前也刷手机，刷完更慌。要不先把手机扣过去？', '别想三章了，先看一页，看完就休息。'],
+      arrival: ['论文真的烦！你写到哪了？', '哎，考试周或论文周都这样，我打开文档就发呆。'],
+      reply: ['我写东西也拖，后来先只写标题。', '别想整篇了，我一般先写三行，写完就去吃饭。'],
     },
   },
   future: {
@@ -872,7 +878,7 @@ export async function askForAdvice(
   if (!persona) return { cards: input.cards, personas: input.personas, calls: 0, logs: [] };
 
   const trouble = inferTrouble(card.text);
-  const options = pickActions(new Date(now).getHours(), 3, trouble);
+  const options = pickActions(new Date(now).getHours(), 3, trouble, card.text);
   const action = options[0];
   let text = action.line;
   let calls = 0;

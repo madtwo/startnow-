@@ -442,6 +442,25 @@ button {
 
 /* ---------- crisis ---------- */
 
+.crisis-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(20, 20, 19, 0.38);
+  backdrop-filter: blur(3px);
+}
+
+.crisis-layer .crisis {
+  width: min(520px, 100%);
+  margin: 0;
+  border-radius: var(--radius-card);
+  box-shadow: 0 24px 70px rgba(20, 20, 19, 0.22);
+}
+
 .crisis {
   margin-top: calc(16px * var(--site-space, 1));
   padding: 18px 20px;
@@ -4216,6 +4235,12 @@ button {
   color: var(--ink-2);
   font-size: 13px;
   line-height: 1.9;
+}
+
+.step-ai-note {
+  margin: 8px 0 0;
+  color: var(--tertiary);
+  font-size: 11px;
 }
 
 .step-actions {
