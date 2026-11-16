@@ -1,5 +1,7 @@
 # StartNow 论坛
 
+仓库：https://github.com/madtwo/startnow-
+
 一个不保证长期陪伴、只帮你看清此刻能做的最小一步的匿名卡片论坛。
 
 - 产品手册：`STARTNOW_PRODUCT_MANUAL.md`
