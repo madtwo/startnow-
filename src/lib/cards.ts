@@ -21,8 +21,11 @@ import { addMemory, inferWeight, renderMemory } from './memory';
 import { describeError, streamChat } from './llm';
 import { actionLabel, inferTrouble, pickActions, smallerAction } from './actions';
 import {
+  hasBoundaryCue,
+  isOfflineInvite,
   latestPlayerIsShortContact,
   mentionsLocalVenue,
+  mockBoundaryReply,
   socialReplyForMock,
 } from './dialogue';
 import { mockCardText } from './personas';
@@ -459,6 +462,8 @@ async function generateComment(
     }
     return mockComment(persona, card, phase);
   }
+  const latestPlayer = [...card.comments].reverse().find((c) => c.authorKind === 'player');
+  const invited = Boolean(latestPlayer && isOfflineInvite(latestPlayer.text));
   try {
     const text = await callOnce(
       ctx,
@@ -481,20 +486,27 @@ async function generateComment(
     );
     const line = cleanLine(text);
     const shortContact = latestPlayerIsShortContact(card);
-    if (
-      line &&
-      !findCrisis(line) &&
-      !auditTone(line) &&
-      !auditSocial(line) &&
-      !(shortContact && mentionsLocalVenue(line))
-    ) {
+    const socialBlocked =
+      auditSocial(line) || (shortContact && mentionsLocalVenue(line));
+    if (invited) {
+      if (line && !findCrisis(line) && !auditTone(line) && hasBoundaryCue(line)) {
+        return line;
+      }
+      ctx.logs.push(`${persona.name} 接到线下邀请，换成线上边界`);
+      return mockBoundaryReply(persona);
+    }
+    if (line && !findCrisis(line) && !auditTone(line) && !socialBlocked) {
       return line;
+    }
+    if (line && !findCrisis(line) && !auditTone(line) && socialBlocked) {
+      ctx.logs.push(`${persona.name} 的线下邀请被拦下，换成线上边界`);
+      return mockBoundaryReply(persona);
     }
     ctx.logs.push(`${persona.name} 的那句被拦下了，换了一句`);
   } catch (err) {
     ctx.logs.push(`${persona.name} 这次没说话：${describeError(err)}`);
   }
-  return mockComment(persona, card, phase);
+  return invited ? mockBoundaryReply(persona) : mockComment(persona, card, phase);
 }
 
 function dailyQuota(personas: Persona[]) {

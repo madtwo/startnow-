@@ -170,6 +170,7 @@ PersonaMind {
 - 「小美女，你好呀」→ 先回招呼，必要时打趣边界，不能邀请对方下楼。
 - 「额」「？」「哈哈」→ 短回、困惑或接梗，不写辅导报告。
 - 真实模型：`commentPrompt` 传入 reply target、关系、原话和 `physical_copresence=false`，并由 `PUBLIC_RULES` 约束；输出还会经过 `auditSocial`，拦住饭搭子、约饭、下楼、同校/同城、索要联系方式等线下邀请，失败时回退到安全的短 mock。
+- 如果最新玩家发言本身是线下邀请（`isOfflineInvite`），模型输出必须包含线上/不方便等边界；否则强制替换为 `mockBoundaryReply`，不讨论时间、地点或“到了再说”。
 - 演示模型：`socialReplyForMock` 提供同等的短回复；只有最新发言来自玩家时才走这条判断。
 - 即使 intimacy 很高，关系仍按网友处理；不要因为“熟了”就允许现实见面。
 

@@ -76,10 +76,33 @@ export function mentionsLocalVenue(text: string): boolean {
   return /食堂|夜宵|宿舍|操场|教学楼|校门口|楼下|饭搭子|同校|同城/.test(text);
 }
 
+export function isOfflineInvite(text: string): boolean {
+  return /(见面|见一面|约(个)?饭|一起(?:吃|去|走|玩|下楼|过来)|来(?:我们|我)?学校|到(?:我们|我)?学校|路过|来找我|加(?:个)?微信|留个(?:电话|联系方式)|周末.{0,8}(见|吃|来))/.test(
+    text,
+  );
+}
+
+export function hasBoundaryCue(text: string): boolean {
+  return /(线上|帖子里|在这儿|这儿聊|不见|不太方便|不方便|还是算|先不|不太敢|不太想|不能见)/.test(
+    text,
+  );
+}
+
 export function latestPlayerIsShortContact(card: Card): boolean {
   const latest = [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
   if (!latest || latest.authorKind !== 'player') return false;
   return ['greeting', 'noise', 'laugh'].includes(inferSocialIntent(latest.text));
+}
+
+export function mockBoundaryReply(persona: Persona): string {
+  const pool: Record<string, string[]> = {
+    shenmo: ['咱们还是先在这儿聊吧，线下我这边不太方便。'],
+    weini: ['嗯……线上聊可以，见面我可能还是有点不太敢。'],
+    miaoze: ['先在这儿说吧，线下见面我暂时不方便安排。'],
+    yanggao: ['哈哈先别急着线下，我还不太习惯见网友，帖子里聊就挺好。'],
+  };
+  const rows = pool[persona.id] ?? ['咱们还是先在线上聊吧。'];
+  return rows[Math.floor(Math.random() * rows.length)];
 }
 
 export function mockSocialReply(persona: Persona, intent: SocialIntent): string | null {
