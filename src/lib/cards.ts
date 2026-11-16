@@ -20,6 +20,7 @@ import { findCrisis, isHeavyShare } from './safety';
 import { addMemory, inferWeight, renderMemory } from './memory';
 import { streamChat } from './llm';
 import { actionLabel, inferTrouble, pickActions, smallerAction } from './actions';
+import { socialReplyForMock } from './dialogue';
 import { mockCardText } from './personas';
 import {
   ADVICE_DECIDE_RULES,
@@ -347,7 +348,7 @@ const MOCK_LINES: Record<MockTopic, Record<string, { arrival: string[]; reply: s
     },
     yanggao: {
       arrival: ['谁惹你了？先说说。', '哎，人际的事最烦。你说。'],
-      reply: ['走，先下楼买瓶喝的，边走边说。', '别闷着，先给那个人发个表情也行。'],
+      reply: ['我刚下楼买了瓶喝的，回来接着听你说。', '别闷着，先给那个人发个表情也行。'],
     },
   },
   self: {
@@ -365,7 +366,7 @@ const MOCK_LINES: Record<MockTopic, Record<string, { arrival: string[]; reply: s
     },
     yanggao: {
       arrival: ['哎你来了！谁惹你了？', '在在在，怎么了。'],
-      reply: ['走，先下楼买瓶喝的。', '别闷着，你说，我听着呢。'],
+      reply: ['我刚下楼买了瓶喝的，回来接着听。', '别闷着，你说，我听着呢。'],
     },
   },
 };
@@ -378,13 +379,16 @@ const PEER_LINES: Record<string, string[]> = {
 };
 
 function mockComment(persona: Persona, card: Card, phase: 'arrival' | 'reply'): string {
-  if (phase === 'reply') {
-    const lastPeer = [...card.comments]
-      .reverse()
-      .find((c) => c.authorKind === 'persona' && c.authorId !== persona.id);
-    if (lastPeer && Math.random() < 0.35) {
-      return pick(PEER_LINES[persona.id] ?? ['嗯，我听着。']);
-    }
+  const social = socialReplyForMock(persona, card, phase);
+  if (social) return social;
+  const latest = [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
+  if (
+    phase === 'reply' &&
+    latest?.authorKind === 'persona' &&
+    latest.authorId !== persona.id &&
+    Math.random() < 0.35
+  ) {
+    return pick(PEER_LINES[persona.id] ?? ['嗯，我听着。']);
   }
   const rows = MOCK_LINES[topicGroup(inferTrouble(card.text))][persona.id];
   const list = rows?.[phase];
@@ -462,7 +466,7 @@ async function generateComment(
         }`,
         ctx.settings.baselineExtra,
       ),
-      commentPrompt(card),
+      commentPrompt(card, persona),
       200,
     );
     const line = cleanLine(text);

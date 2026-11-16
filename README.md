@@ -6,6 +6,7 @@
 
 - 产品手册：`STARTNOW_PRODUCT_MANUAL.md`
 - 代码与 AI 交接：`ARCHITECTURE.md`
+- 独立智能体与自然对话研究包：`research/agent-dialogue-pack/`（索引见 `research/README.md`）
 - 人设设定：`人设共创说明.md`
 - 运行说明：`运行说明.md`
 
