@@ -1,0 +1,225 @@
+import { useState } from 'react';
+import type { Card, Persona, Todo } from '../types';
+
+interface Props {
+  cards: Card[];
+  todos: Todo[];
+  personas: Persona[];
+  busy: boolean;
+  onOpenCard: (card: Card) => void;
+  onAccept: (card: Card) => void;
+  onDone: (card: Card) => void;
+  onAdvice: (card: Card) => void;
+  onWrite: () => void;
+  onForum: () => void;
+  onAddTodo: (text: string) => void;
+  onToggleTodo: (id: string) => void;
+  onBrag: (todo: Todo) => void;
+  onBragCard: (text: string) => void;
+  onOpenMine: () => void;
+}
+
+export default function StepBoard({
+  cards,
+  todos,
+  personas,
+  busy,
+  onOpenCard,
+  onAccept,
+  onDone,
+  onAdvice,
+  onWrite,
+  onForum,
+  onAddTodo,
+  onToggleTodo,
+  onBrag,
+  onBragCard,
+  onOpenMine,
+}: Props) {
+  const [draft, setDraft] = useState('');
+  const mine = cards
+    .filter((c) => c.authorId === 'me')
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const open = mine.filter((c) => c.status !== 'done' && c.status !== 'handled');
+  const noted = mine.find((c) => c.note && c.status === 'noted');
+  const advised = mine.find(
+    (c) => c.advice && !c.advice.accepted && c.status !== 'done' && c.status !== 'handled',
+  );
+  const active = open[0];
+  const focus = noted ?? advised;
+  const waiting = open.filter(
+    (c) => c.status === 'stuck' || c.status === 'arrived' || c.status === 'talking',
+  );
+  const lastDone = mine.find((c) => c.status === 'done' && c.note);
+  const giver = focus
+    ? personas.find((p) => p.id === (focus.note?.fromPersonaId ?? focus.advice?.fromPersonaId))
+    : undefined;
+  const others = waiting.filter((c) => c.id !== (focus?.id ?? active?.id));
+  const myTodos = todos.filter((t) => !t.doneAt);
+  const doneTodos = todos.filter((t) => t.doneAt).slice(0, 3);
+
+  const add = () => {
+    const text = draft.trim();
+    if (!text) return;
+    onAddTodo(text);
+    setDraft('');
+  };
+
+  return (
+    <div className="step-board">
+      <header className="step-head">
+        <h2>下一步该做什么</h2>
+        <p>不用想清楚，只做此刻这一件。</p>
+      </header>
+
+      {focus ? (
+        <section className="step-hero" data-tour="step">
+          <p className="step-kicker">{noted ? '今天的一步' : '有人给了你一个下一步'}</p>
+          <p className="step-line">{noted?.note?.text ?? advised?.advice?.text}</p>
+          <p className="step-from">
+            {giver ? `${giver.name} 给的 · ` : ''}
+            {noted ? '做不到就再小一级' : '做不到就换更小的'}
+          </p>
+          <div className="step-actions">
+            {noted ? (
+              <button className="btn btn-primary" onClick={() => onDone(noted)}>
+                我做到了
+              </button>
+            ) : advised ? (
+              <button className="btn btn-primary" onClick={() => onAccept(advised)}>
+                贴到便签
+              </button>
+            ) : null}
+            <button className="btn btn-ghost" onClick={() => onOpenCard(focus)}>
+              {noted ? '打开这张卡' : '先看看上下文'}
+            </button>
+          </div>
+        </section>
+      ) : active ? (
+        <section className="step-hero is-waiting" data-tour="step">
+          <p className="step-kicker">你的卡还在等</p>
+          <p className="step-line">{active.title ?? active.text.slice(0, 40)}</p>
+          <p className="step-from">
+            {active.arrivals.length
+              ? `${active.arrivals.length} 人来过，还在聊`
+              : '放出去不用守着，有人来会提示你'}
+          </p>
+          <div className="step-actions">
+            <button className="btn btn-primary" onClick={() => onOpenCard(active)}>
+              打开我的卡
+            </button>
+            {active.arrivals.length > 0 && !active.advice && (
+              <button className="btn btn-ghost" onClick={() => onAdvice(active)} disabled={busy}>
+                直接要一个下一步
+              </button>
+            )}
+          </div>
+        </section>
+      ) : lastDone ? (
+        <section className="step-hero is-done" data-tour="step">
+          <p className="step-kicker">做到了</p>
+          <p className="step-line">{lastDone.note?.text}</p>
+          <p className="step-from">不用写读后感。想让人看见，就发个炫耀。</p>
+          <div className="step-actions">
+            <button
+              className="btn btn-primary"
+              onClick={() => onBragCard(lastDone.note?.text ?? '')}
+            >
+              发个炫耀
+            </button>
+            <button className="btn btn-ghost" onClick={() => onOpenCard(lastDone)}>
+              打开这张卡
+            </button>
+          </div>
+        </section>
+      ) : (
+        <section className="step-hero is-empty" data-tour="step">
+          <h3>还没有下一步</h3>
+          <p className="step-empty-text">
+            卡住了就写一句，会有人给你一个今晚能做的小步。不用讲清前因后果。
+          </p>
+          <div className="step-actions">
+            <button className="btn btn-primary" onClick={onWrite}>
+              写一张卡
+            </button>
+            <button className="btn btn-ghost" onClick={onForum}>
+              没有灵感？去论坛看看
+            </button>
+          </div>
+        </section>
+      )}
+
+      {mine.length > 0 && (
+        <button className="step-link" onClick={onOpenMine}>
+          我的卡 · {mine.length} 张{waiting.length > 0 ? `，${waiting.length} 张还在等` : ''} →
+        </button>
+      )}
+
+      <section className="step-shelf">
+        <div className="step-shelf-head">
+          <h3>我自己加的</h3>
+          {myTodos.length > 0 && <span>{myTodos.length} 件</span>}
+        </div>
+        <div className="step-add">
+          <input
+            value={draft}
+            placeholder="加一件小到不会失败的事，比如「把文档打开」"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') add();
+            }}
+          />
+          <button className="foot-send" onClick={add} disabled={!draft.trim()}>
+            加
+          </button>
+        </div>
+        {myTodos.length === 0 && doneTodos.length === 0 && (
+          <p className="view-empty">还没有。小到不会失败，比如「洗把脸」「把书翻开」。</p>
+        )}
+        {myTodos.map((todo) => (
+          <div key={todo.id} className="step-todo">
+            <button
+              className="todo-check"
+              onClick={() => onToggleTodo(todo.id)}
+              aria-label="标记完成"
+            />
+            <span>{todo.text}</span>
+          </div>
+        ))}
+        {doneTodos.length > 0 && (
+          <div className="step-done">
+            <p className="step-done-title">做到了</p>
+            {doneTodos.map((todo) => (
+              <div key={todo.id} className="step-todo is-done">
+                <span className="todo-check on" aria-hidden="true" />
+                <span>{todo.text}</span>
+                <button className="link" onClick={() => onBrag(todo)}>
+                  发个炫耀
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {(focus || active || lastDone) && (
+        <button className="step-browse" onClick={onForum}>
+          没有灵感？去论坛看看别人卡在哪 →
+        </button>
+      )}
+
+      {others.length > 0 && (
+        <div className="step-others">
+          <p className="step-others-title">其它还在等的卡</p>
+          {others.map((c) => (
+            <button key={c.id} className="step-others-row" onClick={() => onOpenCard(c)}>
+              <span className="step-others-dot" />
+              <span>{c.title ?? c.text.slice(0, 26)}</span>
+              <em>{c.arrivals.length ? `${c.arrivals.length} 人来过` : '等一会儿'}</em>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

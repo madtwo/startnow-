@@ -1,5 +1,6 @@
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -118,6 +119,14 @@ const proxyPlugin = (): Plugin => ({
 
 export default defineConfig({
   plugins: [react(), proxyPlugin()],
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        room: resolve(__dirname, 'room.html'),
+      },
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,

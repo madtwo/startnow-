@@ -1239,6 +1239,24 @@ export default function App() {
                   <span>重新打开置顶说明</span>
                 </span>
               </button>
+              <button
+                type="button"
+                className="menu-item"
+                onClick={() => {
+                  window.location.href = '/room.html';
+                }}
+              >
+                <span className="menu-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#E8A87C" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M5 6.5h14v8.5H9l-4 3z" />
+                    <path d="M9 10h6M9 12.5h4" />
+                  </svg>
+                </span>
+                <span className="menu-item-text">
+                  <b>群聊模式</b>
+                  <span>换一种方式聊（独立页）</span>
+                </span>
+              </button>
               <button type="button" className="menu-item" onClick={doExport}>
                 <span className="menu-item-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="#7BA3C9" strokeWidth="1.8" strokeLinecap="round">
