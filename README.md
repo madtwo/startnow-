@@ -6,7 +6,8 @@
 
 ## 评委先读
 
-[STARTNOW_PRODUCT_MANUAL.md](STARTNOW_PRODUCT_MANUAL.md)
+[STARTNOW_PRODUCT_MANUAL.md](STARTNOW_PRODUCT_MANUAL.md)  
+技术附录：[ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## 本地运行
 
@@ -23,16 +24,10 @@ npm run dev
 npm run build
 ```
 
-## 开发与交接
-
-先看 [AGENTS.md](AGENTS.md)，再看 [ARCHITECTURE.md](ARCHITECTURE.md)。
-
-独立智能体与自然对话的研究资料在 `research/agent-dialogue-pack/`，索引见 `research/README.md`。
-
 ## 数据
 
 卡片、便签、同伴记忆和 API Key 默认只存在本机浏览器。仓库不包含任何真实密钥。
 
-## 许可
+## 开发交接
 
-内部参赛原型，未定开源协议。分发前先与作者确认。
+见 `AGENTS.md`。
