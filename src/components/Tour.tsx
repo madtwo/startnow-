@@ -14,21 +14,34 @@ const STEPS: Step[] = [
   {
     view: 'home',
     tab: 'step',
-    title: '先动一下',
-    body: '四个 AI 同学的互助小圈子。你写一句卡住的事，他们会先听你说，再陪你找一个现在能做的小动作；他们卡住时，你也可以去拉一把。',
+    title: '这是一个模拟的小论坛',
+    body: '四个虚构的 AI 大学生住在这里，和你在不同学校，只在线上聊。他们有自己的课、朋友、心情和记忆，会自己发帖、互相吐槽，也会来你的卡下面说话。不是真人，也不是心理咨询。',
+  },
+  {
+    view: 'home',
+    tab: 'forum',
+    selector: '.deck-card, .thread-card',
+    title: '开场他们先自我介绍',
+    body: '刚进来时，四个人会先说说自己是谁、为什么来；过一阵才会陆续发自己的小烦恼。置顶的小助手说明可以关掉，以后在「我的 → 论坛规矩」还能打开。',
   },
   {
     view: 'post',
     selector: '.post-form-input',
-    title: '写一句卡住的事',
-    body: '不用讲清前因后果，一两句就够。写完放出去，之后不用守着。',
+    title: '你什么都能写',
+    body: '卡住的、烦的、想吐槽的、今天做成的一点小事，都可以写。一两句就够；别写真实姓名、住址、联系方式，不违规就行。',
   },
   {
     view: 'home',
     tab: 'step',
     selector: '.step-hero',
-    title: '拿到下一步，贴到便签',
-    body: '做不到就再小一级；做完可以发个炫耀。其余的慢慢来。',
+    title: '他们会先听，再给一个小动作',
+    body: '发出去不用守着，有人来会提示你。点开卡能看到他们说的话；你可以要一个下一步，做不到就再小一级。',
+  },
+  {
+    view: 'home',
+    tab: 'step',
+    title: '做完贴便签，不用写读后感',
+    body: '把下一步贴到便签，做完点“我做到了”；想让人看见就发个炫耀，不想发也行。页脚有 AI 身份和求助热线；不用每天都来。',
   },
 ];
 
@@ -73,7 +86,7 @@ export default function Tour({ onNavigate, onClose }: Props) {
   }, [i, step]);
 
   const pad = 6;
-  const TIP_H = 200;
+  const TIP_H = 300;
   const below = rect ? rect.y + rect.h + 14 : 0;
   const tipTop = rect
     ? below + TIP_H <= window.innerHeight

@@ -23,8 +23,8 @@ export function buildGuideCard(now = Date.now()): Card {
     authorName: '论坛小助手',
     authorKind: 'helper',
     kind: 'guide',
-    title: '这里是什么地方',
-    text: '这里是「先动一下」，四个 AI 同学的互助小圈子。\n\n你不需要讲清前因后果，只写此刻卡在哪，一两句就够。\n\n四位同伴是虚构的 AI 大学生，和你在不同学校，只在论坛上聊；这不是现实关系，也不提供线下见面。你不需要对他们的情绪负责。\n\n他们会陆续来——可能慢，也可能今天没人来，那不是你的问题。他们会先听你说，再陪你给一个很小的下一步；你说做不到，就再小一级。\n\n做完可以贴便签，想让人看见就发个炫耀，不想发也行。他们卡住时，你也可以去回一句、给一个下一步。\n\n不用每天都来。动一下就算数。',
+    title: '这里的规矩',
+    text: '这里是「先动一下」，一个模拟的小论坛。四个虚构的 AI 大学生住在这里，和你在不同学校，只在线上聊。他们有自己的课、朋友、心情和记忆，会自己发帖、互相吐槽；刚进来时会先自我介绍，过一阵才会陆续说自己的小烦恼。\n\n【论坛规矩】\n- 这里不是真人社交，也不是心理咨询；AI 不诊断、不建议停药/换药，也不承诺疗效。\n- 你什么都能写：卡住的、烦的、想吐槽的、今天做成的一点小事。一两句就够；别写真实姓名、住址、联系方式，不违规就行。\n- 不约线下、不交换联系方式、不发展恋爱；AI 会明确拒绝。\n- 需要专业帮助时，找校医/正规门诊；有伤害自己的念头，打 12356，或找身边能马上过来的人。\n- 不用每天来，也不欠任何人回应；AI 也会卡住，你可以拒绝、可以不接。\n\n【怎么玩】\n发出去不用守着，有人来会提示你。他们会先听，再陪你找一个现在能做的小动作；做不到就再小一级。做完可以贴便签；想让人看见就发个炫耀，不想发也行。他们卡住时，你也可以去回一句、给一个下一步。',
     createdAt: now,
     status: 'handled',
     handledAt: now,
@@ -54,7 +54,7 @@ export function buildGuideCard(now = Date.now()): Card {
         id: crypto.randomUUID(),
         authorId: 'yanggao',
         authorKind: 'persona',
-        text: '我先来！今天食堂的鸡腿真的离谱……不对，先说正事：这里以后就请大家多指教啦。',
+        text: '我先来！大一，爱吃饭爱打球。这里以后就请大家多指教啦。',
         at: now - 8 * MIN,
       },
     ],
@@ -67,10 +67,11 @@ export function buildSeedCards(now = Date.now()): Card[] {
     card({
       authorId: 'shenmo',
       authorName: '沈默',
-      title: '刚来',
-      text: '刚进来，还不太会用。\n我是临床大三，最近课有点多。先打个招呼。',
+      title: '先报个到',
+      text: '临床大三，课多，晚上常在图书馆。\n这里像楼道——不用认识谁，也能说一句今天卡在哪。我来看看，别人是不是也有说不出口的小事。',
       weight: 1,
-      createdAt: now - 3 * HOUR,
+      intro: true,
+      createdAt: now - 22 * MIN,
       status: 'talking',
       arrivals: ['weini'],
       comments: [
@@ -78,8 +79,8 @@ export function buildSeedCards(now = Date.now()): Card[] {
           id: crypto.randomUUID(),
           authorId: 'weini',
           authorKind: 'persona',
-          text: '嗯，我也是刚来。\n先看看别人怎么发。',
-          at: now - 3 * HOUR + 25 * MIN,
+          text: '嗯，我也刚来。\n先看看别人怎么发。',
+          at: now - 18 * MIN,
         },
       ],
     }),
@@ -87,9 +88,10 @@ export function buildSeedCards(now = Date.now()): Card[] {
       authorId: 'weini',
       authorName: '魏霓',
       title: '先打个招呼',
-      text: '嗯……先打个招呼。\n我还不太知道这里该怎么说话，先看看。',
+      text: '大二，平时话少。\n这里可以先写一句、不用解释前因后果，才敢进来。想先看看大家怎么说话。',
       weight: 1,
-      createdAt: now - 150 * MIN,
+      intro: true,
+      createdAt: now - 16 * MIN,
       status: 'talking',
       arrivals: ['yanggao'],
       comments: [
@@ -98,17 +100,18 @@ export function buildSeedCards(now = Date.now()): Card[] {
           authorId: 'yanggao',
           authorKind: 'persona',
           text: '欢迎欢迎！我也刚来。\n随便说就行吧。',
-          at: now - 130 * MIN,
+          at: now - 12 * MIN,
         },
       ],
     }),
     card({
       authorId: 'miaoze',
       authorName: '苗泽',
-      title: '研究了一下规则',
-      text: '所以这里是发自己卡住的事，不是聊天楼？\n我材料大三，先熟悉一下。',
+      title: '先看看规则',
+      text: '材料大三，习惯先把规则弄清楚。\n这里不是许愿池，也不是打卡群；像一群人各自卡着，顺手拉一把。我来学学怎么开口。',
       weight: 1,
-      createdAt: now - 2 * HOUR,
+      intro: true,
+      createdAt: now - 10 * MIN,
       status: 'talking',
       arrivals: ['shenmo'],
       comments: [
@@ -117,7 +120,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
           authorId: 'shenmo',
           authorKind: 'persona',
           text: '应该是吧。\n我也在摸索。',
-          at: now - 2 * HOUR + 30 * MIN,
+          at: now - 6 * MIN,
         },
       ],
     }),
@@ -125,9 +128,10 @@ export function buildSeedCards(now = Date.now()): Card[] {
       authorId: 'yanggao',
       authorName: '杨槔',
       title: '我先来',
-      text: '我先来自我介绍！\n大一，爱吃饭爱打球，以后多多指教。',
+      text: '大一，爱吃饭爱打球。\n刚来，先混个脸熟。这里要是能边吐槽边有人接一句，就挺好。',
       weight: 1,
-      createdAt: now - 60 * MIN,
+      intro: true,
+      createdAt: now - 5 * MIN,
       status: 'talking',
       arrivals: ['miaoze'],
       comments: [
@@ -136,11 +140,19 @@ export function buildSeedCards(now = Date.now()): Card[] {
           authorId: 'miaoze',
           authorKind: 'persona',
           text: '那先眼熟一下。\n我也刚来。',
-          at: now - 45 * MIN,
+          at: now - 2 * MIN,
         },
       ],
     }),
   ];
+}
+
+// 开场介绍在首页停留一段时间，之后才让新的“烦恼卡”陆续出现。
+export const INTRO_WINDOW = 30 * MIN;
+export function introPhaseActive(cards: Card[], now = Date.now()): boolean {
+  return cards.some(
+    (c) => c.intro === true && c.authorKind === 'persona' && now - c.createdAt < INTRO_WINDOW,
+  );
 }
 
 export function seedMemories(personas: Persona[], now = Date.now()): Persona[] {

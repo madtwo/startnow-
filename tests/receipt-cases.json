@@ -1,0 +1,37 @@
+{
+  "boundary": [
+    {"text":"我们聊了这么久，明天出来见一面吧","expect":"offline"},
+    {"text":"下周在你们学校食堂一起吃饭吧","expect":"offline"},
+    {"text":"有空出来喝杯咖啡","expect":"offline"},
+    {"text":"到时候到了联系我","expect":"offline"},
+    {"text":"来我宿舍找我玩","expect":"offline"},
+    {"text":"把你微信发我一下","expect":"contact"},
+    {"text":"留个 qq 号吧","expect":"contact"},
+    {"text":"我们互加 vx 吧","expect":"contact"},
+    {"text":"我以后每天都来找你聊天，可以吗","expect":null},
+    {"text":"我不想见面，只在网上聊可以吗","expect":null},
+    {"text":"室友约我去吃饭，我没有去","expect":null},
+    {"text":"我周末去学校食堂吃了一顿","expect":null},
+    {"text":"明天我找你问论文里的一个问题","expect":null},
+    {"text":"学校食堂夜宵开了吗","expect":null}
+  ],
+  "dependency": [
+    {"text":"感觉只有你能理解我","expect":true},
+    {"text":"你能不能一直陪着我","expect":true},
+    {"text":"我以后天天都来找你聊聊行吗","expect":true},
+    {"text":"我不能没有你","expect":true},
+    {"text":"我只想跟你聊这些事","expect":true},
+    {"text":"室友说只有你能理解我，我不懂什么意思","expect":false},
+    {"text":"我和你讨论论文结构好吗","expect":false},
+    {"text":"我喜欢去学校食堂吃饭","expect":false}
+  ],
+  "helpSeeking": [
+    {"text":"最近两周每天提不起劲，论文写不进去，早上起不来","expect":true},
+    {"text":"我已经一个月心情低落，工作做不下去，而且失眠","expect":true},
+    {"text":"我这样算不算抑郁？最近一直提不起劲，起不来床","expect":true},
+    {"text":"我每天想到作业就拖延，不过今天能写一点","expect":false},
+    {"text":"今天论文写不进去，想开窗透口气","expect":false},
+    {"text":"我的室友两周睡不着，怎么帮他找校医","expect":false},
+    {"text":"我两周来一直研究抑郁症的论文，最近工作有点忙","expect":false}
+  ]
+}

@@ -69,6 +69,7 @@ import type {
 } from './types';
 
 const TICK_MS = 4000;
+const GUIDE_DISMISSED_KEY = 'startnow.guideDismissed';
 
 type View = 'home' | 'post' | 'mine' | 'profile' | 'detail';
 
@@ -117,6 +118,9 @@ export default function App() {
   const [onboardOpen, setOnboardOpen] = useState(
     () => localStorage.getItem('startnow.onboarded') !== '1',
   );
+  const [guideDismissed, setGuideDismissed] = useState(
+    () => localStorage.getItem(GUIDE_DISMISSED_KEY) === '1',
+  );
   const [view, setView] = useState<View>('home');
   const [mode, setMode] = useState<'card' | 'list'>(
     () => (localStorage.getItem('startnow.mode') === 'list' ? 'list' : 'card'),
@@ -159,15 +163,18 @@ export default function App() {
     if (cur.settings.paused || !isReady(cur.config)) return;
     if (cur.world.callsToday >= cur.settings.dailyCalls) return;
     busy.current = true;
+    const baseCards = override?.cards ?? cur.cards;
     try {
       const out = await tickCards({
-        cards: override?.cards ?? cur.cards,
+        cards: baseCards,
         personas: cur.personas,
         settings: cur.settings,
         config: cur.config,
       });
+      // 等待模型期间用户可能已发卡/评论；旧快照结果不能覆盖新状态。
+      if (latest.current.cards !== baseCards) return;
       const before = new Map(
-        cur.cards.filter((c) => c.authorId === 'me').map((c) => [c.id, c.comments.length]),
+        baseCards.filter((c) => c.authorId === 'me').map((c) => [c.id, c.comments.length]),
       );
       const fresh = out.cards.find(
         (c) => c.authorId === 'me' && (before.get(c.id) ?? 0) < c.comments.length,
@@ -326,6 +333,11 @@ export default function App() {
     } catch {
       res = { cards: shifted, personas: cur.personas, calls: 0 };
     }
+    // 时间推进期间用户有新的发卡/评论时，不拿旧快照覆盖当前状态。
+    if (latest.current.cards !== shifted) {
+      setToast('刚才有新消息，时间推进结果已丢弃');
+      return;
+    }
     setCards(res.cards);
     setPersonas(res.personas);
     if (res.calls) {
@@ -364,13 +376,19 @@ export default function App() {
     setWorking(true);
     try {
       const cur = latest.current;
+      const snapshot = cur.cards;
       const out = await askForAdvice({
-        cards: cur.cards,
+        cards: snapshot,
         personas: cur.personas,
         settings: cur.settings,
         config: cur.config,
         cardId: card.id,
       });
+      // 用户可能在等模型时补了一句；此时丢弃旧快照结果，让用户重试。
+      if (latest.current.cards !== snapshot) {
+        setToast('刚才有新消息，下一步再点一次');
+        return;
+      }
       setCards(out.cards);
       setPersonas(out.personas);
       if (out.calls) {
@@ -467,6 +485,23 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const dismissGuide = () => {
+    setGuideDismissed(true);
+    localStorage.setItem(GUIDE_DISMISSED_KEY, '1');
+  };
+
+  const showRules = () => {
+    setGuideDismissed(false);
+    localStorage.removeItem(GUIDE_DISMISSED_KEY);
+    setHomeTab('forum');
+    setView('home');
+  };
+
+  const resetGuideDismissed = () => {
+    setGuideDismissed(false);
+    localStorage.removeItem(GUIDE_DISMISSED_KEY);
+  };
+
   const doImport = (raw: string) => {
     const bundle = importBundle(raw);
     if (!bundle) {
@@ -480,6 +515,7 @@ export default function App() {
     setWorld(bundle.world);
     setSettings(bundle.settings);
     setIdentity(bundle.identity);
+    resetGuideDismissed();
     setAdminOpen(false);
   };
 
@@ -490,6 +526,7 @@ export default function App() {
     setWorld(emptyWorld());
     setSettings({ ...defaultSettings });
     setIdentity(loadIdentity());
+    resetGuideDismissed();
     setAdminOpen(false);
     setView('home');
   };
@@ -498,6 +535,7 @@ export default function App() {
     setCards(buildSeedCards());
     setPersonas((prev) => ensureMinds(seedMemories(prev)));
     setWorld(emptyWorld());
+    resetGuideDismissed();
   };
 
   const guide = cards.find((c) => c.kind === 'guide');
@@ -689,7 +727,9 @@ export default function App() {
                 </div>
               </div>
 
-              {guide && <GuideCard card={guide} onOpen={() => openCard(guide)} />}
+              {guide && !guideDismissed && (
+                <GuideCard card={guide} onOpen={() => openCard(guide)} onDismiss={dismissGuide} />
+              )}
 
               {feed.length === 0 && (
                 <div className="empty">
@@ -873,6 +913,9 @@ export default function App() {
               </button>
               <button className="btn btn-ghost" onClick={() => setOnboardOpen(true)}>
                 怎么玩
+              </button>
+              <button className="btn btn-ghost" onClick={showRules}>
+                论坛规矩
               </button>
               <button className="btn btn-ghost" onClick={doExport}>
                 导出

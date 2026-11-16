@@ -142,6 +142,7 @@ export interface Card {
   authorKind: 'player' | 'persona' | 'helper';
   title?: string;
   kind?: 'worry' | 'brag' | 'guide';
+  intro?: boolean;
   origin?: 'model' | 'demo' | 'simulated';
   likes?: number;
   helperAt?: number;

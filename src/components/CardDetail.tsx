@@ -1,6 +1,7 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import type { Card, Comment, Identity, Persona } from '../types';
 import Avatar from './Avatar';
+import { isHelpSeekingAction } from '../lib/support';
 
 interface Props {
   card: Card;
@@ -120,6 +121,7 @@ export default function CardDetail({
             <p className="page-author">
               {card.authorName}
               {!mine && !isGuide && <span className="thread-badge">AI</span>}
+              {card.intro && <span className="thread-badge">自我介绍</span>}
               {card.origin && (
                 <span className="thread-badge">{card.origin === 'model' ? '模型生成' : card.origin === 'simulated' ? '模拟情节' : '演示内容'}</span>
               )}
@@ -142,6 +144,11 @@ export default function CardDetail({
             <span className="advice-hint">做不到就再小一级</span>
           </div>
           <p className="advice-label">{card.advice.text}</p>
+          {isHelpSeekingAction(card.advice.actionId) && (
+            <p className="page-composer-note" role="note">
+              这是联系真人支持的准备步骤，不是诊断或治疗建议；如感到自己有即时危险，请联系身边的人和当地紧急服务。
+            </p>
+          )}
           {card.advice.origin && <small>{card.advice.origin === 'demo' ? '演示动作' : '预置动作'}</small>}
           {mine && !card.advice.accepted && (
             <div className="advice-actions">
@@ -183,6 +190,7 @@ export default function CardDetail({
       )}
 
       <h2 className="page-comments-title">{card.comments.length} 条回应</h2>
+      {!isGuide && <p className="page-composer-note">这里的 AI 同伴是虚构角色，不是真人，也不能替代专业帮助。</p>}
 
       <div className="forum-comments">
         {card.comments.length === 0 && (
@@ -224,6 +232,7 @@ export default function CardDetail({
                 <span className="forum-comment-name">
                   {isMe ? '你' : isHelper ? '论坛小助手' : persona?.name ?? 'AI 同伴'}
                 </span>
+                {comment.authorKind === 'persona' && <span className="thread-badge" title="虚构 AI 同伴，非真人、非心理咨询师">AI</span>}
                 <span className="forum-comment-time">{clock(comment.at)}</span>
                 {repliedTo && <span className="forum-comment-reply">回复 {repliedTo}</span>}
                 {comment.kind === 'advice' && <span className="advice-tag">下一步</span>}

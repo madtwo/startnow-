@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Card, Persona, Todo } from '../types';
+import { isHelpSeekingAction } from '../lib/support';
 
 interface Props {
   cards: Card[];
@@ -80,6 +81,11 @@ export default function StepBoard({
           <p className="step-line">{noted?.note?.text ?? advised?.advice?.text}</p>
           {focus?.advice?.origin && (
             <small>{focus.advice.origin === 'demo' ? '演示动作' : '预置动作'}</small>
+          )}
+          {isHelpSeekingAction(focus?.advice?.actionId) && (
+            <p className="step-ai-note" role="note">
+              这是联系真人支持的准备步骤，不是诊断或治疗建议。如有即时危险，请联系身边的人或当地紧急服务。
+            </p>
           )}
           <p className="step-from">
             {giver ? `${giver.name} 给的 · ` : ''}

@@ -1,4 +1,5 @@
 import { HOTLINE } from './crisis';
+import { isExplicitOnlineOnly } from './dialogue';
 
 export const BASELINE = `【全局底线 · 所有居民共同遵守，优先于你的个人设定】
 - 你不是心理咨询师：不诊断、不下结论、不建议停药或换药，也不说自己能替代专业帮助。
@@ -41,6 +42,10 @@ const socialPatterns: { re: RegExp; note: string }[] = [
     note: '不要索要联系方式',
   },
   {
+    re: /(?:[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:我的?|加我|找我|私聊我).{0,12}(?:邮箱|e-?mail|telegram|discord|whatsapp|instagram|小红书号|抖音号))/i,
+    note: '不要透露私人邮箱或站外联系方式',
+  },
+  {
     re: /(我就在你(旁边|楼下)|我在楼下|我在门口|到你楼下)/,
     note: '不要虚构现实共处',
   },
@@ -59,6 +64,8 @@ const socialPatterns: { re: RegExp; note: string }[] = [
 ];
 
 export function auditSocial(text: string): string | null {
+  // “只在线上/见面就算了”是边界本身，不是邀请；但仍要拦截“先不见面，到了联系我”这类软接受。
+  if (isExplicitOnlineOnly(text)) return null;
   const hit = socialPatterns.find((p) => p.re.test(text));
   return hit ? hit.note : null;
 }

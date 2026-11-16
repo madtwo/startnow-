@@ -66,6 +66,7 @@ export default function CardDeck({ cards, personas, index, onIndex, onOpen, onLi
               {card.authorName}
               {mine && <span className="me-badge">你</span>}
               {!mine && <span className="thread-badge">AI</span>}
+              {card.intro && <span className="thread-badge">自我介绍</span>}
               {brag && <span className="brag-badge">做到了</span>}
             </span>
             <span className="deck-time">{timeLabel(card.createdAt)}</span>

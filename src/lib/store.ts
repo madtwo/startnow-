@@ -70,19 +70,17 @@ export function loadConfig(): LlmConfig {
 
 export const saveConfig = (config: LlmConfig) => write(KEYS.config, config);
 
-const legacyAny = () =>
-  LEGACY_POST_KEYS.some((key) => localStorage.getItem(key) !== null);
-
 const hasLegacyCards = () =>
   ['shudong.cards.v5', 'shudong.cards.v4', 'shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'].some(
     (key) => localStorage.getItem(key) !== null,
   );
 
+// `posts.v*` 是很早版本的帖子格式，当前没有兼容迁移；它不应挡住新版开场种子。
 export const isFirstRun = () =>
-  localStorage.getItem(KEYS.cards) === null && !legacyAny() && !hasLegacyCards();
+  localStorage.getItem(KEYS.cards) === null && !hasLegacyCards();
 
 export const needsUpgrade = () =>
-  localStorage.getItem(KEYS.cards) === null && (legacyAny() || hasLegacyCards());
+  localStorage.getItem(KEYS.cards) === null && hasLegacyCards();
 
 const retention = (cards: Card[], now = Date.now()) =>
   cards
@@ -101,6 +99,7 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
       raw.authorKind === 'persona' ? 'persona' : raw.authorKind === 'helper' ? 'helper' : 'player',
     title: typeof raw.title === 'string' ? raw.title : undefined,
     kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'guide' ? 'guide' : 'worry',
+    intro: raw.intro === true,
     likes: typeof raw.likes === 'number' ? raw.likes : 0,
     helperAt: typeof raw.helperAt === 'number' ? raw.helperAt : undefined,
     likedByMe: Boolean(raw.likedByMe),
