@@ -1106,3 +1106,23 @@ test('介绍期内玩家发卡仍会被同伴接住', async () => {
   assert.ok(card.arrivals.length>=1);
   assert.ok(card.comments.some((c)=>c.authorKind==='persona'));
 });
+
+test('玩家直接要建议时，NPC立刻给出具体动作，不调模型', async () => {
+  const out=await runTick(jobCard({playerText:'你能立刻给我一个建议吗？'}));
+  const reply=out.cards[0].comments.at(-1);
+  assert.equal(reply.origin,'curated');
+  assert.match(reply.text,/(先|打开|写|站|倒|做)/);
+  assert.equal(out.calls,0);
+  assert.equal(dialogue.wantsDirectAdvice('你能立刻给我一个建议吗？'),true);
+  assert.equal(dialogue.wantsDirectAdvice('我给你一个建议'),false);
+});
+
+test('回复链保存 replyTo：玩家回复绑评论，AI 回复绑源评论', async () => {
+  const card=jobCard({playerText:'论文写不出来'});
+  const after=addPlayerComment(card,'先试第一段',now,6,'comment','yanggao',card.comments[0].id);
+  assert.equal(after.comments.at(-1).replyTo,card.comments[0].id);
+  const out=await runTick(card);
+  const reply=out.cards[0].comments.at(-1);
+  assert.equal(reply.authorKind,'persona');
+  assert.equal(reply.replyTo,'u1');
+});

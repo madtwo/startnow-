@@ -3826,6 +3826,21 @@ button {
   margin: 10px 0 18px;
 }
 
+.forum-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.forum-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-left: 18px;
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+}
+
 .forum-comment {
   --pc: var(--warm-silver);
   padding: 11px 13px;

@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Card, Comment, Identity, Persona } from '../types';
 import Avatar from './Avatar';
 import { isHelpSeekingAction } from '../lib/support';
@@ -8,7 +8,7 @@ interface Props {
   me: Identity;
   personas: Persona[];
   busy: boolean;
-  onComment: (text: string, kind: 'comment' | 'advice', peer?: string) => void;
+  onComment: (text: string, kind: 'comment' | 'advice', peer?: string, replyTo?: string) => void;
   onAdvice: () => void;
   onShrink: () => void;
   onAccept: () => void;
@@ -78,7 +78,7 @@ export default function CardDetail({
   const send = () => {
     const text = draft.trim();
     if (!text || busy) return;
-    onComment(text, mode === 'advice' ? 'advice' : 'comment', targetId);
+    onComment(text, mode === 'advice' ? 'advice' : 'comment', targetId, targetComment || undefined);
     setDraft('');
     setMode('comment');
     setTargetComment('');
@@ -95,6 +95,85 @@ export default function CardDetail({
     setTargetId(defaultTarget);
     setTargetComment('');
     inputRef.current?.focus();
+  };
+
+  const commentsById = new Map(card.comments.map((c) => [c.id, c]));
+  const childrenByParent = new Map<string, Comment[]>();
+  const roots: Comment[] = [];
+  for (const c of card.comments) {
+    const parentId = c.replyTo && commentsById.has(c.replyTo) ? c.replyTo : '';
+    if (parentId) {
+      const list = childrenByParent.get(parentId) ?? [];
+      list.push(c);
+      childrenByParent.set(parentId, list);
+    } else {
+      roots.push(c);
+    }
+  }
+
+  const renderComment = (comment: Comment, depth: number, visited: Set<string>): ReactNode => {
+    if (visited.has(comment.id) || depth > 10) return null;
+    const nextVisited = new Set(visited).add(comment.id);
+    const persona = personas.find((p) => p.id === comment.authorId);
+    const isMe = comment.authorKind === 'player';
+    const isHelper = comment.authorKind === 'helper';
+    const selected = targetComment === comment.id;
+    const parent = comment.replyTo ? commentsById.get(comment.replyTo) : undefined;
+    const repliedTo = parent
+      ? parent.authorKind === 'player'
+        ? '你'
+        : peerName(parent.authorId)
+      : comment.peer && comment.peer !== card.authorId
+        ? peerName(comment.peer)
+        : '';
+    const pc = persona?.color ?? (isMe ? '#c96442' : 'var(--warm-silver)');
+    const kids = childrenByParent.get(comment.id) ?? [];
+    return (
+      <div className="forum-thread" key={comment.id}>
+        <div
+          className={`forum-comment ${isMe ? 'mine' : ''} ${isHelper ? 'helper' : ''} ${
+            selected ? 'selected' : ''
+          }`}
+          style={{ '--pc': pc } as CSSProperties}
+          role={persona ? 'button' : undefined}
+          tabIndex={persona ? 0 : undefined}
+          onClick={() => pick(comment)}
+          onKeyDown={(e) => {
+            if (persona && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault();
+              pick(comment);
+            }
+          }}
+        >
+          <div className="forum-comment-head">
+            {persona ? (
+              <Avatar avatarKey={persona.avatarKey} color={persona.color} size="xs" />
+            ) : isHelper ? (
+              <Avatar avatarKey="lamp" color="#c96442" size="xs" />
+            ) : (
+              <Avatar avatarKey={me.avatarKey} className="me" size="xs" />
+            )}
+            <span className="forum-comment-name">
+              {isMe ? '你' : isHelper ? '论坛小助手' : persona?.name ?? 'AI 同伴'}
+            </span>
+            {comment.authorKind === 'persona' && <span className="thread-badge" title="虚构 AI 同伴，非真人、非心理咨询师">AI</span>}
+            <span className="forum-comment-time">{clock(comment.at)}</span>
+            {repliedTo && <span className="forum-comment-reply">回复 {repliedTo}</span>}
+            {comment.kind === 'advice' && <span className="advice-tag">下一步</span>}
+            {comment.origin && originLabels[comment.origin] && (
+              <span className="advice-tag">{originLabels[comment.origin]}</span>
+            )}
+            {selected && <span className="forum-comment-target">正在回复</span>}
+          </div>
+          <p className="forum-comment-text">{comment.text}</p>
+        </div>
+        {kids.length > 0 && (
+          <div className="forum-replies">
+            {kids.map((kid) => renderComment(kid, depth + 1, nextVisited))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -196,55 +275,7 @@ export default function CardDetail({
         {card.comments.length === 0 && (
           <p className="view-empty">还没有人说话。等一会儿，或者在下面先回楼主一句。</p>
         )}
-        {card.comments.map((comment) => {
-          const persona = personas.find((p) => p.id === comment.authorId);
-          const isMe = comment.authorKind === 'player';
-          const isHelper = comment.authorKind === 'helper';
-          const selected = targetComment === comment.id;
-          const repliedTo =
-            comment.peer && comment.peer !== card.authorId ? peerName(comment.peer) : '';
-          const pc = persona?.color ?? (isMe ? '#c96442' : 'var(--warm-silver)');
-          return (
-            <div
-              key={comment.id}
-              className={`forum-comment ${isMe ? 'mine' : ''} ${isHelper ? 'helper' : ''} ${
-                selected ? 'selected' : ''
-              }`}
-              style={{ '--pc': pc } as CSSProperties}
-              role={persona ? 'button' : undefined}
-              tabIndex={persona ? 0 : undefined}
-              onClick={() => pick(comment)}
-              onKeyDown={(e) => {
-                if (persona && (e.key === 'Enter' || e.key === ' ')) {
-                  e.preventDefault();
-                  pick(comment);
-                }
-              }}
-            >
-              <div className="forum-comment-head">
-                {persona ? (
-                  <Avatar avatarKey={persona.avatarKey} color={persona.color} size="xs" />
-                ) : isHelper ? (
-                  <Avatar avatarKey="lamp" color="#c96442" size="xs" />
-                ) : (
-                  <Avatar avatarKey={me.avatarKey} className="me" size="xs" />
-                )}
-                <span className="forum-comment-name">
-                  {isMe ? '你' : isHelper ? '论坛小助手' : persona?.name ?? 'AI 同伴'}
-                </span>
-                {comment.authorKind === 'persona' && <span className="thread-badge" title="虚构 AI 同伴，非真人、非心理咨询师">AI</span>}
-                <span className="forum-comment-time">{clock(comment.at)}</span>
-                {repliedTo && <span className="forum-comment-reply">回复 {repliedTo}</span>}
-                {comment.kind === 'advice' && <span className="advice-tag">下一步</span>}
-                {comment.origin && originLabels[comment.origin] && (
-                  <span className="advice-tag">{originLabels[comment.origin]}</span>
-                )}
-                {selected && <span className="forum-comment-target">正在回复</span>}
-              </div>
-              <p className="forum-comment-text">{comment.text}</p>
-            </div>
-          );
-        })}
+        {roots.map((comment) => renderComment(comment, 0, new Set()))}
       </div>
 
       {!isGuide && !closed && (

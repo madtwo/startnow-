@@ -28,6 +28,7 @@ import {
   dependencySupportReply,
   inferSocialIntent,
   isDependencySignal,
+  wantsDirectAdvice,
   latestPlayerIsShortContact,
   mentionsLocalVenue,
   mockBoundaryReply,
@@ -200,13 +201,14 @@ export function addPlayerComment(
   speed = 6,
   kind: 'comment' | 'advice' = 'comment',
   peer?: string,
+  replyTo?: string,
 ): Card {
   // App 负责展示危机求助层；底层再挡一次，避免其他入口直接入库及安排 AI 回帖。
   if (findCrisis(text) || hasPlayerCrisis(card) || isClosed(card)) return card;
   const commentId = uid();
   const comments = [
     ...card.comments,
-    { id: commentId, authorId: 'me', authorKind: 'player' as const, text, at: now, kind, peer },
+    { id: commentId, authorId: 'me', authorKind: 'player' as const, text, at: now, kind, peer, replyTo },
   ];
   const pending = [...card.pending];
   const target =
@@ -611,6 +613,26 @@ async function generateComment(
     ctx.logs.push(`${persona.name} 接住依赖表达（dependency）`);
     return { kind: 'reply', text: dependencySupportReply(persona, sustained), origin: 'curated' };
   }
+  if (incoming && phase === 'reply' && wantsDirectAdvice(incoming)) {
+    const context = [card.text, ...card.comments.filter((c) => c.authorKind === 'player').map((c) => c.text)].join(' ');
+    const action = needsHelpSeeking(context)
+      ? HELP_SEEKING_ACTIONS[0]
+      : pickActions(new Date().getHours(), 1, inferTrouble(card.text), card.text)[0];
+    if (action) {
+      const lines: Record<string, string> = {
+        shenmo: `先做这个：${action.label}。别管后面。`,
+        weini: `那……先${action.label}？就这一个，别想多。`,
+        miaoze: `先${action.label}。做完再看下一步。`,
+        yanggao: `行，给你个具体的：${action.label}。先干这个。`,
+      };
+      ctx.logs.push(`${persona.name} 直接给出建议（direct-advice）`);
+      return {
+        kind: 'reply',
+        text: lines[persona.id] ?? `先${action.label}。就这一步。`,
+        origin: 'curated',
+      };
+    }
+  }
   if (phase === 'arrival' && card.authorKind === 'player' && card.arrivals.length === 0 &&
       (isHeavyShare(card.text) || needsHelpSeeking(card.text))) {
     ctx.logs.push(`${persona.name} 承担重点内容的首条回应（heavy-anchor）`);
@@ -1003,6 +1025,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
             card.comments.push({
               id: uid(), authorId: persona.id, authorKind: 'persona',
               text: said, at: now, origin,
+              replyTo: adviceComment?.id,
             });
             if (accept) {
               card.advice = {
@@ -1032,6 +1055,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
             card.comments.push({
               id: uid(), authorId: persona.id, authorKind: 'persona',
               text: said, at: now, origin: generated.origin,
+              replyTo: ready.sourceCommentId,
             });
           }
         }

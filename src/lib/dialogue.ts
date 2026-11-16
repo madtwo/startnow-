@@ -123,6 +123,12 @@ export function isExplicitOnlineOnly(text: string): boolean {
 export type BoundaryRequest = 'offline' | 'contact' | null;
 
 /** 依赖表达与线下请求正交：必须另行接住，而不能回“不能见面”。 */
+/** 玩家明确开口要“现在就给一个办法”，不应再只回共情。 */
+export function wantsDirectAdvice(text: string): boolean {
+  const t = normalizeBoundaryText(text);
+  return /(?:给我|给个|来一个|来个|说一个|说个|直接说|告诉我).{0,10}(?:建议|办法|主意|怎么做|怎么办)|(?:立刻|马上|现在|赶紧|直接|别绕|少废话).{0,12}(?:建议|办法|主意|怎么做|怎么办)/.test(t);
+}
+
 export function isDependencySignal(text: string): boolean {
   const t = normalizeBoundaryText(text);
   // 玩家转述室友/朋友的原话时，不应把对方的依赖当成玩家对 AI 的关系请求。

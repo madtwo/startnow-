@@ -93,6 +93,7 @@ export interface Comment {
   at: number;
   kind?: 'comment' | 'advice';
   peer?: string;
+  replyTo?: string;
   // 不给本地生成或审查回退的台词伪装成真实模型输出。
   origin?: 'model' | 'demo' | 'boundary' | 'curated' | 'simulated' | 'system';
 }

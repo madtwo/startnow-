@@ -363,13 +363,13 @@ export default function App() {
     setView('detail');
   };
 
-  const comment = (card: Card, text: string, kind: 'comment' | 'advice', peer?: string) => {
+  const comment = (card: Card, text: string, kind: 'comment' | 'advice', peer?: string, replyTo?: string) => {
     if (findCrisis(text)) {
       setCrisis(text);
       return;
     }
     setPersonas((prev) => notePlayerShare(prev, text));
-    patch(card.id, (c) => addPlayerComment(c, text, Date.now(), settings.speed, kind, peer));
+    patch(card.id, (c) => addPlayerComment(c, text, Date.now(), settings.speed, kind, peer, replyTo));
   };
 
   const advice = async (card: Card) => {
@@ -810,7 +810,7 @@ export default function App() {
             initialPeer={detailPeer}
             personas={personas}
             busy={working}
-            onComment={(text, kind, peer) => comment(detailCard, text, kind, peer)}
+            onComment={(text, kind, peer, replyTo) => comment(detailCard, text, kind, peer, replyTo)}
             onAdvice={() => void advice(detailCard)}
             onShrink={() => patch(detailCard.id, (c) => shrinkAdvice(c))}
             onAccept={() => patch(detailCard.id, (c) => acceptAdvice(c))}
@@ -909,7 +909,7 @@ export default function App() {
                 API 设置
               </button>
               <button className="btn btn-ghost" onClick={() => setAdminOpen(true)}>
-                作者后台
+                作者后台 · 推进时间
               </button>
               <button className="btn btn-ghost" onClick={() => setOnboardOpen(true)}>
                 怎么玩
