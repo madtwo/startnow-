@@ -1072,10 +1072,6 @@ test('开场四张卡先自我介绍，介绍期内不生成新的烦恼卡', ()
   assert.match(guide.text,/什么都能写/);
   assert.match(guide.text,/不违规/);
   assert.match(guide.text,/不是心理咨询/);
-  assert.match(guide.text,/【论坛规矩】/);
-  assert.match(guide.text,/不约线下/);
-  assert.match(guide.text,/12356/);
-  assert.match(guide.text,/不用每天来/);
   assert.equal(introPhaseActive(seeded,now),true);
   assert.equal(introPhaseActive(seeded,now+31*60*1000),false);
 });

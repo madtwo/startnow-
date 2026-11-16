@@ -17,6 +17,7 @@ import {
   mindAfterStep,
 } from './mind';
 import { findCrisis, isHeavyShare } from './safety';
+import { hasPlayerCrisis } from './submissionGuard';
 import { introPhaseActive } from './seed';
 import { addMemory, inferWeight, sanitizeMemoryText } from './memory';
 import { describeError, streamChat } from './llm';
@@ -56,10 +57,8 @@ const rand = (min: number, max: number) => min + Math.random() * (max - min);
 const uid = () => crypto.randomUUID();
 const scale = (settings: WorldSettings) => Math.max(1, settings.speed);
 
-/** 包括旧存档/导入评论：在任何角色任务运行前审查整张卡的玩家内容。 */
-const hasPlayerCrisis = (card: Card): boolean =>
-  (card.authorKind === 'player' && findCrisis(card.text)) ||
-  card.comments.some((comment) => comment.authorKind === 'player' && findCrisis(comment.text));
+/** 包括旧存档/导入评论与标题：在角色任务运行前审查整张卡的玩家内容。 */
+const hasPlayerCrisisInput = (card: Card): boolean => hasPlayerCrisis(card);
 
 const isClosed = (card: Card): boolean => card.status === 'done' || card.status === 'handled';
 
@@ -204,7 +203,7 @@ export function addPlayerComment(
   replyTo?: string,
 ): Card {
   // App 负责展示危机求助层；底层再挡一次，避免其他入口直接入库及安排 AI 回帖。
-  if (findCrisis(text) || hasPlayerCrisis(card) || isClosed(card)) return card;
+  if (findCrisis(text) || hasPlayerCrisisInput(card) || isClosed(card)) return card;
   const commentId = uid();
   const comments = [
     ...card.comments,
@@ -232,7 +231,7 @@ export function addPlayerComment(
 }
 
 export function summonPersona(card: Card, personaId: string, now = Date.now()): Card {
-  if (isClosed(card) || hasPlayerCrisis(card) || card.arrivals.includes(personaId)) return card;
+  if (isClosed(card) || hasPlayerCrisisInput(card) || card.arrivals.includes(personaId)) return card;
   return {
     ...card,
     plan: [...card.plan.filter((p) => p.personaId !== personaId), { personaId, at: now - 1 }],
@@ -240,7 +239,7 @@ export function summonPersona(card: Card, personaId: string, now = Date.now()): 
 }
 
 export function shrinkAdvice(card: Card, now = Date.now()): Card {
-  if (card.status !== 'advised' || hasPlayerCrisis(card)) return card;
+  if (card.status !== 'advised' || hasPlayerCrisisInput(card)) return card;
   const advice = card.advice;
   if (advice?.accepted) return card;
   if (!advice?.actionId) return card;
@@ -265,7 +264,7 @@ export function shrinkAdvice(card: Card, now = Date.now()): Card {
 }
 
 export function acceptAdvice(card: Card, now = Date.now()): Card {
-  if (card.status !== 'advised' || !card.advice || card.advice.accepted || hasPlayerCrisis(card)) return card;
+  if (card.status !== 'advised' || !card.advice || card.advice.accepted || hasPlayerCrisisInput(card)) return card;
   return {
     ...card,
     status: 'noted',
@@ -287,7 +286,7 @@ export function closeCard(card: Card, now = Date.now()): Card {
 }
 
 export function completeCard(card: Card, now = Date.now(), speed = 6): Card {
-  if (card.status !== 'noted' || !card.note || hasPlayerCrisis(card)) return card;
+  if (card.status !== 'noted' || !card.note || hasPlayerCrisisInput(card)) return card;
   const label = card.note?.text ?? '那件小事';
   const pool = [
     ...new Set([card.advice?.fromPersonaId, ...card.arrivals].filter(Boolean) as string[]),
@@ -595,7 +594,7 @@ async function generateComment(
 
   // 按具体请求分流：线下/联系方式 > 情感依赖 > 严重内容的第一条回应 > 模型。
   // 危机内容应在 App 发送入口拦截；本分支再兜底，禁止把危机当普通聊天。
-  if (hasPlayerCrisis(card) || (incoming && findCrisis(incoming))) {
+  if (hasPlayerCrisisInput(card) || (incoming && findCrisis(incoming))) {
     ctx.logs.push(`${persona.name} 检出危机内容，阻止普通角色回复（应由 App 显示危机层）`);
     return { kind: 'crisis', reason: 'crisis' };
   }
@@ -743,8 +742,8 @@ async function generateAiCard(
     const cleanFact = fact && !/^无/.test(fact.trim()) && !replyProblem(fact)
       ? sanitizeMemoryText(cleanLine(fact, 60)) : '';
     return { text: card, fact: cleanFact, origin: 'model' };
-  } catch {
-    ctx.logs.push(`${persona.name} 这次没发出来`);
+  } catch (err) {
+    ctx.logs.push(`${persona.name} 发帖模型不可用：${describeError(err)}`);
     return null;
   }
 }
@@ -791,7 +790,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     };
 
     // 导入的旧主帖/玩家评论都必须在整个任务队列执行前检查，不能仅检查当前 sourceCommentId。
-    if (hasPlayerCrisis(card)) {
+    if (hasPlayerCrisisInput(card)) {
       card.plan = [];
       card.pending = [];
       card.helperAt = undefined;
@@ -1202,7 +1201,7 @@ export async function askForAdvice(
   const now = input.now ?? Date.now();
   const card = input.cards.find((c) => c.id === input.cardId);
   if (!card) return { cards: input.cards, personas: input.personas, calls: 0, logs: [] };
-  if (hasPlayerCrisis(card)) {
+  if (hasPlayerCrisisInput(card)) {
     return { cards: input.cards, personas: input.personas, calls: 0, logs: ['检测到危机内容，不生成普通行动建议；请走危机求助层'] };
   }
   if (isClosed(card) || card.advice || card.status === 'noted') {

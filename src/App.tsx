@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import AdminPanel from './components/AdminPanel';
 import Avatar from './components/Avatar';
 import CardDetail from './components/CardDetail';
@@ -6,14 +6,18 @@ import CardRow from './components/CardRow';
 import CardDeck from './components/CardDeck';
 import GuideCard from './components/GuideCard';
 import NoteDrawer from './components/NoteDrawer';
+import MemoryManager from './components/MemoryManager';
 import PostForm from './components/PostForm';
 import StepBoard from './components/StepBoard';
 import Tour from './components/Tour';
 import CrisisCard from './components/CrisisCard';
 import SettingsDialog from './components/SettingsDialog';
-import { isMock, isReady } from './config/providers';
+import { defaultConfig, isMock, isReady } from './config/providers';
 import { HOTLINE } from './lib/crisis';
-import { findCrisis } from './lib/safety';
+import { containsCrisis, hasCrisisInArchive } from './lib/submissionGuard';
+import { createOperationGate } from './lib/operationGate';
+import { forgetAll, forgetOne, forgetRole } from './lib/memoryControl';
+import { modelFailureNotice } from './lib/modelStatus';
 import {
   acceptAdvice,
   addPlayerComment,
@@ -34,6 +38,8 @@ import { ensureMinds } from './lib/mind';
 import { defaultPersonas } from './lib/personas';
 import {
   clearAll,
+  deleteLegacyPosts,
+  listLegacyPostKeys,
   dayKey,
   defaultSettings,
   emptyWorld,
@@ -104,12 +110,22 @@ export default function App() {
     }
     return { cards: withGuide(loadCards()), personas: ensureMinds(loadPersonas()) };
   });
-  const [config, setConfig] = useState<LlmConfig>(() => loadConfig());
-  const [cards, setCards] = useState<Card[]>(boot.cards);
-  const [personas, setPersonas] = useState<Persona[]>(boot.personas);
-  const [world, setWorld] = useState<World>(() => loadWorld());
-  const [settings, setSettings] = useState<WorldSettings>(() => loadSettings());
-  const [identity, setIdentity] = useState<Identity>(() => loadIdentity());
+  // 同步变更时立即推进版本号，不依赖 React 下一次 render 的时间。
+  const gate = useRef(createOperationGate());
+  const tickAfterCommit = useRef(false);
+  const [config, rawSetConfig] = useState<LlmConfig>(() => loadConfig());
+  const [cards, rawSetCards] = useState<Card[]>(boot.cards);
+  const [personas, rawSetPersonas] = useState<Persona[]>(boot.personas);
+  const [world, rawSetWorld] = useState<World>(() => loadWorld());
+  const [settings, rawSetSettings] = useState<WorldSettings>(() => loadSettings());
+  const [identity, rawSetIdentity] = useState<Identity>(() => loadIdentity());
+  const touch = () => { gate.current.change(); };
+  const setConfig: Dispatch<SetStateAction<LlmConfig>> = (next) => { touch(); rawSetConfig(next); };
+  const setCards: Dispatch<SetStateAction<Card[]>> = (next) => { touch(); rawSetCards(next); };
+  const setPersonas: Dispatch<SetStateAction<Persona[]>> = (next) => { touch(); rawSetPersonas(next); };
+  const setWorld: Dispatch<SetStateAction<World>> = (next) => { touch(); rawSetWorld(next); };
+  const setSettings: Dispatch<SetStateAction<WorldSettings>> = (next) => { touch(); rawSetSettings(next); };
+  const setIdentity: Dispatch<SetStateAction<Identity>> = (next) => { touch(); rawSetIdentity(next); };
   const [draft, setDraft] = useState('');
   const [draftTitle, setDraftTitle] = useState('');
   const [image, setImage] = useState('');
@@ -136,13 +152,14 @@ export default function App() {
   const [settingsNotice, setSettingsNotice] = useState('');
   const [adminOpen, setAdminOpen] = useState(false);
   const [crisis, setCrisis] = useState('');
-  const [todos, setTodos] = useState<Todo[]>(() => loadTodos());
+  const [todos, rawSetTodos] = useState<Todo[]>(() => loadTodos());
+  const setTodos: Dispatch<SetStateAction<Todo[]>> = (next) => { touch(); rawSetTodos(next); };
+  const [legacyKeys, setLegacyKeys] = useState<string[]>(() => listLegacyPostKeys());
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [brag, setBrag] = useState<{ id?: string; text: string } | null>(null);
   const [bragText, setBragText] = useState('');
   const [bragTitle, setBragTitle] = useState('');
   const brandClicks = useRef<number[]>([]);
-  const busy = useRef(false);
 
   useEffect(() => saveCards(cards), [cards]);
   useEffect(() => savePersonas(personas), [personas]);
@@ -157,13 +174,22 @@ export default function App() {
   const latest = useRef({ cards, personas, world, settings, config, working });
   latest.current = { cards, personas, world, settings, config, working };
 
-  const tick = useCallback(async (override?: { cards?: Card[] }) => {
-    if (busy.current) return;
+  const guardSubmission = (...parts: (string | undefined | null)[]): boolean => {
+    if (!containsCrisis(parts)) return false;
+    // 不把敏感原文复制到额外的 React 状态或日志中。
+    setCrisis('show');
+    return true;
+  };
+
+  const tick = useCallback(async () => {
+    if (document.hidden) return;
     const cur = latest.current;
     if (cur.settings.paused || !isReady(cur.config)) return;
     if (cur.world.callsToday >= cur.settings.dailyCalls) return;
-    busy.current = true;
-    const baseCards = override?.cards ?? cur.cards;
+    const operation = gate.current.start('tick');
+    if (!operation) return;
+    const revision = gate.current.revision();
+    const baseCards = cur.cards;
     try {
       const out = await tickCards({
         cards: baseCards,
@@ -171,8 +197,16 @@ export default function App() {
         settings: cur.settings,
         config: cur.config,
       });
-      // 等待模型期间用户可能已发卡/评论；旧快照结果不能覆盖新状态。
-      if (latest.current.cards !== baseCards) return;
+      if (!gate.current.isCurrent(operation, revision) || latest.current.cards !== baseCards) {
+        // 已调用的模型仍计入本机配额，但不能写入过时的卡片和记忆。
+        if (out.calls) {
+          const day = dayKey(Date.now());
+          setWorld((w) => ({ ...w, dayKey: day,
+            callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls }));
+        }
+        setToast('有新内容，旧回复已跳过；后台会再试');
+        return;
+      }
       const before = new Map(
         baseCards.filter((c) => c.authorId === 'me').map((c) => [c.id, c.comments.length]),
       );
@@ -202,17 +236,36 @@ export default function App() {
         lastBragAt: extra.length ? nowTs : w.lastBragAt ?? nowTs,
         logs: [...out.logs, ...w.logs].slice(0, 20),
       }));
+      const failureNotice = modelFailureNotice(out.logs);
+      if (failureNotice) setToast(failureNotice);
+    } catch {
+      // 不让 setInterval 的异步异常成为未处理 Promise；不冒充角色回帖。
+      setToast('模型暂时不可用，后台稍后再试');
     } finally {
-      busy.current = false;
+      gate.current.finish(operation);
     }
   }, []);
 
   useEffect(() => {
     if (!ready) return;
     const id = window.setInterval(() => void tick(), TICK_MS);
+    const onVisible = () => {
+      if (!document.hidden) void tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     void tick();
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [ready, tick]);
+
+  // React 提交 nudge/advance 的新卡片后才运行 tick，避免 latest 引用尚未更新。
+  useEffect(() => {
+    if (!tickAfterCommit.current) return;
+    tickAfterCommit.current = false;
+    void tick();
+  }, [cards, tick]);
 
   useEffect(() => {
     if (!toast) return;
@@ -226,10 +279,7 @@ export default function App() {
   const send = () => {
     const text = draft.trim();
     if (!text || working) return;
-    if (findCrisis(text)) {
-      setCrisis(text);
-      return;
-    }
+    if (guardSubmission(text, draftTitle)) return;
     if (!ready) {
       setSettingsNotice('先接入一个 API，或者切到演示模式。');
       setSettingsOpen(true);
@@ -253,8 +303,10 @@ export default function App() {
       likes: Math.max(0, (c.likes ?? 0) + (c.likedByMe ? -1 : 1)),
     }));
 
-  const addTodo = (text: string) =>
+  const addTodo = (text: string) => {
+    if (guardSubmission(text)) return;
     setTodos((prev) => [{ id: crypto.randomUUID(), text, at: Date.now() }, ...prev]);
+  };
 
   const toggleTodo = (id: string) =>
     setTodos((prev) =>
@@ -277,9 +329,8 @@ export default function App() {
 
   const submitBrag = () => {
     if (!brag || !bragText.trim()) return;
-    if (findCrisis(bragText)) {
+    if (guardSubmission(bragText, bragTitle)) {
       setBrag(null);
-      setCrisis(bragText);
       return;
     }
     const card = createPlayerCard(
@@ -304,6 +355,11 @@ export default function App() {
   };
 
   const advance = async (hours: number) => {
+    const operation = gate.current.start('advance');
+    if (!operation) {
+      setToast('后台正在处理另一个任务，稍后再推进时间');
+      return;
+    }
     const cur = latest.current;
     const shift = hours * 3_600_000;
     const shifted = cur.cards.map((c) => ({
@@ -316,39 +372,37 @@ export default function App() {
       comments: c.comments.map((x) => ({ ...x, at: x.at - shift })),
     }));
     setCards(shifted);
-    busy.current = false;
-    let res: { cards: Card[]; personas: Persona[]; calls: number } = {
-      cards: shifted,
-      personas: cur.personas,
-      calls: 0,
-    };
+    const revision = gate.current.revision();
     try {
-      res = await catchUp({
-        cards: shifted,
-        personas: cur.personas,
-        settings: cur.settings,
-        config: cur.config,
-        hours,
+      const res = await catchUp({
+        cards: shifted, personas: cur.personas, settings: cur.settings, config: cur.config, hours,
       });
+      if (!gate.current.isCurrent(operation, revision)) {
+        if (res.calls) {
+          const day = dayKey(Date.now());
+          setWorld((w) => ({ ...w, dayKey: day,
+            callsToday: (w.dayKey === day ? w.callsToday : 0) + res.calls }));
+        }
+        setToast('有新消息，时间推进的旧结果已跳过');
+        return;
+      }
+      // 先预约 effect，React 提交新卡片时才触发下一次 tick。
+      tickAfterCommit.current = true;
+      setCards(res.cards);
+      setPersonas(res.personas);
+      if (res.calls) {
+        const day = dayKey(Date.now());
+        setWorld((w) => ({ ...w, dayKey: day,
+          callsToday: (w.dayKey === day ? w.callsToday : 0) + res.calls }));
+      }
+      setDeckIndex(0);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setToast(`过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`);
     } catch {
-      res = { cards: shifted, personas: cur.personas, calls: 0 };
+      setToast('时间已推进，但生成新卡失败；后台计时器会继续尝试');
+    } finally {
+      gate.current.finish(operation);
     }
-    // 时间推进期间用户有新的发卡/评论时，不拿旧快照覆盖当前状态。
-    if (latest.current.cards !== shifted) {
-      setToast('刚才有新消息，时间推进结果已丢弃');
-      return;
-    }
-    setCards(res.cards);
-    setPersonas(res.personas);
-    if (res.calls) {
-      setWorld((w) => ({ ...w, callsToday: w.callsToday + res.calls }));
-    }
-    setDeckIndex(0);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setToast(
-      `过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`,
-    );
-    await tick({ cards: res.cards });
   };
 
   const openCard = (card: Card, peer?: string) => {
@@ -364,28 +418,33 @@ export default function App() {
   };
 
   const comment = (card: Card, text: string, kind: 'comment' | 'advice', peer?: string, replyTo?: string) => {
-    if (findCrisis(text)) {
-      setCrisis(text);
-      return;
-    }
-    setPersonas((prev) => notePlayerShare(prev, text));
+    if (guardSubmission(text)) return;
+    if (!card.noMemory) setPersonas((prev) => notePlayerShare(prev, text));
     patch(card.id, (c) => addPlayerComment(c, text, Date.now(), settings.speed, kind, peer, replyTo));
   };
 
   const advice = async (card: Card) => {
+    if (guardSubmission(card.text, card.title,
+      ...card.comments.filter((c) => c.authorKind === 'player').map((c) => c.text))) return;
+    const operation = gate.current.start('advice');
+    if (!operation) {
+      setToast('同伴正在处理另一条消息，稍后再点下一步');
+      return;
+    }
+    const cur = latest.current;
+    const revision = gate.current.revision();
     setWorking(true);
     try {
-      const cur = latest.current;
-      const snapshot = cur.cards;
       const out = await askForAdvice({
-        cards: snapshot,
-        personas: cur.personas,
-        settings: cur.settings,
-        config: cur.config,
-        cardId: card.id,
+        cards: cur.cards, personas: cur.personas, settings: cur.settings,
+        config: cur.config, cardId: card.id,
       });
-      // 用户可能在等模型时补了一句；此时丢弃旧快照结果，让用户重试。
-      if (latest.current.cards !== snapshot) {
+      if (!gate.current.isCurrent(operation, revision) || latest.current.cards !== cur.cards) {
+        if (out.calls) {
+          const day = dayKey(Date.now());
+          setWorld((w) => ({ ...w, dayKey: day,
+            callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls }));
+        }
         setToast('刚才有新消息，下一步再点一次');
         return;
       }
@@ -393,21 +452,27 @@ export default function App() {
       setPersonas(out.personas);
       if (out.calls) {
         const day = dayKey(Date.now());
-        setWorld((w) => ({
-          ...w,
-          dayKey: day,
-          callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls,
-        }));
+        setWorld((w) => ({ ...w, dayKey: day,
+          callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls }));
       }
       if (out.logs.length) {
         setWorld((w) => ({ ...w, logs: [...out.logs, ...w.logs].slice(0, 20) }));
       }
+      const failureNotice = modelFailureNotice(out.logs);
+      if (failureNotice) setToast(failureNotice);
+    } catch {
+      setToast('暂时无法获取下一步，请稍后重试');
     } finally {
+      gate.current.finish(operation);
       setWorking(false);
     }
   };
 
-  const nudge = async () => {
+  const nudge = () => {
+    if (gate.current.running()) {
+      setToast('后台正在处理消息，稍后再触发');
+      return;
+    }
     const cur = latest.current;
     const now = Date.now();
     let best: { cardId: string; kind: 'plan' | 'pending'; idx: number; at: number } | null = null;
@@ -426,14 +491,11 @@ export default function App() {
       if (target.kind === 'plan') {
         return { ...c, plan: c.plan.map((p, i) => (i === target.idx ? { ...p, at: now - 1 } : p)) };
       }
-      return {
-        ...c,
-        pending: c.pending.map((p, i) => (i === target.idx ? { ...p, at: now - 1 } : p)),
-      };
+      return { ...c, pending: c.pending.map((p, i) =>
+        (i === target.idx ? { ...p, at: now - 1 } : p)) };
     });
+    tickAfterCommit.current = true;
     setCards(next);
-    busy.current = false;
-    await tick({ cards: next });
   };
 
   const openSettings = (notice = '') => {
@@ -468,11 +530,30 @@ export default function App() {
   const patchPersona = (next: Persona) =>
     setPersonas((prev) => prev.map((p) => (p.id === next.id ? next : p)));
 
-  const setMemory = (personaId: string, memory: MemoryEntry[]) =>
+  const setMemory = (personaId: string, memory: MemoryEntry[]) => {
+    if (memory.some((m) => guardSubmission(m.about, m.what))) return;
     setPersonas((prev) => prev.map((p) => (p.id === personaId ? { ...p, memory } : p)));
+  };
+
+  const applyMemoryChange = (next: { cards: Card[]; personas: Persona[] }) => {
+    setCards(next.cards);
+    setPersonas(next.personas);
+  };
+  const forgetMemoryEntry = (personaId: string, entryId: string) =>
+    applyMemoryChange(forgetOne(cards, personas, personaId, entryId));
+  const forgetPersonaMemory = (personaId: string) => {
+    if (window.confirm('删除这个角色的长期记忆？原帖仍会保留。')) {
+      applyMemoryChange(forgetRole(cards, personas, personaId));
+    }
+  };
+  const forgetAllMemory = () => {
+    if (window.confirm('清空所有角色的长期记忆？旧备份导入后可能恢复。')) {
+      applyMemoryChange(forgetAll(cards, personas));
+    }
+  };
 
   const doExport = () => {
-    const raw = exportBundle({ cards, personas, world, settings, identity });
+    const raw = exportBundle({ cards, personas, world, settings, identity, todos });
     const d = new Date();
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(
       d.getDate(),
@@ -502,7 +583,24 @@ export default function App() {
     localStorage.removeItem(GUIDE_DISMISSED_KEY);
   };
 
+  const clearNotices = () => {
+    const now = Date.now();
+    setCards((prev) =>
+      prev.map((c) => (c.kind === 'guide' ? c : { ...c, readAt: now })),
+    );
+    setBellOpen(false);
+  };
+
   const doImport = (raw: string) => {
+    try {
+      if (hasCrisisInArchive(JSON.parse(raw))) {
+        setCrisis('show');
+        setToast('该存档含危机表达，未导入任何数据');
+        return;
+      }
+    } catch {
+      // 非 JSON 仍交给现有导入校验显示错误。
+    }
     const bundle = importBundle(raw);
     if (!bundle) {
       alert('这份 JSON 读不了，检查一下是不是本页导出的。');
@@ -515,19 +613,30 @@ export default function App() {
     setWorld(bundle.world);
     setSettings(bundle.settings);
     setIdentity(bundle.identity);
+    setTodos(bundle.todos ?? []);
+    setLegacyKeys(listLegacyPostKeys());
     resetGuideDismissed();
     setAdminOpen(false);
   };
 
   const doClear = () => {
     clearAll();
-    setCards([buildGuideCard()]);
-    setPersonas(ensureMinds(defaultPersonas()));
+    // 清除持有的 Key 和便签；不能只删除 localStorage 而继续沿用旧内存状态。
+    setConfig(defaultConfig);
+    setCards(buildSeedCards());
+    setPersonas(ensureMinds(seedMemories(defaultPersonas())));
     setWorld(emptyWorld());
     setSettings({ ...defaultSettings });
     setIdentity(loadIdentity());
+    setTodos([]);
+    setMode('card');
+    setHomeTab('step');
+    setOnboardOpen(true);
+    setLegacyKeys([]);
     resetGuideDismissed();
     setAdminOpen(false);
+    setDrawerOpen(false);
+    setBrag(null);
     setView('home');
   };
 
@@ -557,14 +666,6 @@ export default function App() {
     .filter((c) => c.advice?.accepted && c.advice.fromPersonaId === 'me')
     .sort((a, b) => b.createdAt - a.createdAt);
   const detailCard = cards.find((c) => c.id === detailId);
-  const clearNotices = () => {
-    const now = Date.now();
-    setCards((prev) =>
-      prev.map((c) => (c.kind === 'guide' ? c : { ...c, readAt: now })),
-    );
-    setBellOpen(false);
-  };
-
   const notices = useMemo(() => {
     const out: { card: Card; comment: Comment; persona?: Persona }[] = [];
     cards.forEach((c) => {
@@ -917,6 +1018,13 @@ export default function App() {
             )}
           </section>
 
+          <MemoryManager
+            personas={personas}
+            onForgetOne={forgetMemoryEntry}
+            onForgetRole={forgetPersonaMemory}
+            onForgetAll={forgetAllMemory}
+          />
+
           <section className="profile-block">
             <h3>数据与应用</h3>
             <div className="adm-actions">
@@ -935,6 +1043,16 @@ export default function App() {
               <button className="btn btn-ghost" onClick={doExport}>
                 导出
               </button>
+              {legacyKeys.length > 0 && (
+                <button className="btn btn-ghost danger" onClick={() => {
+                  if (!window.confirm('旧版帖子与当前版本不兼容，确定仅删除这些旧 key 吗？建议先另行备份浏览器数据。')) return;
+                  deleteLegacyPosts();
+                  setLegacyKeys(listLegacyPostKeys());
+                  setToast('旧版帖子数据已从当前浏览器存储移除');
+                }}>
+                  删除不兼容旧帖子（{legacyKeys.length} 项）
+                </button>
+              )}
               <button
                 className="btn btn-ghost danger"
                 onClick={() => {
@@ -945,7 +1063,7 @@ export default function App() {
               </button>
             </div>
             <p className="view-empty">
-              卡片、便签、同伴记忆和 API Key 只存在这台浏览器；导出文件会包含它们。
+              卡片、便签和角色记忆保存在此浏览器；模型请求会发送相关内容给所选模型服务。导出文件包含卡片、便签和记忆，不包含 API Key；重置会清除当前模型配置。
             </p>
             <p className="view-empty">
               这里的 {personas.length} 位同伴都是虚构的 AI 角色，和你在不同学校；不是心理咨询师，内容不构成医疗建议。

@@ -3709,20 +3709,6 @@ button {
   font-size: 9.5px;
 }
 
-.guide-close {
-  padding: 2px 4px;
-  border: 0;
-  background: none;
-  color: var(--tertiary);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.guide-close:hover {
-  color: var(--ink);
-}
-
 .guide-title {
   margin: 9px 0 4px;
   color: var(--ink);
@@ -3824,21 +3810,6 @@ button {
   flex-direction: column;
   gap: 8px;
   margin: 10px 0 18px;
-}
-
-.forum-thread {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.forum-replies {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-left: 18px;
-  padding-left: 10px;
-  border-left: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
 }
 
 .forum-comment {
@@ -4089,28 +4060,11 @@ button {
   box-shadow: 0 18px 50px rgba(20, 20, 19, 0.16);
 }
 
-.bell-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .bell-title {
   margin: 4px 8px 6px;
   color: var(--tertiary);
   font-size: 10.5px;
   letter-spacing: 0.12em;
-}
-
-.bell-clear {
-  margin: 0 8px 0 0;
-  padding: 2px 4px;
-  border: 0;
-  background: none;
-  color: var(--accent-ink);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
 }
 
 .bell-empty {
@@ -4517,4 +4471,62 @@ button {
   .step-shelf {
     padding: 16px;
   }
+}
+
+/* 单机记忆管理：小屏与桌面均不让长文本挤破布局 */
+.memory-manager { min-width: 0; }
+.memory-persona { border-top: 1px solid rgba(80, 80, 80, .17); padding: 12px 0; }
+.memory-persona summary { cursor: pointer; font-weight: 600; }
+.memory-persona > .btn { margin: 12px 0; }
+.memory-list { list-style: none; padding: 0; margin: 8px 0; }
+.memory-list li { padding: 12px 0; border-bottom: 1px solid rgba(80, 80, 80, .12); overflow-wrap: anywhere; }
+.memory-list small { display: block; margin: 6px 0 10px; opacity: .72; }
+.memory-list .btn { font-size: .85rem; }
+
+/* ---------- 论坛规矩关闭 / 楼层叠回复 / 通知一键已读 ---------- */
+
+.guide-close {
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--tertiary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.guide-close:hover {
+  color: var(--ink);
+}
+
+.forum-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.forum-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-left: 18px;
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+}
+
+.bell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bell-clear {
+  margin: 0 8px 0 0;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
 }

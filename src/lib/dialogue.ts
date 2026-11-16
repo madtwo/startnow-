@@ -95,17 +95,21 @@ const CONTACT_REQUESTS = [
   /(?:加|留|给|发|交换|要|私聊|联系).{0,9}(?:微[信]|vx|v信|qq|电话|手机|号码|联系方式|地址|二维码|wechat|wx|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|ins号|小红书号|抖音号)/i,
   /(?:微[信]|vx|v信|qq|手机号|电话号|联系方式|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|小红书号|抖音号).{0,8}(?:给我|给你|发我|发你|留个|加一下|互加|交换)/,
   /(?:你|你的|您|您的)(?:微信号?|vx|qq号?|手机号|电话号?|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|小红书号|抖音号)(?:是)?(?:多少|什么|怎么加)/,
+  // "告诉我你的微信号"也是直接索取联系方式，不能依赖"给/加/发"触发。
+  /(?:告诉|透露|提供|报)(?:给)?(?:我|我们).{0,8}(?:微[信]|vx|v信|qq|手机号|电话号?|联系方式|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|小红书号|抖音号)/i,
 ];
 
 // 逐个移去明确否定的约见/交换方式；剩余文本仍要检查，不能让句首的“不”掩盖后面的真实邀请。
 const NEGATED_MEETING = /(?<!能)(?<!可)(?:不想|不愿意?|不准备|不打算|不方便|不会|不用|不要|不能|没法|从来不|从未|没有|拒绝|别|不|没)(?:再|去|来|和你|跟你|跟我|和我)?(?:在线下|线下|现实里)?(?:见个?面|碰个?面|面基|奔现|约(?:个)?饭|聚聚)/g;
 const NEGATED_CONTACT = /(?<!能)(?<!可)(?:不想|不愿意?|不准备|不打算|不方便|不会|不用|不要|不能|没法|拒绝|别|不|没)(?:再)?(?:加|留|给|发|交换|要|私聊|联系)(?:你|我|个|一下)?(?:微信|v信|vx|qq|手机号|电话号?|联系方式|地址|二维码|wechat|wx|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|小红书号|抖音号)/g;
+const NEGATED_TELL_CONTACT = /(?<!能)(?<!可)(?:不想|不愿意?|不准备|不打算|不方便|不会|不用|不要|不能|没法|拒绝|别|不|没)(?:再|直接)?(?:告诉|透露|提供|报)(?:给)?(?:我|我们).{0,8}(?:微[信]|vx|v信|qq|手机号|电话号?|联系方式|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|小红书号|抖音号)/gi;
 const NEGATED_TOGETHER = /(?<!能)(?<!可)(?:不想|不愿意?|不准备|不打算|不方便|不会|不用|不要|不能|没法|拒绝|别|不|没)(?:和你|跟你|跟我|和我|我们)?(?:一起|一块|一块儿|咱俩)?(?:吃饭|下楼|出来|散步|逛|看电影|喝奶茶|喝咖啡|去玩|玩|见)/g;
 const DISMISSED_MEETING = /(?:见面|线下|现实里|约饭|聚聚)(?:就算了|就不必|不用了|不了|还是算了)/g;
 const stripDeniedRequests = (text: string) =>
   text
     .replace(NEGATED_MEETING, '')
     .replace(NEGATED_CONTACT, '')
+    .replace(NEGATED_TELL_CONTACT, '')
     .replace(NEGATED_TOGETHER, '')
     .replace(DISMISSED_MEETING, '');
 
@@ -122,13 +126,13 @@ export function isExplicitOnlineOnly(text: string): boolean {
 
 export type BoundaryRequest = 'offline' | 'contact' | null;
 
-/** 依赖表达与线下请求正交：必须另行接住，而不能回“不能见面”。 */
 /** 玩家明确开口要“现在就给一个办法”，不应再只回共情。 */
 export function wantsDirectAdvice(text: string): boolean {
   const t = normalizeBoundaryText(text);
   return /(?:给我|给个|来一个|来个|说一个|说个|直接说|告诉我).{0,10}(?:建议|办法|主意|怎么做|怎么办)|(?:立刻|马上|现在|赶紧|直接|别绕|少废话).{0,12}(?:建议|办法|主意|怎么做|怎么办)/.test(t);
 }
 
+/** 依赖表达与线下请求正交：必须另行接住，而不能回“不能见面”。 */
 export function isDependencySignal(text: string): boolean {
   const t = normalizeBoundaryText(text);
   // 玩家转述室友/朋友的原话时，不应把对方的依赖当成玩家对 AI 的关系请求。

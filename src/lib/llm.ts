@@ -309,7 +309,12 @@ export async function streamChat(opts: {
     flushEvent();
   } catch (err) {
     if (err instanceof LlmError) throw err;
-    throw requestError(err, signal);
+    const classified = requestError(err, signal);
+    // 接口流已经启动却在读取中报错：不要将半截回复当成正常结果。
+    if (classified instanceof LlmError && classified.kind === 'network' && !signal.aborted) {
+      throw new LlmError('network', '模型响应中途断开，未保存不完整回复；稍后再试。');
+    }
+    throw classified;
   } finally {
     reader.releaseLock();
   }

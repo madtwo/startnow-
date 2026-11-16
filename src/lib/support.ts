@@ -29,8 +29,8 @@ export interface SupportAction {
 export const HELP_SEEKING_ACTIONS: readonly SupportAction[] = [
   {
     id: 'help-3', minutes: 3,
-    label: '打开学校心理中心或正规医院的官方预约页面，看看预约方式',
-    line: '我先打开学校心理中心或正规医院的官方预约页面，看看怎么约一次咨询或评估。',
+    label: '先找到学校心理中心或正规医院的官方渠道，再看看预约方式',
+    line: '我先找学校心理中心或正规医院的官方渠道；找不到入口就先搜索，找到后看看怎么预约，不用马上约。',
   },
   {
     id: 'help-2', minutes: 2,
