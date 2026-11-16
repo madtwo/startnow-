@@ -519,6 +519,23 @@ body {
   overflow: visible;
 }
 
+/* 长链接、长英文名等无空格文本不撑破布局 */
+.main,
+.foot-inner,
+.drawer,
+.tour-tip,
+.toast,
+.crisis {
+  overflow-wrap: anywhere;
+}
+
+.deck-meta,
+.page-author-row > div,
+.step-todo,
+.drawer-todo {
+  min-width: 0;
+}
+
 /* ---------- 首页 ---------- */
 
 .step-board {
@@ -2385,5 +2402,10 @@ body {
 
   .tab {
     padding: 8px 12px;
+  }
+
+  .bell-panel {
+    right: -46px;
+    width: min(300px, calc(100vw - 32px));
   }
 }

@@ -1177,8 +1177,10 @@ export default function App() {
             key={id}
             className={`tab ${
               (id === 'step' && view === 'home' && homeTab === 'step') ||
-              (id === 'forum' && view === 'home' && homeTab === 'forum') ||
-              (id !== 'step' && id !== 'forum' && view === id)
+              (id === 'forum' &&
+                ((view === 'home' && homeTab === 'forum') || view === 'detail')) ||
+              (id === 'profile' && (view === 'profile' || view === 'mine')) ||
+              (id !== 'step' && id !== 'forum' && id !== 'profile' && view === id)
                 ? 'on'
                 : ''
             }`}
