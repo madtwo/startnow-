@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Card, Persona, Todo } from '../types';
 import { isHelpSeekingAction } from '../lib/support';
 import Avatar from './Avatar';
@@ -44,6 +44,7 @@ export default function StepBoard({
   onOpenMine,
 }: Props) {
   const [draft, setDraft] = useState('');
+  const todoInputRef = useRef<HTMLInputElement>(null);
   const mine = cards
     .filter((c) => c.authorId === 'me')
     .sort((a, b) => b.createdAt - a.createdAt);
@@ -218,14 +219,8 @@ export default function StepBoard({
             </>
           ) : (
             <>
-              <span className="hero-eyebrow">✦ 今天也先动一下</span>
               <h3>今天，先做一件小事</h3>
-              <p className="step-empty-text">
-                不用逼自己很努力，先启动这一步就够了。四个 AI 同学会先听你说，再陪你把它缩成一个现在能做的小动作。
-              </p>
-              <p className="step-ai-note">
-                四位同伴都是虚构的 AI 同学，和你在不同学校；只在论坛上聊。你不需要对他们的情绪负责。
-              </p>
+              <p className="step-empty-text">不用逼自己很努力，先启动这一步就够了。</p>
               <div className="step-actions">
                 <button className="btn btn-primary" onClick={onWrite}>
                   开始
@@ -234,12 +229,31 @@ export default function StepBoard({
                   再想想
                 </button>
               </div>
+              <button
+                className="btn btn-quiet"
+                onClick={() => {
+                  todoInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  todoInputRef.current?.focus();
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="8.5" />
+                  <path d="M12 7.5V12l3 1.8" />
+                </svg>
+                先记一件小事
+              </button>
             </>
           )}
         </div>
 
         <div className="rate-ring" role="img" aria-label={`今日启动率 ${ratePct}%`}>
           <svg viewBox="0 0 120 120" aria-hidden="true">
+            <defs>
+              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#b8a6fb" />
+                <stop offset="100%" stopColor="#7c5cf0" />
+              </linearGradient>
+            </defs>
             <circle className="ring-track" cx="60" cy="60" r={RING_R} />
             {ratePct > 0 && (
               <circle
@@ -264,19 +278,6 @@ export default function StepBoard({
           <div className="rate-ring-center">
             <span>今日启动率</span>
             <b>{ratePct}%</b>
-            <small>{rateBase === 0 ? '先走一步' : `${doneToday} / ${rateBase} 件`}</small>
-          </div>
-        </div>
-
-        <div className="companion-strip">
-          <div className="companion-avatars">
-            {personas.map((p) => (
-              <Avatar key={p.id} avatarKey={p.avatarKey} name={p.name} color={p.color} size="sm" />
-            ))}
-          </div>
-          <div className="companion-strip-text">
-            <b>{personas.map((p) => p.name).join('、')}</b>
-            <span>{personas.length} 位 AI 同伴都在 · 不是真人，但会认真听你说</span>
           </div>
         </div>
       </section>
@@ -292,12 +293,24 @@ export default function StepBoard({
             </span>
             今日最小任务
           </div>
-          <p className="info-main">{minTask ?? '写一张卡，说说你卡在哪'}</p>
-          <p className="info-sub">{minTask ? '预计 1–15 分钟' : '写下来，才知道卡在哪'}</p>
+          <p className="info-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M7 4h7l4 4v12H7z" />
+              <path d="M14 4v4h4" />
+            </svg>
+            {minTask ?? '写一张卡，说说你卡在哪'}
+          </p>
+          <p className="info-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M12 7.5V12l3 1.8" />
+            </svg>
+            {minTask ? '预计 1–15 分钟' : '写下来，才知道卡在哪'}
+          </p>
         </article>
         <article className="info-card">
           <div className="info-card-head">
-            <span className="info-icon is-mint" aria-hidden="true">
+            <span className="info-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
                 <circle cx="12" cy="12" r="8.5" />
                 <path d="M12 7.5V12l3 1.8" />
@@ -305,16 +318,25 @@ export default function StepBoard({
             </span>
             本周进度
           </div>
-          <p className="info-stat">
+          <p className="info-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 9a8 8 0 0 1 13.7-4.3L20 7" />
+              <path d="M20 4v3h-3" />
+              <path d="M20 15a8 8 0 0 1-13.7 4.3L4 17" />
+              <path d="M4 20v-3h3" />
+            </svg>
             连续启动 <b>{streak}</b> 天
           </p>
-          <p className="info-stat">
+          <p className="info-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5 12l4 4L19 6" />
+            </svg>
             完成 <b>{weekDone}</b> 个小步骤
           </p>
         </article>
         <article className="info-card">
           <div className="info-card-head">
-            <span className="info-icon is-pink" aria-hidden="true">
+            <span className="info-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 4l1.8 4.7L18.5 10.5l-4.7 1.8L12 17l-1.8-4.7L5.5 10.5l4.7-1.8Z" />
               </svg>
@@ -322,9 +344,28 @@ export default function StepBoard({
             AI 同伴提醒
           </div>
           <p className="info-main">{reminder}</p>
-          <p className="info-sub">四位同伴都在 · 不是真人，但会认真听你说</p>
+          <p className="info-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 5h16v11H9l-5 4z" />
+            </svg>
+            不是真人，但会认真听你说
+          </p>
         </article>
       </section>
+
+      <div className="companion-bubble">
+        <div className="companion-avatars">
+          {personas.map((p) => (
+            <Avatar key={p.id} avatarKey={p.avatarKey} name={p.name} color={p.color} size="sm" />
+          ))}
+        </div>
+        <div className="companion-bubble-text">
+          <p>先别管完美，先让自己开始。</p>
+          <span>
+            {personas.map((p) => p.name).join('、')} 都在 · 不是真人，只在论坛上聊
+          </span>
+        </div>
+      </div>
 
       {mine.length > 0 && (
         <button className="step-link" onClick={onOpenMine}>
@@ -346,6 +387,7 @@ export default function StepBoard({
         </div>
         <div className="step-add">
           <input
+            ref={todoInputRef}
             value={draft}
             placeholder="加一件小到不会失败的事，比如「把文档打开」"
             onChange={(e) => setDraft(e.target.value)}

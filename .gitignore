@@ -1,5 +1,7 @@
 node_modules/
 dist/
 tests/results/
+.shots/
+.DS_Store
 .env
 .env.*

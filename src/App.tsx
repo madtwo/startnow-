@@ -823,7 +823,7 @@ export default function App() {
     cards.filter((c) => c.note && c.status === 'noted').length;
 
   return (
-    <div className="shell">
+    <div className={`shell ${view === 'home' && homeTab === 'step' ? 'is-home-step' : ''}`}>
       <header className="top">
         <div className="top-inner">
           <button type="button" className="brand" onClick={bumpBrand} title="StartNow">
