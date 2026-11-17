@@ -167,6 +167,7 @@ export default function App() {
   );
   const [deckIndex, setDeckIndex] = useState(0);
   const [bellOpen, setBellOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [detailPeer, setDetailPeer] = useState('');
   const [detailId, setDetailId] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -182,6 +183,7 @@ export default function App() {
   const [bragTitle, setBragTitle] = useState('');
   const brandClicks = useRef<number[]>([]);
   const bellRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [, refreshClock] = useState(0);
 
   useEffect(() => saveCards(cards), [cards]);
@@ -213,6 +215,22 @@ export default function App() {
       document.removeEventListener('keydown', onKey);
     };
   }, [bellOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   const ready = isReady(config);
   const latest = useRef({ cards, personas, world, settings, config, working });
@@ -823,11 +841,94 @@ export default function App() {
               </svg>
             </span>
             <span className="brand-text">
-              <span className="brand-name">先动一下</span>
-              <span className="brand-sub">四个 AI 同学的互助小圈子</span>
+              <span className="brand-name">Start Now</span>
+              <span className="brand-sub">先动一下 · 四个 AI 同学的互助小圈子</span>
             </span>
           </button>
+          <nav className="top-nav" aria-label="主导航">
+            <button
+              type="button"
+              className={view === 'home' && homeTab === 'step' ? 'active' : ''}
+              aria-current={view === 'home' && homeTab === 'step' ? 'page' : undefined}
+              onClick={() => {
+                setHomeTab('step');
+                setView('home');
+              }}
+            >
+              试试
+            </button>
+            <button
+              type="button"
+              className={
+                (view === 'home' && homeTab === 'forum') || view === 'detail' ? 'active' : ''
+              }
+              aria-current={
+                (view === 'home' && homeTab === 'forum') || view === 'detail' ? 'page' : undefined
+              }
+              onClick={() => {
+                setHomeTab('forum');
+                setView('home');
+              }}
+            >
+              论坛
+            </button>
+            <button
+              type="button"
+              className={view === 'profile' || view === 'mine' ? 'active' : ''}
+              aria-current={view === 'profile' || view === 'mine' ? 'page' : undefined}
+              onClick={() => setView('profile')}
+            >
+              我的
+            </button>
+          </nav>
           <div className="top-actions">
+          <button
+            className="icon-btn plus-btn"
+            onClick={() => setView('post')}
+            aria-label="发一张卡"
+            title="发一张卡"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+          <div className="menu-wrap" ref={menuRef}>
+            <button
+              className="icon-btn"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="设置"
+              aria-expanded={menuOpen}
+              title="设置"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <path d="M4 8h16M4 16h16" />
+                <circle cx="9.5" cy="8" r="2.2" fill="#fff" />
+                <circle cx="14.5" cy="16" r="2.2" fill="#fff" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="menu-panel">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    openSettings();
+                  }}
+                >
+                  API 设置
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setAdminOpen(true);
+                  }}
+                >
+                  作者后台
+                </button>
+              </div>
+            )}
+          </div>
           <div className="bell-wrap" ref={bellRef}>
             <button
               className="bell-btn"
@@ -875,7 +976,7 @@ export default function App() {
             )}
           </div>
           <button className="avatar-btn" onClick={() => setView('profile')} aria-label="我的">
-            <Avatar avatarKey={identity.avatarKey} className="me" size="sm" />
+            <Avatar avatarKey={identity.avatarKey} name={identity.name} className="me" size="sm" />
           </button>
         </div>
         </div>
@@ -900,7 +1001,7 @@ export default function App() {
                   <circle cx="12" cy="12" r="9" />
                   <path d="M12 16v-4M12 8h.01" />
                 </svg>
-                下一步
+                试试
               </button>
               <button
                 type="button"
@@ -1454,7 +1555,7 @@ export default function App() {
       <nav className="tabbar">
         {(
           [
-            ['step', '下一步'],
+            ['step', '试试'],
             ['forum', '论坛'],
             ['post', '发一张卡'],
             ['profile', '我的'],
