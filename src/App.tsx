@@ -17,7 +17,7 @@ import NoteDrawer from './components/NoteDrawer';
 import MemoryManager from './components/MemoryManager';
 import PostForm from './components/PostForm';
 import StepBoard from './components/StepBoard';
-import Tour from './components/Tour';
+import Onboarding from './components/Onboarding';
 import CrisisCard from './components/CrisisCard';
 import { defaultConfig, isMock, isReady } from './config/providers';
 import { HOTLINE } from './lib/crisis';
@@ -174,7 +174,9 @@ export default function App() {
   const [working, setWorking] = useState(false);
   const [toast, setToast] = useState('');
   const [onboardOpen, setOnboardOpen] = useState(
-    () => localStorage.getItem('startnow.onboarded') !== '1',
+    () =>
+      new URLSearchParams(window.location.search).has('onboard') ||
+      localStorage.getItem('startnow.onboarded') !== '1',
   );
   const [guideDismissed, setGuideDismissed] = useState(
     () => localStorage.getItem(GUIDE_DISMISSED_KEY) === '1',
@@ -1678,7 +1680,7 @@ export default function App() {
       </nav>
 
       {onboardOpen && (
-        <Tour
+        <Onboarding
           onNavigate={(next, tab) => {
             if (tab) setHomeTab(tab);
             setView(next);

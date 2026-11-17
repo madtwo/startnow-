@@ -285,7 +285,7 @@ test('模型成功返回具体动作+结果时标 model；系统规则和低信�
 });
 
 test('TSX 新增入口和卡片展示至少通过 TypeScript 语法编译',()=>{
-  for (const name of ['App.tsx','components/AdminPanel.tsx']) {
+  for (const name of ['App.tsx','components/AdminPanel.tsx','components/Onboarding.tsx','components/RoomView.tsx']) {
     const full=path.join(__dirname,'..','src',name);
     const result=ts.transpileModule(fs.readFileSync(full,'utf8'),{
       fileName:full,reportDiagnostics:true,

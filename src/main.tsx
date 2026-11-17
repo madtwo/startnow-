@@ -5,6 +5,7 @@ import './styles.css';
 import './theme.css';
 import './theme-v2.css';
 import './room.css';
+import './onboarding.css';
 
 class Boundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
