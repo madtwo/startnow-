@@ -105,12 +105,16 @@ export interface Advice {
   fromPersonaId: string;
   at: number;
   accepted: boolean;
-  origin?: 'curated' | 'demo';
+  /** Links a user-selected action back to the original persona comment. */
+  sourceCommentId?: string;
+  origin?: 'curated' | 'demo' | 'adopted';
 }
 
 export interface Note {
   text: string;
   actionId?: string;
+  /** Optional provenance kept when an adopted reply is pinned. */
+  sourceCommentId?: string;
   fromPersonaId: string;
   at: number;
   dueAt: number;

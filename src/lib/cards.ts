@@ -17,6 +17,7 @@ import {
   mindAfterStep,
 } from './mind';
 import { findCrisis, isHeavyShare } from './safety';
+import { wantsDirectAdvice } from './directAdvice';
 import { hasPlayerCrisis } from './submissionGuard';
 import { introPhaseActive } from './seed';
 import { addMemory, inferWeight, sanitizeMemoryText } from './memory';
@@ -29,7 +30,6 @@ import {
   dependencySupportReply,
   inferSocialIntent,
   isDependencySignal,
-  wantsDirectAdvice,
   latestPlayerIsShortContact,
   mentionsLocalVenue,
   mockBoundaryReply,
@@ -238,6 +238,78 @@ export function summonPersona(card: Card, personaId: string, now = Date.now()): 
   };
 }
 
+/**
+ * Adopt a persona's existing words as a next step. No model call or synthetic
+ * actionId: this is a user-selected quote, never a regenerated model action.
+ */
+export function adoptCommentAdvice(
+  card: Card,
+  commentId: string,
+  personas: readonly Persona[],
+  now = Date.now(),
+): { card: Card; error?: string } {
+  if (card.authorKind !== 'player' || card.kind === 'guide' || isClosed(card) ||
+      card.status === 'noted' || card.advice?.accepted) {
+    return { card, error: '这张卡已进入便签或完成状态，不能覆盖现有下一步' };
+  }
+  if (hasPlayerCrisisInput(card)) return { card, error: '当前卡片需先显示危机求助提示' };
+  const comment = card.comments.find((row) => row.id === commentId);
+  if (!comment || comment.authorKind !== 'persona' ||
+      !personas.some((persona) => persona.id === comment.authorId) ||
+      comment.origin === 'boundary' || comment.origin === 'system') {
+    return { card, error: '只能采用本卡真实存在的角色建议，不能采用边界或系统提示' };
+  }
+  const text = comment.text.trim();
+  if (!text || text.length > 600 || findCrisis(text) ||
+      auditSocial(text) || auditCriticalContent(text)) {
+    return { card, error: '这条回复包含不适合写入便签的内容，请换一条安全、具体的建议' };
+  }
+  const context = [card.text, ...card.comments.filter((row) => row.authorKind === 'player')
+    .map((row) => row.text)].join(' ');
+  if (needsHelpSeeking(context) || isHelpSeekingAction(card.advice?.actionId)) {
+    return { card, error: '当前卡片需要保留求助起点，不能用普通评论替代真人支持步骤' };
+  }
+  return {
+    card: {
+      ...card,
+      status: 'advised',
+      advice: {
+        text, fromPersonaId: comment.authorId, sourceCommentId: comment.id,
+        at: now, accepted: false, origin: 'adopted',
+      },
+    },
+  };
+}
+
+/** Prefer the explicitly selected participant; otherwise the latest speaker. */
+export function advicePersonaFor(
+  card: Card,
+  personas: readonly Persona[],
+  requestedId?: string,
+): Persona | undefined {
+  const participantIds = new Set([
+    ...card.arrivals,
+    ...(card.authorKind === 'persona' ? [card.authorId] : []),
+    ...card.comments.filter((row) => row.authorKind === 'persona').map((row) => row.authorId),
+  ]);
+  const byId = (id?: string) => id && participantIds.has(id)
+    ? personas.find((persona) => persona.id === id)
+    : undefined;
+  // Do not silently substitute a different persona if an explicit selection is invalid.
+  if (requestedId) return byId(requestedId) || undefined;
+  for (let i = card.comments.length - 1; i >= 0; i--) {
+    const row = card.comments[i];
+    if (row.authorKind !== 'persona') continue;
+    const found = byId(row.authorId);
+    if (found) return found;
+  }
+  for (let i = card.arrivals.length - 1; i >= 0; i--) {
+    const found = byId(card.arrivals[i]);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 export function shrinkAdvice(card: Card, now = Date.now()): Card {
   if (card.status !== 'advised' || hasPlayerCrisisInput(card)) return card;
   const advice = card.advice;
@@ -272,6 +344,7 @@ export function acceptAdvice(card: Card, now = Date.now()): Card {
     note: {
       text: card.advice.text,
       actionId: card.advice.actionId,
+      sourceCommentId: card.advice.sourceCommentId,
       fromPersonaId: card.advice.fromPersonaId,
       at: now,
       dueAt: now + DAY,
@@ -1196,7 +1269,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
 }
 
 export async function askForAdvice(
-  input: TickInput & { cardId: string },
+  input: TickInput & { cardId: string; personaId?: string },
 ): Promise<{ cards: Card[]; personas: Persona[]; calls: number; logs: string[] }> {
   const now = input.now ?? Date.now();
   const card = input.cards.find((c) => c.id === input.cardId);
@@ -1207,8 +1280,13 @@ export async function askForAdvice(
   if (isClosed(card) || card.advice || card.status === 'noted') {
     return { cards: input.cards, personas: input.personas, calls: 0, logs: ['当前卡片不可再次生成下一步'] };
   }
-  const persona = input.personas.find((p) => card.arrivals.includes(p.id)) ?? input.personas[0];
-  if (!persona) return { cards: input.cards, personas: input.personas, calls: 0, logs: [] };
+  const persona = advicePersonaFor(card, input.personas, input.personaId);
+  if (!persona) {
+    return {
+      cards: input.cards, personas: input.personas, calls: 0,
+      logs: [input.personaId ? '所选角色尚未参与这张卡，未更换成其他角色' : '当前还没有可提供下一步的角色'],
+    };
+  }
 
   // 危机不是普通的微行动；完整提交入口必须由 App 展示危机求助层。
   const context = [card.text, ...card.comments.filter((c) => c.authorKind === 'player').map((c) => c.text)].join(' ');

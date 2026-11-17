@@ -9,9 +9,10 @@
     "preview": "vite preview",
     "test:review": "node --test tests/review.test.cjs",
     "test:patch": "node --test tests/patch.test.cjs",
-    "test:all": "node --test tests/review.test.cjs tests/patch.test.cjs",
+    "test:all": "node --test tests/review.test.cjs tests/patch.test.cjs tests/ui-threading.test.cjs",
     "model:plan": "node tests/model-matrix.cjs --plan",
-    "model:smoke": "node tests/model-matrix.cjs --mock --smoke"
+    "model:smoke": "node tests/model-matrix.cjs --mock --smoke",
+    "test:ui-threading": "node --test tests/ui-threading.test.cjs"
   },
   "dependencies": {
     "react": "^18.3.1",

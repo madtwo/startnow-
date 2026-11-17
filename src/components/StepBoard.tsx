@@ -77,7 +77,13 @@ export default function StepBoard({
           <span className="hero-eyebrow">{noted ? '✦ 今天的一步' : '✦ 有人给了你一个下一步'}</span>
           <p className="step-line">{noted?.note?.text ?? advised?.advice?.text}</p>
           {focus?.advice?.origin && (
-            <small>{focus.advice.origin === 'demo' ? '演示动作' : '预置动作'}</small>
+            <small>
+              {focus.advice.origin === 'adopted'
+                ? '你从角色回复采用 · 保留原话'
+                : focus.advice.origin === 'demo'
+                  ? '演示动作'
+                  : '预置动作'}
+            </small>
           )}
           {isHelpSeekingAction(focus?.advice?.actionId) && (
             <p className="step-ai-note" role="note">
@@ -85,8 +91,12 @@ export default function StepBoard({
             </p>
           )}
           <p className="step-from">
-            {giver ? `${giver.name} 给的 · ` : ''}
-            做不到就再小一级
+            {giver
+              ? focus.advice?.sourceCommentId
+                ? `从${giver.name}的回复采用 · `
+                : `${giver.name} 给的 · `
+              : ''}
+            {focus.advice?.actionId ? '做不到就再小一级' : '评论原话暂无自动缩小'}
           </p>
           <div className="step-actions">
             {noted ? (
@@ -95,7 +105,16 @@ export default function StepBoard({
               </button>
             ) : advised ? (
               <>
-                <button className="btn btn-ghost" onClick={() => onShrink(advised)}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => onShrink(advised)}
+                  disabled={!advised.advice?.actionId}
+                  title={
+                    !advised.advice?.actionId
+                      ? '回复原话没有可自动缩小的动作链，请回复她商量更小一步'
+                      : undefined
+                  }
+                >
                   做不到
                 </button>
                 <button className="btn btn-primary" onClick={() => onAccept(advised)}>

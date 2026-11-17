@@ -4517,15 +4517,6 @@ button {
   gap: 8px;
 }
 
-.forum-replies {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-left: 18px;
-  padding-left: 10px;
-  border-left: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
-}
-
 .bell-head {
   display: flex;
   align-items: center;
@@ -4541,4 +4532,74 @@ button {
   font: inherit;
   font-size: 11px;
   cursor: pointer;
+}
+
+/* 2026-11-17: 帖子回复树保留 replyTo，视觉最多两级缩进。 */
+.forum-comments,
+.forum-thread,
+.forum-comment { min-width: 0; max-width: 100%; }
+.forum-thread { margin-inline-start: 0; }
+.forum-thread.forum-depth-1 {
+  margin-inline-start: 16px;
+  padding-inline-start: 6px;
+  border-inline-start: 2px solid var(--border);
+}
+.forum-thread.forum-depth-2 {
+  margin-inline-start: 30px;
+  padding-inline-start: 6px;
+  border-inline-start: 2px solid var(--border);
+}
+.forum-comment-text { overflow-wrap: anywhere; }
+.forum-comment-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+.forum-adopt, .advice-source-link {
+  border: 0;
+  padding: 3px 5px;
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.forum-adopt:disabled { opacity: .55; cursor: default; text-decoration: none; }
+.advice-source-link { display: inline-block; margin: 6px 0 0; }
+
+/* 随内容测量高度，固定输入栏与底部导航都在可视空间之外。 */
+.card-page.has-composer {
+  padding-bottom: calc(var(--composer-height, 140px) + 104px + env(safe-area-inset-bottom));
+}
+.card-page .page-composer {
+  bottom: calc(76px + env(safe-area-inset-bottom) + var(--keyboard-lift, 0px));
+  max-height: min(48dvh, 230px);
+  overflow-y: auto;
+}
+.forum-jump-latest {
+  position: fixed;
+  z-index: 47;
+  left: 50%;
+  bottom: calc(var(--composer-height, 140px) + 88px + env(safe-area-inset-bottom) + var(--keyboard-lift, 0px));
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 16px;
+  background: var(--surface-strong);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 10%);
+  color: var(--accent-ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.card-page[data-keyboard-open='true'] .page-composer {
+  bottom: calc(10px + var(--keyboard-lift, 0px));
+}
+.card-page[data-keyboard-open='true'] .forum-jump-latest {
+  bottom: calc(var(--composer-height, 140px) + 22px + var(--keyboard-lift, 0px));
+}
+body.card-forum-keyboard-open .tabbar { display: none; }
+@media (max-width: 640px) {
+  .forum-thread.forum-depth-1 { margin-inline-start: 12px; }
+  .forum-thread.forum-depth-2 { margin-inline-start: 26px; }
+  .card-page .page-composer {
+    bottom: calc(66px + env(safe-area-inset-bottom) + var(--keyboard-lift, 0px));
+  }
+  .page-composer-row input { font-size: 16px; }
 }

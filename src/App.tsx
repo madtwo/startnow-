@@ -29,6 +29,7 @@ import { modelFailureNotice } from './lib/modelStatus';
 import {
   acceptAdvice,
   addPlayerComment,
+  adoptCommentAdvice,
   askForAdvice,
   catchUp,
   closeCard,
@@ -461,12 +462,23 @@ export default function App() {
   };
 
   const comment = (card: Card, text: string, kind: 'comment' | 'advice', peer?: string, replyTo?: string) => {
-    if (guardSubmission(text)) return;
+    if (guardSubmission(text)) return false;
     if (!card.noMemory) setPersonas((prev) => notePlayerShare(prev, text));
     patch(card.id, (c) => addPlayerComment(c, text, Date.now(), settings.speed, kind, peer, replyTo));
+    return true;
   };
 
-  const advice = async (card: Card) => {
+  const adoptReply = (card: Card, commentId: string) => {
+    const checked = adoptCommentAdvice(card, commentId, personas);
+    if (checked.error) {
+      setToast(checked.error);
+      return;
+    }
+    patch(card.id, (current) => adoptCommentAdvice(current, commentId, personas).card);
+    setToast('已把这条回复作为下一步');
+  };
+
+  const advice = async (card: Card, personaId?: string) => {
     if (guardSubmission(card.text, card.title,
       ...card.comments.filter((c) => c.authorKind === 'player').map((c) => c.text))) return;
     const operation = gate.current.start('advice');
@@ -480,7 +492,7 @@ export default function App() {
     try {
       const out = await askForAdvice({
         cards: cur.cards, personas: cur.personas, settings: cur.settings,
-        config: cur.config, cardId: card.id,
+        config: cur.config, cardId: card.id, personaId,
       });
       if (!gate.current.isCurrent(operation, revision) || latest.current.cards !== cur.cards) {
         if (out.calls) {
@@ -1058,13 +1070,15 @@ export default function App() {
       {view === 'detail' && detailCard && (
         <div className="feed">
           <CardDetail
+            key={detailCard.id}
             card={detailCard}
             me={identity}
             initialPeer={detailPeer}
             personas={personas}
             busy={working}
             onComment={(text, kind, peer, replyTo) => comment(detailCard, text, kind, peer, replyTo)}
-            onAdvice={() => void advice(detailCard)}
+            onAdvice={(personaId) => void advice(detailCard, personaId)}
+            onAdoptAdvice={(commentId) => adoptReply(detailCard, commentId)}
             onShrink={() => patch(detailCard.id, (c) => shrinkAdvice(c))}
             onAccept={() => patch(detailCard.id, (c) => acceptAdvice(c))}
             onDone={() => patch(detailCard.id, (c) => completeCard(c, Date.now(), settings.speed))}
