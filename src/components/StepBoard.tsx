@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react';
 import type { Card, Persona, Todo } from '../types';
 import { isHelpSeekingAction } from '../lib/support';
-import Avatar from './Avatar';
 
 interface Props {
   cards: Card[];
   todos: Todo[];
   personas: Persona[];
+  userName: string;
   busy: boolean;
   onOpenCard: (card: Card) => void;
   onAccept: (card: Card) => void;
@@ -29,6 +29,7 @@ export default function StepBoard({
   cards,
   todos,
   personas,
+  userName,
   busy,
   onOpenCard,
   onAccept,
@@ -106,6 +107,12 @@ export default function StepBoard({
     : doneToday > 0
       ? `今天已经启动 ${doneToday} 次，保持这个节奏就好`
       : '先做 5 分钟也算开始';
+
+  const hour = new Date().getHours();
+  const partOfDay =
+    hour < 6 ? '夜深了' : hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
+  const nickname = userName.trim() && !userName.trim().startsWith('匿名') ? userName.trim() : '';
+  const greeting = nickname ? `${partOfDay}，${nickname}` : partOfDay;
 
   const add = () => {
     const text = draft.trim();
@@ -219,28 +226,36 @@ export default function StepBoard({
             </>
           ) : (
             <>
-              <h3>今天，先做一件小事</h3>
-              <p className="step-empty-text">不用逼自己很努力，先启动这一步就够了。</p>
+              <span className="hero-eyebrow hero-greeting">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="4.2" />
+                  <path d="M12 3.2v2M12 18.8v2M3.2 12h2M18.8 12h2M5.8 5.8l1.4 1.4M16.8 16.8l1.4 1.4M18.2 5.8l-1.4 1.4M7.2 16.8l-1.4 1.4" />
+                </svg>
+                {greeting}
+              </span>
+              <h3>今天，先做一件事</h3>
+              <p className="step-empty-text">不用逼自己很努力，先启动这一步就够了</p>
               <div className="step-actions">
                 <button className="btn btn-primary" onClick={onWrite}>
                   开始
                 </button>
-                <button className="btn btn-ghost" onClick={onForum}>
+                <button className="btn btn-ghost btn-soft" onClick={onForum}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="8.4" />
+                    <path d="M8.6 14.2a4 4 0 0 0 6.8 0" />
+                    <path d="M9.3 9.6h.01M14.7 9.6h.01" />
+                  </svg>
                   再想想
                 </button>
               </div>
               <button
-                className="btn btn-quiet"
+                className="btn-later"
                 onClick={() => {
                   todoInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   todoInputRef.current?.focus();
                 }}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="8.5" />
-                  <path d="M12 7.5V12l3 1.8" />
-                </svg>
-                先记一件小事
+                换个时间再开始
               </button>
             </>
           )}
@@ -352,20 +367,6 @@ export default function StepBoard({
           </p>
         </article>
       </section>
-
-      <div className="companion-bubble">
-        <div className="companion-avatars">
-          {personas.map((p) => (
-            <Avatar key={p.id} avatarKey={p.avatarKey} name={p.name} color={p.color} size="sm" />
-          ))}
-        </div>
-        <div className="companion-bubble-text">
-          <p>先别管完美，先让自己开始。</p>
-          <span>
-            {personas.map((p) => p.name).join('、')} 都在 · 不是真人，只在论坛上聊
-          </span>
-        </div>
-      </div>
 
       {mine.length > 0 && (
         <button className="step-link" onClick={onOpenMine}>

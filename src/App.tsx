@@ -828,16 +828,8 @@ export default function App() {
         <div className="top-inner">
           <button type="button" className="brand" onClick={bumpBrand} title="StartNow">
             <span className="mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M12 3c.6 3.8-1.8 5-1.8 7.4a4.2 4.2 0 0 0 2.4 3.8A3 3 0 0 1 12 18c-1.8 0-3-1-3-3 0-1.9 1.2-3.1 3-5.6Z"
-                  fill="currentColor"
-                />
-                <path
-                  d="M6 16.5c.3 1.8 1.4 2.4 1.4 3.9 0 .8-.7 1.3-1.4 1.3s-1.4-.5-1.4-1.3c0-1.5 1.1-2.1 1.4-3.9Z"
-                  fill="currentColor"
-                  opacity="0.7"
-                />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                <path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6L6 18" />
               </svg>
             </span>
             <span className="brand-text">
@@ -1087,6 +1079,7 @@ export default function App() {
               cards={cards}
               todos={todos}
               personas={personas}
+              userName={identity.name}
               busy={working}
               onOpenCard={openCard}
               onAccept={(card) => patch(card.id, (c) => acceptAdvice(c))}
