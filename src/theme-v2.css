@@ -1145,7 +1145,7 @@ body {
   padding: 30px;
   border: 1px solid rgba(255, 255, 255, 0.9);
   border-radius: 24px;
-  background: linear-gradient(135deg, #ffffff 0%, #f7f3ff 58%, #eef9f3 100%);
+  background: linear-gradient(150deg, #e7dfff 0%, #f2ecff 44%, #fbf9ff 100%);
   box-shadow: var(--v2-shadow-sm);
 }
 
@@ -1183,29 +1183,50 @@ body {
 .profile-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 0;
   width: 100%;
-  margin-top: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.78);
 }
 
 .profile-stats .stat {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 18px 20px;
-  border: 1px solid var(--v2-line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.82);
+  display: block;
+  min-width: 0;
+  padding: 0 0 0 18px;
+  border: 0;
+  border-left: 1px solid rgba(124, 92, 240, 0.14);
+  border-radius: 0;
+  background: none;
+  text-align: left;
+}
+
+.profile-stats .stat:first-child {
+  padding-left: 0;
+  border-left: 0;
 }
 
 .profile-stats .stat b {
-  color: var(--v2-ink);
-  font-size: 26px;
+  display: block;
+  color: #2f2a44;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.profile-stats .stat b i {
+  margin-left: 2px;
+  color: #6f6b7d;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
 }
 
 .profile-stats .stat span {
-  color: var(--v2-muted);
-  font-size: 13px;
+  display: block;
+  margin-top: 4px;
+  color: #6f6b7d;
+  font-size: 12px;
 }
 
 .section-card {
@@ -1786,15 +1807,15 @@ body {
   }
 
   .profile-stats {
-    gap: 10px;
+    gap: 0;
   }
 
   .profile-stats .stat {
-    padding: 12px 14px;
+    padding: 0 0 0 12px;
   }
 
   .profile-stats .stat b {
-    font-size: 22px;
+    font-size: 24px;
   }
 
   .profile-grid {
@@ -1839,10 +1860,6 @@ body {
 
   .rate-ring-center b {
     font-size: 34px;
-  }
-
-  .profile-stats {
-    grid-template-columns: 1fr;
   }
 
   .forum-chips button {

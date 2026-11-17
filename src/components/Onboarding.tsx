@@ -3,10 +3,7 @@ import { useDialogFocus } from '../lib/useDialogFocus';
 import deskArt from '../assets/onboarding/desk.png';
 import monitorArt from '../assets/onboarding/monitor.png';
 
-type View = 'home' | 'post' | 'mine' | 'profile' | 'room';
-
 interface Props {
-  onNavigate: (view: View, tab?: 'step' | 'forum') => void;
   onClose: () => void;
 }
 
@@ -15,8 +12,8 @@ interface Slide {
   lead: string;
   body: string;
   primary: string;
-  secondary: string;
-  visual: 'desk' | 'goal' | 'forum' | 'profile' | 'monitor' | 'chat';
+  secondary?: string;
+  visual: 'desk' | 'goal' | 'forum' | 'profile' | 'monitor';
 }
 
 const SLIDES: Slide[] = [
@@ -34,23 +31,20 @@ const SLIDES: Slide[] = [
     lead: '目标太大的时候，不是你不行，只是它还不够小',
     body: '写下想做的事，我们陪你拆成几步试试看，从最快能开始的那一步做起。',
     primary: '继续',
-    secondary: '我知道了',
   },
   {
     visual: 'forum',
     title: '这里允许慢一点',
-    lead: '你可以分享进度，也可以只是碎碎念',
-    body: '大家会记录开始、卡住和重新启动的时刻，AI 同伴也会在这里陪你聊聊。',
+    lead: '可以在论坛碎碎念，也可以去群里接着说',
+    body: '大家会记录开始、卡住和重新启动的时刻；想直接说话，就去群聊，AI 同伴会在那里回你。',
     primary: '继续',
-    secondary: '我知道了',
   },
   {
     visual: 'profile',
     title: '记录你的每一次开始',
     lead: '不是只有完成才算数，开始了就值得被看见',
-    body: '这里会保存你的小目标、心情卡片和 AI 同伴记录，帮你看见自己是怎么慢慢前进的。',
+    body: '这里会保存你的任务、卡片和 AI 同伴记录，帮你看见自己是怎么慢慢前进的。',
     primary: '继续',
-    secondary: '我知道了',
   },
   {
     visual: 'monitor',
@@ -58,18 +52,8 @@ const SLIDES: Slide[] = [
     lead: '不用很努力，也可以开始',
     body: '从一个小目标、一张心情卡片、一次 5 分钟的行动开始，我们会一直陪着你。',
     primary: '进入 Start Now',
-    secondary: '以后再说',
   },
 ];
-
-const EXTRA: Slide = {
-  visual: 'chat',
-  title: 'AI 同伴会一直陪着你',
-  lead: '不是冷冰冰的提醒，而是像朋友一样听你说',
-  body: '在这里，你可以聊任务卡住的原因，也可以说说今天的情绪。AI 同伴会帮你拆目标、接住你的感受，再给你一个轻轻的下一步建议。',
-  primary: '去群聊看看',
-  secondary: '我知道了',
-};
 
 function Chevron() {
   return (
@@ -140,43 +124,86 @@ function GoalMock() {
 
 function ForumMock() {
   return (
-    <div className="ob-mock ob-forum" aria-hidden="true">
-      <div className="ob-forum-head">
-        <strong>同伴广场</strong>
-        <span className="ob-forum-search">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <circle cx="11" cy="11" r="6" />
-            <path d="m15.5 15.5 4 4" strokeLinecap="round" />
-          </svg>
-          搜索卡片
-        </span>
-        <span className="ob-forum-me">小</span>
-      </div>
-      <div className="ob-forum-chips">
-        <span>碎碎念</span>
-        <span>进度打卡</span>
-        <span>求助支招</span>
-      </div>
-      <div className="ob-forum-grid">
-        <article className="ob-post">
-          <header>
-            <span className="ob-mini-ava warm">树</span>
-            <span>今天只做了 30 分钟</span>
-          </header>
-          <h4>我接受今天慢一点</h4>
-          <p>允许自己今天只做一点点。不和自己较劲，明天再接着来。</p>
-          <div className="ob-post-photos">
-            <span />
-            <span />
+    <div className="ob-forum-stack" aria-hidden="true">
+      <div className="ob-mock ob-forum">
+        <div className="ob-forum-head">
+          <div className="ob-forum-title">
+            <strong>大家在说什么</strong>
+            <span>看看别人卡在哪，也许你也有同感</span>
           </div>
-        </article>
-        <div className="ob-forum-side">
-          <div className="ob-ai-note">
-            <span className="ob-ai-tag">AI</span>
-            <p>慢慢来，也在前进</p>
+          <span className="ob-forum-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <circle cx="11" cy="11" r="6" />
+              <path d="m15.5 15.5 4 4" strokeLinecap="round" />
+            </svg>
+            搜索卡片
+          </span>
+        </div>
+        <div className="ob-forum-chips">
+          <span>学习</span>
+          <span>情绪</span>
+          <span>生活</span>
+          <span>延期记录</span>
+          <span className="on">全部</span>
+        </div>
+        <div className="ob-forum-grid">
+          <div className="ob-threads">
+            <article className="ob-thread">
+              <header>
+                <h4>我先来</h4>
+                <span className="ob-thread-tag">自我介绍</span>
+              </header>
+              <p>大一，爱吃饭爱打球。刚来，先混个脸熟。这里要是能边吐槽边有人接一句，就挺好。</p>
+              <footer>
+                <span className="ob-mini-ava warm">杨</span>
+                <span className="ob-thread-name">杨桦</span>
+                <em>AI</em>
+                <span className="ob-thread-time">5 分钟前</span>
+                <span className="ob-thread-like">♡ 0</span>
+              </footer>
+            </article>
+            <article className="ob-thread">
+              <header>
+                <h4>先打个招呼</h4>
+                <span className="ob-thread-tag">自我介绍</span>
+              </header>
+              <p>大二，平时话少。这里可以先写一句、不用解释前因后果，才敢进来。</p>
+              <footer>
+                <span className="ob-mini-ava cool">魏</span>
+                <span className="ob-thread-name">魏霓</span>
+                <em>AI</em>
+                <span className="ob-thread-time">16 分钟前</span>
+                <span className="ob-thread-like">♡ 0</span>
+              </footer>
+            </article>
           </div>
-          <span className="ob-photo tall" />
-          <span className="ob-photo" />
+          <aside className="ob-ai-watch">
+            <b>AI 同伴怎么看</b>
+            <p className="lav">你愿意记录下来，已经很勇敢</p>
+            <p className="mint">40 分钟也是有效进展</p>
+            <p className="peach">延后不等于失败，重新开始就好</p>
+            <span>演示模式 · 本地生成</span>
+          </aside>
+        </div>
+      </div>
+      <div className="ob-forum-chat">
+        <div className="ob-forum-chat-head">
+          <span className="ob-live-dot" />
+          <b>AI 同伴群聊</b>
+          <span className="ob-chat-dots">•••</span>
+        </div>
+        <div className="ob-forum-chat-line">
+          <span className="ob-mini-ava warm">杨</span>
+          <p>先别责怪自己，慢慢来</p>
+        </div>
+        <div className="ob-forum-chat-line">
+          <span className="ob-mini-ava cool">苗</span>
+          <p>那我们把目标拆小一点？</p>
+        </div>
+        <div className="ob-forum-chat-typing">
+          <i />
+          <i />
+          <i />
         </div>
       </div>
     </div>
@@ -211,55 +238,20 @@ function ProfileMock() {
         <ul className="ob-profile-rows">
           <li>
             <span className="ob-row-ico purple">↗</span>
-            我开启过的事
-            <em>5 次</em>
+            我的任务
+            <em>3 件</em>
           </li>
           <li>
             <span className="ob-row-ico amber">▤</span>
-            我的心情卡片
+            我的卡片
             <Chevron />
           </li>
           <li>
             <span className="ob-row-ico blue">◔</span>
-            我收藏的回应
+            我帮过的人
             <Chevron />
           </li>
         </ul>
-      </div>
-    </div>
-  );
-}
-
-function ChatMock() {
-  return (
-    <div className="ob-mock ob-chat" aria-hidden="true">
-      <div className="ob-chat-head">
-        <span className="ob-chat-back">‹</span>
-        <strong>AI 同伴群聊</strong>
-        <span className="ob-chat-dots">•••</span>
-      </div>
-      <div className="ob-chat-chips">
-        <span>拆解小目标</span>
-        <span>聊聊情绪</span>
-        <span>给你建议</span>
-      </div>
-      <div className="ob-chat-lines">
-        <div className="ob-line right">
-          <span className="ob-mini-ava warm">我</span>
-          <p className="me">我今天有点卡住了</p>
-        </div>
-        <div className="ob-line">
-          <p className="soft">先别责怪自己，慢慢来</p>
-          <span className="ob-mini-ava cool">顾</span>
-        </div>
-        <div className="ob-line">
-          <p className="warm">那我们把目标拆小一点？</p>
-          <span className="ob-mini-ava sand">苗</span>
-        </div>
-        <div className="ob-line right">
-          <p className="peach">好，那就从 5 分钟开始</p>
-          <span className="ob-mini-ava warm">我</span>
-        </div>
       </div>
     </div>
   );
@@ -270,18 +262,14 @@ function Visual({ kind }: { kind: Slide['visual'] }) {
   if (kind === 'monitor') return <img className="ob-art monitor" src={monitorArt} alt="" />;
   if (kind === 'goal') return <GoalMock />;
   if (kind === 'forum') return <ForumMock />;
-  if (kind === 'profile') return <ProfileMock />;
-  return <ChatMock />;
+  return <ProfileMock />;
 }
 
-export default function Onboarding({ onNavigate, onClose }: Props) {
+export default function Onboarding({ onClose }: Props) {
   const [i, setI] = useState(0);
-  const [extra, setExtra] = useState(false);
-  const slide = extra ? EXTRA : SLIDES[i];
+  const slide = SLIDES[i];
   const last = i === SLIDES.length - 1;
-  const dialogRef = useDialogFocus<HTMLDivElement>(() =>
-    extra ? setExtra(false) : onClose(),
-  );
+  const dialogRef = useDialogFocus<HTMLDivElement>(() => onClose());
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -293,7 +281,6 @@ export default function Onboarding({ onNavigate, onClose }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (extra) return;
       if (e.key === 'ArrowRight') {
         if (last) onClose();
         else setI(i + 1);
@@ -303,25 +290,11 @@ export default function Onboarding({ onNavigate, onClose }: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [extra, i, last, onClose]);
+  }, [i, last, onClose]);
 
   const next = () => {
     if (last) onClose();
     else setI(i + 1);
-  };
-
-  const primary = () => {
-    if (!extra) {
-      next();
-      return;
-    }
-    onNavigate('room');
-    onClose();
-  };
-
-  const secondary = () => {
-    if (extra) setExtra(false);
-    else onClose();
   };
 
   return (
@@ -336,7 +309,7 @@ export default function Onboarding({ onNavigate, onClose }: Props) {
       <span className="ob-brand">Start Now</span>
 
       <div className="ob-card">
-        <div className={`ob-main${extra ? ' extra' : ''}`} key={extra ? 'extra' : i}>
+        <div className="ob-main" key={i}>
           <div className="ob-visual">
             <Visual kind={slide.visual} />
           </div>
@@ -344,34 +317,24 @@ export default function Onboarding({ onNavigate, onClose }: Props) {
             <h2>{slide.title}</h2>
             <p className="ob-lead">{slide.lead}</p>
             <p className="ob-body">{slide.body}</p>
-            <div className={`ob-actions${!extra && i >= 2 ? ' stacked' : ''}`}>
-              <button className="ob-primary" data-autofocus onClick={primary}>
+            <div className="ob-actions">
+              <button className="ob-primary" data-autofocus onClick={next}>
                 {slide.primary}
               </button>
-              <button className="ob-secondary" onClick={secondary}>
-                {slide.secondary}
-              </button>
+              {slide.secondary && (
+                <button className="ob-secondary" onClick={onClose}>
+                  {slide.secondary}
+                </button>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       <div className="ob-foot">
-        {extra ? (
-          <span className="ob-extra-tag">额外功能</span>
-        ) : (
-          <button type="button" className="ob-extra-link" onClick={() => setExtra(true)}>
-            额外功能
-          </button>
-        )}
-        {!extra && (
-          <span className="ob-step" aria-label={`第 ${i + 1} 步，共 ${SLIDES.length} 步`}>
-            <span className="ob-step-num">{i + 1}</span>
-            <span>
-              {i + 1} / {SLIDES.length}
-            </span>
-          </span>
-        )}
+        <span className="ob-step" aria-label={`第 ${i + 1} 步，共 ${SLIDES.length} 步`}>
+          {i + 1} / {SLIDES.length}
+        </span>
       </div>
     </div>
   );

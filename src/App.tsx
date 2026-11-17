@@ -174,9 +174,7 @@ export default function App() {
   const [working, setWorking] = useState(false);
   const [toast, setToast] = useState('');
   const [onboardOpen, setOnboardOpen] = useState(
-    () =>
-      new URLSearchParams(window.location.search).has('onboard') ||
-      localStorage.getItem('startnow.onboarded') !== '1',
+    () => localStorage.getItem('startnow.onboarded') !== '1',
   );
   const [guideDismissed, setGuideDismissed] = useState(
     () => localStorage.getItem(GUIDE_DISMISSED_KEY) === '1',
@@ -216,6 +214,9 @@ export default function App() {
   useEffect(() => saveIdentity(identity), [identity]);
   useEffect(() => saveTodos(todos), [todos]);
   useEffect(() => localStorage.setItem('startnow.homeTab', homeTab), [homeTab]);
+  useEffect(() => {
+    if (onboardOpen) localStorage.setItem('startnow.onboarded', '1');
+  }, [onboardOpen]);
 
   useEffect(() => {
     const id = window.setInterval(() => refreshClock((n) => n + 1), 60_000);
@@ -799,6 +800,30 @@ export default function App() {
   const doneToday =
     todos.filter((t) => t.doneAt && t.doneAt >= todayStart).length +
     myCards.filter((c) => c.doneAt && c.doneAt >= todayStart).length;
+  const profileStats = useMemo(() => {
+    const stamps = [
+      ...todos.filter((t) => t.doneAt).map((t) => t.doneAt as number),
+      ...myCards.filter((c) => c.doneAt).map((c) => c.doneAt as number),
+    ];
+    const day = 86_400_000;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const days = new Set(
+      stamps.map((ts) => {
+        const d = new Date(ts);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime();
+      }),
+    );
+    let cursor = start.getTime();
+    if (!days.has(cursor)) cursor -= day;
+    let streak = 0;
+    while (days.has(cursor)) {
+      streak += 1;
+      cursor -= day;
+    }
+    return { started: myCards.length + todos.length, streak, done: stamps.length };
+  }, [myCards, todos]);
   const notices = useMemo(() => {
     const out: { card: Card; comment: Comment; persona?: Persona }[] = [];
     cards.forEach((c) => {
@@ -1353,16 +1378,22 @@ export default function App() {
             </div>
             <div className="profile-stats">
               <div className="stat">
-                <b>{myCards.length}</b>
-                <span>发过卡</span>
+                <b>
+                  {profileStats.started} <i>次</i>
+                </b>
+                <span>试着启动</span>
               </div>
               <div className="stat">
-                <b>{helped.length}</b>
-                <span>帮过人</span>
+                <b>
+                  {profileStats.streak} <i>天</i>
+                </b>
+                <span>坚持</span>
               </div>
               <div className="stat">
-                <b>{doneToday}</b>
-                <span>今日完成</span>
+                <b>
+                  {profileStats.done} <i>件</i>
+                </b>
+                <span>完成</span>
               </div>
             </div>
           </section>
@@ -1681,12 +1712,7 @@ export default function App() {
 
       {onboardOpen && (
         <Onboarding
-          onNavigate={(next, tab) => {
-            if (tab) setHomeTab(tab);
-            setView(next);
-          }}
           onClose={() => {
-            localStorage.setItem('startnow.onboarded', '1');
             setOnboardOpen(false);
           }}
         />

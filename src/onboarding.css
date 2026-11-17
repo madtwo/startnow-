@@ -117,13 +117,6 @@
   margin-top: 34px;
 }
 
-.ob-actions.stacked {
-  flex-direction: column;
-  align-items: stretch;
-  max-width: 336px;
-  gap: 12px;
-}
-
 .ob-primary,
 .ob-secondary {
   min-width: 172px;
@@ -166,14 +159,8 @@
   color: #5b5fe8;
 }
 
-.ob-actions.stacked .ob-primary,
-.ob-actions.stacked .ob-secondary {
-  width: 100%;
-}
-
 .ob-primary:focus-visible,
-.ob-secondary:focus-visible,
-.ob-extra-link:focus-visible {
+.ob-secondary:focus-visible {
   outline: 2px solid #5b5fe8;
   outline-offset: 3px;
 }
@@ -182,49 +169,13 @@
   position: fixed;
   right: 44px;
   bottom: 28px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.ob-extra-link {
-  padding: 6px 4px;
-  border: 0;
-  background: none;
-  color: #6f6b7d;
-  font-family: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.ob-extra-link:hover {
-  color: #5b5fe8;
-}
-
-.ob-extra-tag {
-  color: #6f6b7d;
-  font-size: 13px;
 }
 
 .ob-step {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   color: #3b3854;
   font-size: 14px;
   font-weight: 600;
-}
-
-.ob-step-num {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: #ece7ff;
-  color: #5b5fe8;
-  font-size: 12px;
-  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 /* ---------- 左侧示意：通用 ---------- */
@@ -259,10 +210,6 @@
 
 .ob-mini-ava.cool {
   background: linear-gradient(135deg, #9fb8e8, #6f8fd1);
-}
-
-.ob-mini-ava.sand {
-  background: linear-gradient(135deg, #e8cb9d, #c9a367);
 }
 
 /* ---------- 2 / 5 目标清单 ---------- */
@@ -401,40 +348,53 @@
   box-shadow: 0 8px 18px rgba(91, 95, 232, 0.24);
 }
 
-/* ---------- 3 / 5 同伴广场 ---------- */
+/* ---------- 3 / 5 同伴广场 + 群聊 ---------- */
+
+.ob-forum-stack {
+  width: min(100%, 430px);
+}
 
 .ob-forum {
-  width: min(100%, 430px);
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.72);
+  width: 100%;
+  padding: 14px 14px 34px;
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .ob-forum-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 10px;
 }
 
-.ob-forum-head strong {
-  flex: none;
+.ob-forum-title strong {
+  display: block;
   color: #221f2e;
   font-size: 15px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
+.ob-forum-title span {
+  display: block;
+  margin-top: 2px;
+  color: #8a8698;
+  font-size: 9.5px;
+}
+
 .ob-forum-search {
   display: flex;
   align-items: center;
   gap: 5px;
-  flex: 1;
-  min-width: 0;
-  height: 30px;
-  padding: 0 10px;
+  flex: none;
+  width: 132px;
+  height: 29px;
+  padding: 0 9px;
+  border: 1px solid #f0ecf8;
   border-radius: 999px;
   background: #fff;
   color: #9b96a9;
-  font-size: 10.5px;
+  font-size: 10px;
 }
 
 .ob-forum-search svg {
@@ -443,148 +403,240 @@
   flex: none;
 }
 
-.ob-forum-me {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #b7a6f6, #8b74f0);
-  color: #fff;
-  font-size: 10px;
-}
-
 .ob-forum-chips {
   display: flex;
-  gap: 6px;
-  margin: 12px 0;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 11px 0;
 }
 
 .ob-forum-chips span {
   padding: 4px 9px;
   border-radius: 999px;
-  background: #f5f1fc;
-  color: #6c5ce7;
-  font-size: 10.5px;
+  background: #fff;
+  color: #6f6b7d;
+  font-size: 9.5px;
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(80, 68, 140, 0.05);
 }
 
-.ob-forum-chips span:nth-child(2) {
-  background: #fdf2e4;
-  color: #a8763a;
-}
-
-.ob-forum-chips span:nth-child(3) {
-  background: #fdeeea;
-  color: #b85c4f;
+.ob-forum-chips span.on {
+  background: #efeaff;
+  color: #6c5ce7;
 }
 
 .ob-forum-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.42fr) minmax(0, 0.88fr);
-  gap: 9px;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 8px;
   align-items: start;
 }
 
-.ob-post {
-  padding: 11px;
-  border-radius: 15px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(80, 68, 140, 0.07);
-}
-
-.ob-post header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #8a8698;
-  font-size: 9.5px;
-}
-
-.ob-post h4 {
-  margin: 8px 0 5px;
-  color: #232130;
-  font-size: 13.5px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.ob-post p {
-  display: -webkit-box;
-  margin: 0;
-  overflow: hidden;
-  color: #8a8698;
-  font-size: 9px;
-  line-height: 1.65;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.ob-post-photos {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-  margin-top: 8px;
-}
-
-.ob-post-photos span,
-.ob-photo {
-  display: block;
-  height: 80px;
-  border-radius: 8px;
-  background:
-    linear-gradient(90deg, transparent 46%, rgba(255, 255, 255, 0.5) 47%, transparent 54%),
-    linear-gradient(0deg, transparent 62%, rgba(255, 255, 255, 0.42) 63%, transparent 70%),
-    linear-gradient(135deg, #e6e1f1 0%, #cfd8e6 52%, #eee7df 100%);
-}
-
-.ob-forum-side {
+.ob-threads {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 7px;
 }
 
-.ob-ai-note {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px;
+.ob-thread {
+  padding: 10px;
   border-radius: 13px;
   background: #fff;
   box-shadow: 0 2px 8px rgba(80, 68, 140, 0.07);
 }
 
-.ob-ai-tag {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #9fb6ff, #6f8ef0);
-  color: #fff;
+.ob-thread header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ob-thread h4 {
+  margin: 0;
+  color: #232130;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.ob-thread-tag {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: #efeaff;
+  color: #6c5ce7;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.ob-thread p {
+  display: -webkit-box;
+  margin: 6px 0 8px;
+  overflow: hidden;
+  color: #7f7a8f;
   font-size: 9px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.ob-thread footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #9b96a9;
+  font-size: 8.5px;
+}
+
+.ob-thread .ob-mini-ava {
+  width: 16px;
+  height: 16px;
+  font-size: 8px;
+}
+
+.ob-thread-name {
+  color: #5d596f;
+  font-weight: 600;
+}
+
+.ob-thread footer em {
+  padding: 1px 3px;
+  border-radius: 4px;
+  background: #efeaff;
+  color: #6c5ce7;
+  font-size: 7px;
+  font-style: normal;
   font-weight: 700;
 }
 
-.ob-ai-note p {
+.ob-thread-time {
+  margin-left: auto;
+}
+
+.ob-thread-like {
+  flex: none;
+}
+
+.ob-ai-watch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(80, 68, 140, 0.07);
+}
+
+.ob-ai-watch b {
+  color: #2d2a3d;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.ob-ai-watch p {
   margin: 0;
+  padding: 6px 7px;
+  border-radius: 8px;
+  font-size: 8.5px;
+  line-height: 1.5;
+}
+
+.ob-ai-watch .lav {
+  background: #efeaff;
+  color: #574b9a;
+}
+
+.ob-ai-watch .mint {
+  background: #e8f8f0;
+  color: #356e52;
+}
+
+.ob-ai-watch .peach {
+  background: #fdeeea;
+  color: #9c4b40;
+}
+
+.ob-ai-watch > span {
+  color: #aaa5ba;
+  font-size: 7.5px;
+  line-height: 1.4;
+}
+
+.ob-forum-chat {
+  position: relative;
+  width: 226px;
+  margin: -20px 8px 0 auto;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 2px 6px rgba(80, 68, 140, 0.06),
+    0 18px 34px rgba(80, 68, 140, 0.16);
+}
+
+.ob-forum-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #f1edf8;
+}
+
+.ob-forum-chat-head b {
+  flex: 1;
+  color: #2d2a3d;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.ob-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #5fbf8f;
+  box-shadow: 0 0 0 3px rgba(95, 191, 143, 0.16);
+}
+
+.ob-chat-dots {
+  color: #b3aec1;
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+
+.ob-forum-chat-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.ob-forum-chat-line .ob-mini-ava {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+}
+
+.ob-forum-chat-line p {
+  margin: 0;
+  padding: 5px 8px;
+  border-radius: 9px;
+  background: #f4f1fb;
   color: #4a4658;
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1.45;
 }
 
-.ob-photo.tall {
-  height: 92px;
+.ob-forum-chat-typing {
+  display: flex;
+  gap: 3px;
+  margin: 8px 0 0 23px;
 }
 
-.ob-photo {
-  height: 68px;
-  background:
-    linear-gradient(90deg, transparent 46%, rgba(255, 255, 255, 0.55) 47%, transparent 54%),
-    linear-gradient(0deg, transparent 60%, rgba(255, 255, 255, 0.46) 61%, transparent 68%),
-    linear-gradient(135deg, #ece7f3 0%, #d9ddeb 55%, #efe9e3 100%);
+.ob-forum-chat-typing i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #c9c3da;
 }
 
 /* ---------- 4 / 5 我的 ---------- */
@@ -752,105 +804,6 @@
   color: #557fd1;
 }
 
-/* ---------- 额外功能：群聊 ---------- */
-
-.ob-chat {
-  width: min(100%, 356px);
-  padding: 15px;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.ob-chat-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #f1edf8;
-}
-
-.ob-chat-head strong {
-  flex: 1;
-  color: #26232f;
-  font-size: 12.5px;
-  font-weight: 700;
-  text-align: center;
-}
-
-.ob-chat-back {
-  color: #6c5ce7;
-  font-size: 20px;
-  line-height: 1;
-}
-
-.ob-chat-dots {
-  color: #b3aec1;
-  font-size: 10px;
-  letter-spacing: 1px;
-}
-
-.ob-chat-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin: 10px 0 4px;
-}
-
-.ob-chat-chips span {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: #f6f3fc;
-  color: #6f6b7d;
-  font-size: 9.5px;
-}
-
-.ob-chat-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  margin-top: 8px;
-}
-
-.ob-line {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.ob-line.right {
-  justify-content: flex-end;
-}
-
-.ob-line p {
-  max-width: 210px;
-  margin: 0;
-  padding: 7px 10px;
-  border-radius: 12px;
-  background: #f4f1fb;
-  color: #4a4658;
-  font-size: 10.5px;
-  line-height: 1.55;
-}
-
-.ob-line p.me {
-  background: #ece7ff;
-  color: #443d70;
-}
-
-.ob-line p.soft {
-  background: #e8f8f0;
-  color: #356e52;
-}
-
-.ob-line p.warm {
-  background: #fdf2e4;
-  color: #8a5f2e;
-}
-
-.ob-line p.peach {
-  background: #fdeeea;
-  color: #9c4b40;
-}
-
 /* ---------- 响应式 ---------- */
 
 @media (max-width: 1080px) {
@@ -906,6 +859,10 @@
     width: min(100%, 380px);
   }
 
+  .ob-forum-stack {
+    width: min(100%, 380px);
+  }
+
   .ob-copy h2 {
     font-size: clamp(26px, 5vw, 34px);
   }
@@ -958,20 +915,19 @@
   }
 
   .ob-forum {
-    padding: 11px;
+    padding: 11px 11px 28px;
   }
 
-  .ob-post-photos span,
-  .ob-photo {
-    height: 58px;
+  .ob-forum-grid {
+    grid-template-columns: minmax(0, 1fr) 104px;
   }
 
-  .ob-photo.tall {
-    height: 70px;
+  .ob-forum-chat {
+    width: 210px;
+    margin: -14px 4px 0 auto;
   }
 
-  .ob-actions,
-  .ob-actions.stacked {
+  .ob-actions {
     flex-direction: column;
     align-items: stretch;
     max-width: none;
@@ -988,22 +944,10 @@
   .ob-foot {
     right: 16px;
     bottom: 16px;
-    gap: 12px;
-  }
-
-  .ob-extra-link,
-  .ob-extra-tag {
-    font-size: 12px;
   }
 
   .ob-step {
     font-size: 13px;
-  }
-
-  .ob-step-num {
-    width: 26px;
-    height: 26px;
-    font-size: 11px;
   }
 }
 
@@ -1016,6 +960,14 @@
     padding-top: 16px;
   }
 
+  .ob-card {
+    padding: 18px 14px 22px;
+  }
+
+  .ob-main {
+    gap: 14px;
+  }
+
   .ob-art {
     max-width: 188px;
   }
@@ -1026,6 +978,35 @@
 
   .ob-lead {
     font-size: 15px;
+  }
+
+  .ob-body {
+    font-size: 13.5px;
+    line-height: 1.7;
+  }
+
+  .ob-forum {
+    padding-bottom: 26px;
+  }
+
+  .ob-forum-search {
+    width: 116px;
+  }
+
+  .ob-forum-chips {
+    margin: 8px 0;
+  }
+
+  .ob-thread:nth-child(2),
+  .ob-ai-watch p:nth-of-type(3),
+  .ob-ai-watch > span,
+  .ob-forum-chat-typing {
+    display: none;
+  }
+
+  .ob-forum-chat {
+    width: 196px;
+    margin-top: -12px;
   }
 }
 
