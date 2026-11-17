@@ -871,6 +871,21 @@ export default function App() {
             >
               论坛
             </button>
+            <a className="nav-room" href="/room.html" title="进入群聊">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 5.5h14v9.5H9l-4 3.5z" />
+                <path d="M9 9.5h6M9 12h4" />
+              </svg>
+              群聊
+            </a>
             <button
               type="button"
               className={view === 'profile' || view === 'mine' ? 'active' : ''}
@@ -1617,36 +1632,46 @@ export default function App() {
           [
             ['step', '试试'],
             ['forum', '论坛'],
+            ['room', '群聊'],
             ['post', '发一张卡'],
             ['profile', '我的'],
           ] as [string, string][]
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            className={`tab ${
-              (id === 'step' && view === 'home' && homeTab === 'step') ||
-              (id === 'forum' &&
-                ((view === 'home' && homeTab === 'forum') || view === 'detail')) ||
-              (id === 'profile' && (view === 'profile' || view === 'mine')) ||
-              (id !== 'step' && id !== 'forum' && id !== 'profile' && view === id)
-                ? 'on'
-                : ''
-            }`}
-            onClick={() => {
-              if (id === 'step') {
-                setHomeTab('step');
-                setView('home');
-              } else if (id === 'forum') {
-                setHomeTab('forum');
-                setView('home');
-              } else {
-                setView(id as View);
-              }
-            }}
-          >
-            {label}
-          </button>
-        ))}
+        ).map(([id, label]) => {
+          if (id === 'room') {
+            return (
+              <a key="room" className="tab" href="/room.html">
+                群聊
+              </a>
+            );
+          }
+          return (
+            <button
+              key={id}
+              className={`tab ${
+                (id === 'step' && view === 'home' && homeTab === 'step') ||
+                (id === 'forum' &&
+                  ((view === 'home' && homeTab === 'forum') || view === 'detail')) ||
+                (id === 'profile' && (view === 'profile' || view === 'mine')) ||
+                (id !== 'step' && id !== 'forum' && id !== 'profile' && view === id)
+                  ? 'on'
+                  : ''
+              }`}
+              onClick={() => {
+                if (id === 'step') {
+                  setHomeTab('step');
+                  setView('home');
+                } else if (id === 'forum') {
+                  setHomeTab('forum');
+                  setView('home');
+                } else {
+                  setView(id as View);
+                }
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
         <button className="tab" onClick={() => setDrawerOpen(true)}>
           便签{noteCount > 0 ? ` · ${noteCount}` : ''}
         </button>
