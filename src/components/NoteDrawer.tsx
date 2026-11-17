@@ -38,7 +38,11 @@ export default function NoteDrawer({
       return {
         key: card.id,
         text: card.note?.text ?? '',
-        meta: giver ? `${giver.name} 给的` : '来自一张卡',
+        meta: giver
+          ? card.note?.sourceCommentId
+            ? `从${giver.name}的回复采用`
+            : `${giver.name} 给的`
+          : '来自一张卡',
         at: card.doneAt ?? card.createdAt,
         brag: () => onBragNote(card.note?.text ?? ''),
       };
@@ -109,7 +113,13 @@ export default function NoteDrawer({
                   onClick={() => onOpenCard(card)}
                 >
                   <span className="drawer-text">{card.note?.text}</span>
-                  <span className="drawer-meta">{giver ? `${giver.name} 给的` : '来自一张卡'}</span>
+                  <span className="drawer-meta">
+                    {giver
+                      ? card.note?.sourceCommentId
+                        ? `从${giver.name}的回复采用`
+                        : `${giver.name} 给的`
+                      : '来自一张卡'}
+                  </span>
                 </button>
               );
             })}

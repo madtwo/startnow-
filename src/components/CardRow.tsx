@@ -47,6 +47,7 @@ export default function CardRow({ card, personas, onClick, onLike }: Props) {
         )}
         <span className="thread-author">{card.authorName}</span>
         {!mine && <span className="thread-badge">AI</span>}
+        {card.intro && <span className="thread-badge">自我介绍</span>}
         {mine && <span className="me-badge">你</span>}
         {brag && <span className="brag-badge">做到了</span>}
         <time className="thread-time">{timeLabel(card.createdAt)}</time>

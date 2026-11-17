@@ -26,6 +26,25 @@ export class LlmError extends Error {
   }
 }
 
+/** 避免把浏览器 Bearer Key 通过明文 HTTP 或跨站 // URL 发给未知接口。 */
+export function validateLlmEndpointBase(baseUrl: string): void {
+  const value = baseUrl.trim();
+  if (value.startsWith('/') && !value.startsWith('//') && !value.includes('\\') &&
+      !/[?#]/.test(value)) return; // 同源代理路径，禁止协议相对 URL。
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new LlmError('config', '模型 Base URL 必须是 HTTPS 地址或同源代理路径。');
+  }
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const loopback = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  if (url.username || url.password || url.search || url.hash ||
+      !(url.protocol === 'https:' || (url.protocol === 'http:' && loopback))) {
+    throw new LlmError('config', '模型接口必须使用 HTTPS；仅允许 localhost/127.0.0.1/::1 的 HTTP 开发地址。不能使用含凭据、查询参数或片段的 Base URL。');
+  }
+}
+
 const endpoint = (baseUrl: string) =>
   `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`;
 
@@ -165,7 +184,7 @@ const chatHeaders = (config: LlmConfig, sessionId?: string) => {
   return headers;
 };
 
-export async function streamChat(opts: {
+type StreamChatOptions = {
   config: LlmConfig;
   messages: ChatMessage[];
   signal: AbortSignal;
@@ -173,7 +192,9 @@ export async function streamChat(opts: {
   onDelta: (text: string) => void;
   maxTokens?: number;
   lowEffort?: boolean;
-}): Promise<string> {
+};
+
+async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
   const { config, messages, signal, sessionId, onDelta } = opts;
   const maxTokens = opts.maxTokens ?? 600;
   const lowEffort = opts.lowEffort ?? true;
@@ -183,6 +204,7 @@ export async function streamChat(opts: {
   if (!config.baseUrl.trim() || !config.model.trim() || !config.apiKey.trim()) {
     throw new LlmError('config', '还没填好接口地址、模型名或密钥。');
   }
+  validateLlmEndpointBase(config.baseUrl);
 
   let res: Response;
   try {
@@ -216,19 +238,22 @@ export async function streamChat(opts: {
   if (!reader) throw new LlmError('server', '响应为空，服务没有返回内容。');
 
   const decoder = new TextDecoder();
+  const MAX_SSE_EVENT = 256_000;
   let buffer = '';
   let full = '';
-  const parseLine = (line: string) => {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('data:')) return;
-    const payload = trimmed.slice(5).trim();
-    if (!payload || payload === '[DONE]') return;
-    let json: any;
+  let dataLines: string[] = [];
+  let eventSize = 0;
+
+  const parsePayload = (payload: string): unknown => {
+    if (payload === '[DONE]') return null;
     try {
-      json = JSON.parse(payload);
+      return JSON.parse(payload);
     } catch {
       throw new LlmError('server', '模型返回了无法解析的流式数据。');
     }
+  };
+  const applyPayload = (json: any) => {
+    if (!json) return;
     if (json?.error) {
       throw new LlmError('server', `模型返回错误：${String(json.error?.message ?? 'stream error').slice(0, 160)}`);
     }
@@ -238,6 +263,34 @@ export async function streamChat(opts: {
       if (full.length > 20_000) throw new LlmError('server', '模型输出超过安全长度限制。');
       onDelta(delta);
     }
+  };
+  const flushEvent = () => {
+    if (!dataLines.length) return;
+    const lines = dataLines;
+    dataLines = [];
+    eventSize = 0;
+    const joined = lines.join('\n').trim();
+    try {
+      applyPayload(parsePayload(joined));
+    } catch (err) {
+      // SSE 正规格式是多行 data 合成一个 event。个别兼容服务缺少空行，
+      // 此时仅在每一行自身都是合法 JSON/[DONE] 时，宽容处理为独立事件。
+      if (lines.length <= 1 || !(err instanceof LlmError) || !err.message.includes('无法解析')) throw err;
+      const individual = lines.map((line) => parsePayload(line.trim()));
+      individual.forEach(applyPayload);
+    }
+  };
+  const parseLine = (raw: string) => {
+    const line = raw.replace(/\r$/, '');
+    if (!line) {
+      flushEvent();
+    } else if (line.startsWith('data:')) {
+      const content = line.slice(5).replace(/^ /, '');
+      eventSize += content.length;
+      if (eventSize > MAX_SSE_EVENT) throw new LlmError('server', '模型单帧流式数据过长。');
+      dataLines.push(content);
+    }
+    // 忽略 SSE 的 :ping、event:、id:、retry: 字段。
   };
 
   try {
@@ -251,12 +304,19 @@ export async function streamChat(opts: {
         buffer = buffer.slice(newline + 1);
         newline = buffer.indexOf('\n');
       }
+      if (buffer.length > MAX_SSE_EVENT) throw new LlmError('server', '模型单行流式数据过长。');
     }
     buffer += decoder.decode();
-    if (buffer.trim()) parseLine(buffer); // 不丢弃末尾没有换行的最后一帧
+    if (buffer) parseLine(buffer); // 支持末尾没有换行的最后一帧
+    flushEvent();
   } catch (err) {
     if (err instanceof LlmError) throw err;
-    throw requestError(err, signal);
+    const classified = requestError(err, signal);
+    // 接口流已经启动却在读取中报错：不要将半截回复当成正常结果。
+    if (classified instanceof LlmError && classified.kind === 'network' && !signal.aborted) {
+      throw new LlmError('network', '模型响应中途断开，未保存不完整回复；稍后再试。');
+    }
+    throw classified;
   } finally {
     reader.releaseLock();
   }
@@ -265,11 +325,39 @@ export async function streamChat(opts: {
   return full;
 }
 
+/**
+ * 主模型失败时自动尝试备用模型。
+ * 只有“还没输出任何文字”的失败才切换；已经吐了半句再断流不重试，避免重复。
+ */
+export async function streamChat(opts: StreamChatOptions): Promise<string> {
+  const fallback = opts.config.fallbackModel?.trim();
+  if (!fallback || fallback === opts.config.model.trim()) return streamChatOnce(opts);
+
+  let emitted = false;
+  try {
+    return await streamChatOnce({
+      ...opts,
+      onDelta: (text) => {
+        if (text) emitted = true;
+        opts.onDelta(text);
+      },
+    });
+  } catch (err) {
+    if (emitted || opts.signal.aborted) throw err;
+    if (!(err instanceof LlmError) || err.kind === 'auth' || err.kind === 'config') throw err;
+    return streamChatOnce({
+      ...opts,
+      config: { ...opts.config, model: fallback },
+    });
+  }
+}
+
 export async function testConnection(config: LlmConfig, signal?: AbortSignal): Promise<string> {
   if (isMock(config)) return '演示模式可用，不需要 API。';
   if (!config.baseUrl.trim() || !config.model.trim() || !config.apiKey.trim()) {
     throw new LlmError('config', '先把接口地址、模型名和密钥填完整。');
   }
+  validateLlmEndpointBase(config.baseUrl);
 
   let res: Response;
   try {

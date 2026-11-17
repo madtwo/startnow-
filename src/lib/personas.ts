@@ -160,9 +160,8 @@ const topTroubles = (p: Persona) =>
     .join('、');
 
 export function buildPersonaPrompt(p: Persona): string {
-  const week = p.weekLog.length
-    ? `\n最近发生的事：\n${p.weekLog.map((f) => `- ${f.text}`).join('\n')}`
-    : '';
+  // weekLog 可能包含来自模型或用户的历史文本，不得升格进入 system 角色。
+  // 调用方通过 withUntrustedHistory 将它放在 user 消息中。
   return [
     `你是 ${p.name}（${p.handle}），${p.tagline}。${genderLine(p)}${p.age} 岁。${schoolLine(p)}`,
     `你的背景：${p.background}`,
@@ -170,7 +169,7 @@ export function buildPersonaPrompt(p: Persona): string {
     `性格：${p.personality}`,
     `说话习惯：${p.speech}`,
     `你的方式：${p.approach}`,
-    `你更常卡在：${topTroubles(p)}${week}`,
+    `你更常卡在：${topTroubles(p)}`,
     `你和对方熟到什么程度：${p.intimacy}/100（不熟就只说轻的，别一上来倒最重的）`,
     '你是同伴，不是导师：可以给一个具体的小建议，也可以不给；不总结对方的人生，不替对方规划。',
     '一点一点透露信息，不要一口气交代自己的档案：',

@@ -1,0 +1,389 @@
+import type {
+  Card,
+  Identity,
+  LlmConfig,
+  Message,
+  Persona,
+  Room,
+  RoomSettings,
+  Todo,
+  World,
+  WorldSettings,
+} from '../types';
+import { defaultConfig, PRESETS } from '../config/providers';
+import { defaultPersonas } from './personas';
+import { buildSeedCards } from './seed';
+
+const KEYS = {
+  config: 'shudong.config.v1',
+  cards: 'shudong.cards.v6',
+  personas: 'shudong.personas.v3',
+  world: 'shudong.world.v1',
+  settings: 'shudong.settings.v1',
+  todos: 'shudong.todos.v1',
+  identity: 'shudong.identity.v2',
+  identityLegacy: 'shudong.identity.v1',
+  room: 'shudong.room.v1',
+  archives: 'shudong.archives.v1',
+  roomSettings: 'shudong.roomsettings.v1',
+};
+
+const LEGACY_POST_KEYS = ['shudong.posts.v3', 'shudong.posts.v2', 'shudong.posts.v1'];
+const DAY = 86_400_000;
+
+const read = (key: string): unknown => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const write = (key: string, value: unknown) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // 隐私模式或空间不足时静默失败，不影响本次会话
+  }
+};
+
+export const defaultSettings: WorldSettings = {
+  paused: false,
+  maxArrivals: 3,
+  aiCardLimit: 2,
+  dailyCalls: 60,
+  maxCallsPerTick: 2,
+  speed: 6,
+  baselineExtra: '',
+};
+
+export const dayKey = (ts: number) => new Date(ts).toDateString();
+
+export const emptyWorld = (now = Date.now()): World => ({
+  lastTickAt: now,
+  dayKey: dayKey(now),
+  callsToday: 0,
+  logs: [],
+});
+
+export function loadConfig(): LlmConfig {
+  const saved = read(KEYS.config) as Partial<LlmConfig> | null;
+  if (!saved || typeof saved !== 'object') return defaultConfig;
+  const providerId = PRESETS.some((p) => p.id === saved.providerId)
+    ? saved.providerId!
+    : defaultConfig.providerId;
+  return {
+    providerId,
+    baseUrl: typeof saved.baseUrl === 'string' ? saved.baseUrl : defaultConfig.baseUrl,
+    model: typeof saved.model === 'string' ? saved.model : defaultConfig.model,
+    apiKey: typeof saved.apiKey === 'string' ? saved.apiKey : '',
+    fallbackModel:
+      typeof saved.fallbackModel === 'string'
+        ? saved.fallbackModel
+        : PRESETS.find((p) => p.id === providerId)?.fallbackModel ?? '',
+  };
+}
+
+export const saveConfig = (config: LlmConfig) => write(KEYS.config, config);
+
+const legacyAny = () =>
+  LEGACY_POST_KEYS.some((key) => localStorage.getItem(key) !== null);
+
+const hasLegacyCards = () =>
+  ['shudong.cards.v5', 'shudong.cards.v4', 'shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'].some(
+    (key) => localStorage.getItem(key) !== null,
+  );
+
+export const isFirstRun = () =>
+  localStorage.getItem(KEYS.cards) === null && !legacyAny() && !hasLegacyCards();
+
+export const needsUpgrade = () =>
+  localStorage.getItem(KEYS.cards) === null && (legacyAny() || hasLegacyCards());
+
+const retention = (cards: Card[], now = Date.now()) =>
+  cards
+    .filter((c) => now - c.createdAt < 14 * DAY)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 200);
+
+const normalizeCard = (raw: Partial<Card>): Card | null => {
+  if (!raw || typeof raw.text !== 'string') return null;
+  const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : Date.now();
+  return {
+    id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
+    authorId: typeof raw.authorId === 'string' ? raw.authorId : 'me',
+    authorName: typeof raw.authorName === 'string' ? raw.authorName : '我',
+    authorKind:
+      raw.authorKind === 'persona' ? 'persona' : raw.authorKind === 'helper' ? 'helper' : 'player',
+    title: typeof raw.title === 'string' ? raw.title : undefined,
+    kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'guide' ? 'guide' : 'worry',
+    likes: typeof raw.likes === 'number' ? raw.likes : 0,
+    helperAt: typeof raw.helperAt === 'number' ? raw.helperAt : undefined,
+    likedByMe: Boolean(raw.likedByMe),
+    text: raw.text,
+    createdAt,
+    status: raw.status ?? 'stuck',
+    arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
+    plan: Array.isArray(raw.plan) ? raw.plan : [],
+    pending: Array.isArray(raw.pending) ? raw.pending : [],
+    comments: Array.isArray(raw.comments) ? raw.comments : [],
+    advice: raw.advice
+      ? { ...raw.advice, text: raw.advice.text ?? '一个办法' }
+      : undefined,
+    note: raw.note
+      ? { ...raw.note, text: raw.note.text ?? '一件小事' }
+      : undefined,
+    doneAt: raw.doneAt,
+    noMemory: raw.noMemory,
+  };
+};
+
+export function loadCards(): Card[] {
+  const saved = read(KEYS.cards);
+  if (Array.isArray(saved)) {
+    return retention(saved.map(normalizeCard).filter((c): c is Card => Boolean(c)));
+  }
+  // 旧版卡片：保留你自己开的卡，AI 的卡换成新种子
+  const legacy =
+    read('shudong.cards.v5') ??
+    read('shudong.cards.v4') ??
+    read('shudong.cards.v3') ??
+    read('shudong.cards.v2') ??
+    read('shudong.cards.v1');
+  if (Array.isArray(legacy)) {
+    const mine = legacy
+      .map(normalizeCard)
+      .filter((c): c is Card => Boolean(c))
+      .filter((c) => c.authorId === 'me');
+    return retention([...mine, ...buildSeedCards()]);
+  }
+  return [];
+}
+
+export const saveCards = (cards: Card[]) => write(KEYS.cards, retention(cards));
+
+function mergePersonas(rows: unknown[]): Persona[] {
+  const defaults = defaultPersonas();
+  const merged = defaults.map((base) => {
+    const found = rows.find((p) => p && (p as Persona).id === base.id) as
+      | Partial<Persona>
+      | undefined;
+    if (!found) return base;
+    return {
+      ...base,
+      ...found,
+      memory: Array.isArray(found.memory) ? found.memory : [],
+      weekLog: Array.isArray(found.weekLog) ? found.weekLog : [],
+      weights: found.weights ?? base.weights,
+      intimacy: typeof found.intimacy === 'number' ? found.intimacy : base.intimacy,
+    } as Persona;
+  });
+  const extra = rows
+    .filter((p) => p && typeof (p as Persona).id === 'string')
+    .filter((p) => (p as Persona).id.startsWith('custom-'))
+    .filter((p) => !defaults.some((d) => d.id === (p as Persona).id))
+    .slice(0, 2)
+    .map((p) => {
+      const row = p as Partial<Persona>;
+      const fallback = defaults[0];
+      return {
+        ...fallback,
+        ...row,
+        id: row.id as string,
+        name: row.name ?? '新同伴',
+        background: row.background ?? '',
+        voice: row.voice ?? '',
+        weights: row.weights ?? fallback.weights,
+        intimacy: typeof row.intimacy === 'number' ? row.intimacy : 10,
+        followUp: row.followUp ?? 'sometimes',
+        memory: Array.isArray(row.memory) ? row.memory : [],
+        weekLog: Array.isArray(row.weekLog) ? row.weekLog : [],
+      } as Persona;
+    });
+  return [...merged, ...extra];
+}
+
+export function loadPersonas(): Persona[] {
+  const saved = read(KEYS.personas);
+  if (!Array.isArray(saved) || !saved.length) return defaultPersonas();
+  return mergePersonas(saved);
+}
+
+export const savePersonas = (personas: Persona[]) => write(KEYS.personas, personas);
+
+export function loadWorld(now = Date.now()): World {
+  const saved = read(KEYS.world) as Partial<World> | null;
+  if (!saved || typeof saved !== 'object') return emptyWorld(now);
+  return {
+    lastTickAt: typeof saved.lastTickAt === 'number' ? saved.lastTickAt : now,
+    dayKey: typeof saved.dayKey === 'string' ? saved.dayKey : dayKey(now),
+    callsToday: typeof saved.callsToday === 'number' ? saved.callsToday : 0,
+    lastBragAt: typeof saved.lastBragAt === 'number' ? saved.lastBragAt : undefined,
+    logs: Array.isArray(saved.logs) ? saved.logs.slice(0, 20) : [],
+  };
+}
+
+export const saveWorld = (world: World) =>
+  write(KEYS.world, { ...world, logs: world.logs.slice(0, 20) });
+
+export function loadSettings(): WorldSettings {
+  const saved = read(KEYS.settings) as Partial<WorldSettings> | null;
+  if (!saved || typeof saved !== 'object') return { ...defaultSettings };
+  return { ...defaultSettings, ...saved, paused: Boolean(saved.paused) };
+}
+
+export const saveSettings = (settings: WorldSettings) => write(KEYS.settings, settings);
+
+export function loadTodos(): Todo[] {
+  const saved = read(KEYS.todos);
+  if (!Array.isArray(saved)) return [];
+  return saved
+    .filter((t): t is Todo => Boolean(t) && typeof t.text === 'string')
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 60);
+}
+
+export const saveTodos = (todos: Todo[]) => write(KEYS.todos, todos.slice(0, 60));
+
+export function loadIdentity(): Identity {
+  const saved = read(KEYS.identity) as Partial<Identity> | null;
+  if (saved && typeof saved.id === 'string' && typeof saved.name === 'string') {
+    return {
+      id: saved.id,
+      name: saved.name,
+      avatarKey: typeof saved.avatarKey === 'string' ? saved.avatarKey : 'petal',
+      bio: typeof saved.bio === 'string' ? saved.bio : '',
+    };
+  }
+  const legacy = read(KEYS.identityLegacy) as Partial<Identity> | null;
+  const identity: Identity = {
+    id: typeof legacy?.id === 'string' ? legacy.id : crypto.randomUUID(),
+    name:
+      typeof legacy?.name === 'string' ? legacy.name : `匿名 · ${Math.floor(100 + Math.random() * 900)}`,
+    avatarKey: 'petal',
+    bio: '',
+  };
+  write(KEYS.identity, identity);
+  return identity;
+}
+
+export const saveIdentity = (identity: Identity) => write(KEYS.identity, identity);
+
+/* ------------------------------------------------------------------ *
+ * 群聊
+ * ------------------------------------------------------------------ */
+
+export const defaultRoomSettings: RoomSettings = {
+  liveliness: 0.5,
+  timeFlow: false,
+  dailyMessages: 400,
+};
+
+export function loadRoomSettings(): RoomSettings {
+  const saved = read(KEYS.roomSettings) as Partial<RoomSettings> | null;
+  if (!saved || typeof saved !== 'object') return { ...defaultRoomSettings };
+  return {
+    liveliness:
+      typeof saved.liveliness === 'number' && Number.isFinite(saved.liveliness)
+        ? Math.max(0, Math.min(1, saved.liveliness))
+        : defaultRoomSettings.liveliness,
+    timeFlow: saved.timeFlow === true,
+    dailyMessages:
+      typeof saved.dailyMessages === 'number' && saved.dailyMessages > 0
+        ? Math.round(saved.dailyMessages)
+        : defaultRoomSettings.dailyMessages,
+  };
+}
+
+export const saveRoomSettings = (settings: RoomSettings) => write(KEYS.roomSettings, settings);
+
+const normalizeRoom = (raw: Partial<Room> | null): Room | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  if (!Array.isArray(raw.messages) || !Array.isArray(raw.cast) || !raw.cast.length) return null;
+  const now = Date.now();
+  return {
+    id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
+    title: typeof raw.title === 'string' ? raw.title : '群聊',
+    createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : now,
+    messages: (raw.messages as Message[]).filter((m) => m && typeof m.text === 'string'),
+    scheduled: Array.isArray(raw.scheduled) ? raw.scheduled : [],
+    steps: Array.isArray(raw.steps) ? raw.steps : [],
+    cast: raw.cast as Persona[],
+    gone: Array.isArray(raw.gone) ? raw.gone : [],
+    lastSeenAt: typeof raw.lastSeenAt === 'number' ? raw.lastSeenAt : now,
+    lastMessageAt: typeof raw.lastMessageAt === 'number' ? raw.lastMessageAt : now,
+    usage:
+      raw.usage && typeof raw.usage === 'object'
+        ? { day: String(raw.usage.day ?? dayKey(now)), messages: Number(raw.usage.messages) || 0 }
+        : { day: dayKey(now), messages: 0 },
+    archivedAt: typeof raw.archivedAt === 'number' ? raw.archivedAt : undefined,
+  };
+};
+
+export function loadRoom(): Room | null {
+  return normalizeRoom(read(KEYS.room) as Partial<Room> | null);
+}
+
+export const saveRoom = (room: Room) => write(KEYS.room, room);
+
+export function loadArchives(): Room[] {
+  const raw = read(KEYS.archives);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => normalizeRoom(row as Partial<Room>))
+    .filter((row): row is Room => Boolean(row))
+    .slice(0, 8);
+}
+
+export const saveArchives = (rooms: Room[]) => write(KEYS.archives, rooms.slice(0, 8));
+
+export interface Bundle {
+  version: 3;
+  exportedAt: number;
+  cards: Card[];
+  personas: Persona[];
+  world: World;
+  settings: WorldSettings;
+  identity: Identity;
+}
+
+export function exportBundle(state: Omit<Bundle, 'version' | 'exportedAt'>): string {
+  const bundle: Bundle = { version: 3, exportedAt: Date.now(), ...state };
+  return JSON.stringify(bundle, null, 2);
+}
+
+export function importBundle(raw: string): Bundle | null {
+  try {
+    const data = JSON.parse(raw) as Partial<Bundle>;
+    if (!data || data.version !== 3 || !Array.isArray(data.cards)) return null;
+    return {
+      version: 3,
+      exportedAt: typeof data.exportedAt === 'number' ? data.exportedAt : Date.now(),
+      cards: retention(
+        (data.cards as Partial<Card>[]).map(normalizeCard).filter((c): c is Card => Boolean(c)),
+      ),
+      personas:
+        Array.isArray(data.personas) && data.personas.length
+          ? mergePersonas(data.personas)
+          : defaultPersonas(),
+      world: data.world && typeof data.world === 'object' ? (data.world as World) : emptyWorld(),
+      settings: data.settings
+        ? { ...defaultSettings, ...(data.settings as Partial<WorldSettings>) }
+        : { ...defaultSettings },
+      identity: (data.identity as Identity) ?? loadIdentity(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearAll() {
+  [...Object.values(KEYS), ...LEGACY_POST_KEYS].forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // 忽略
+    }
+  });
+}

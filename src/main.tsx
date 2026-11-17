@@ -52,7 +52,7 @@ class Boundary extends Component<{ children: ReactNode }, { error: Error | null 
           <button
             onClick={() => {
               Object.keys(localStorage)
-                .filter((k) => k.startsWith('shudong.') || k === 'startnow.onboarded')
+                .filter((k) => k.startsWith('shudong.') || k.startsWith('startnow.'))
                 .forEach((k) => localStorage.removeItem(k));
               location.reload();
             }}

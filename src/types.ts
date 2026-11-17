@@ -14,6 +14,7 @@ export interface LlmConfig {
   baseUrl: string;
   model: string;
   apiKey: string;
+  fallbackModel?: string;
 }
 
 export type Gender = 'female' | 'male' | 'none';
@@ -93,6 +94,7 @@ export interface Comment {
   at: number;
   kind?: 'comment' | 'advice';
   peer?: string;
+  replyTo?: string;
   // 不给本地生成或审查回退的台词伪装成真实模型输出。
   origin?: 'model' | 'demo' | 'boundary' | 'curated' | 'simulated' | 'system';
 }
@@ -103,12 +105,16 @@ export interface Advice {
   fromPersonaId: string;
   at: number;
   accepted: boolean;
-  origin?: 'curated' | 'demo';
+  /** Links a user-selected action back to the original persona comment. */
+  sourceCommentId?: string;
+  origin?: 'curated' | 'demo' | 'adopted';
 }
 
 export interface Note {
   text: string;
   actionId?: string;
+  /** Optional provenance kept when an adopted reply is pinned. */
+  sourceCommentId?: string;
   fromPersonaId: string;
   at: number;
   dueAt: number;
@@ -128,6 +134,16 @@ export interface PendingReply {
   sourceCommentId?: string; // 精确关联触发此次待回复的玩家评论，旧存档可为空。
 }
 
+/** A durable job stored on the original persona worry, not a Comment. */
+export interface PendingBrag {
+  personaId: string;
+  acceptedAt: number;
+  dueAt: number;
+  adviceText: string;
+  actionId?: string;
+  sourceCommentId?: string;
+}
+
 export interface Todo {
   id: string;
   text: string;
@@ -142,6 +158,7 @@ export interface Card {
   authorKind: 'player' | 'persona' | 'helper';
   title?: string;
   kind?: 'worry' | 'brag' | 'guide';
+  intro?: boolean;
   origin?: 'model' | 'demo' | 'simulated';
   likes?: number;
   helperAt?: number;
@@ -156,6 +173,14 @@ export interface Card {
   pending: PendingReply[];
   comments: Comment[];
   advice?: Advice;
+  /** One accepted player suggestion may schedule at most one fictional follow-up card. */
+  pendingBrag?: PendingBrag;
+  /** Provenance on the new persona brag card. */
+  sourceCardId?: string;
+  sourceCommentId?: string;
+  sourceAdviceText?: string;
+  /** Link from source worry to its published follow-up. */
+  bragCardId?: string;
   note?: Note;
   doneAt?: number;
   handledAt?: number;

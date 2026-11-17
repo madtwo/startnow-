@@ -1,27 +1,42 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import Avatar from './components/Avatar';
 import CardDetail from './components/CardDetail';
 import CardRow from './components/CardRow';
 import CardDeck from './components/CardDeck';
 import GuideCard from './components/GuideCard';
 import NoteDrawer from './components/NoteDrawer';
+import MemoryManager from './components/MemoryManager';
 import PostForm from './components/PostForm';
 import StepBoard from './components/StepBoard';
 import Tour from './components/Tour';
 import CrisisCard from './components/CrisisCard';
-import { isMock, isReady } from './config/providers';
+import { defaultConfig, isMock, isReady } from './config/providers';
 import { HOTLINE } from './lib/crisis';
-import { findCrisis } from './lib/safety';
+import { containsCrisis, hasCrisisInArchive } from './lib/submissionGuard';
+import { createOperationGate } from './lib/operationGate';
+import { advanceBragMinutes, cancelBragsForNewWorry, cancelBragsForPersona, triggerNextBrag } from './lib/brag';
+import { forgetAll, forgetOne, forgetRole } from './lib/memoryControl';
+import { modelFailureNotice } from './lib/modelStatus';
 import {
   acceptAdvice,
   addPlayerComment,
+  adoptCommentAdvice,
   askForAdvice,
   catchUp,
   closeCard,
   completeCard,
   createPlayerCard,
   notePlayerShare,
-  personaBrag,
   personaCard,
   shrinkAdvice,
   summonPersona,
@@ -32,6 +47,8 @@ import { ensureMinds } from './lib/mind';
 import { defaultPersonas } from './lib/personas';
 import {
   clearAll,
+  deleteLegacyPosts,
+  listLegacyPostKeys,
   dayKey,
   defaultSettings,
   emptyWorld,
@@ -67,6 +84,7 @@ import type {
 } from './types';
 
 const TICK_MS = 4000;
+const GUIDE_DISMISSED_KEY = 'startnow.guideDismissed';
 
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const SettingsDialog = lazy(() => import('./components/SettingsDialog'));
@@ -113,12 +131,22 @@ export default function App() {
     }
     return { cards: withGuide(loadCards()), personas: ensureMinds(loadPersonas()) };
   });
-  const [config, setConfig] = useState<LlmConfig>(() => loadConfig());
-  const [cards, setCards] = useState<Card[]>(boot.cards);
-  const [personas, setPersonas] = useState<Persona[]>(boot.personas);
-  const [world, setWorld] = useState<World>(() => loadWorld());
-  const [settings, setSettings] = useState<WorldSettings>(() => loadSettings());
-  const [identity, setIdentity] = useState<Identity>(() => loadIdentity());
+  // 同步变更时立即推进版本号，不依赖 React 下一次 render 的时间。
+  const gate = useRef(createOperationGate());
+  const tickAfterCommit = useRef<'full' | 'brag' | null>(null);
+  const [config, rawSetConfig] = useState<LlmConfig>(() => loadConfig());
+  const [cards, rawSetCards] = useState<Card[]>(boot.cards);
+  const [personas, rawSetPersonas] = useState<Persona[]>(boot.personas);
+  const [world, rawSetWorld] = useState<World>(() => loadWorld());
+  const [settings, rawSetSettings] = useState<WorldSettings>(() => loadSettings());
+  const [identity, rawSetIdentity] = useState<Identity>(() => loadIdentity());
+  const touch = () => { gate.current.change(); };
+  const setConfig: Dispatch<SetStateAction<LlmConfig>> = (next) => { touch(); rawSetConfig(next); };
+  const setCards: Dispatch<SetStateAction<Card[]>> = (next) => { touch(); rawSetCards(next); };
+  const setPersonas: Dispatch<SetStateAction<Persona[]>> = (next) => { touch(); rawSetPersonas(next); };
+  const setWorld: Dispatch<SetStateAction<World>> = (next) => { touch(); rawSetWorld(next); };
+  const setSettings: Dispatch<SetStateAction<WorldSettings>> = (next) => { touch(); rawSetSettings(next); };
+  const setIdentity: Dispatch<SetStateAction<Identity>> = (next) => { touch(); rawSetIdentity(next); };
   const [draft, setDraft] = useState('');
   const [draftTitle, setDraftTitle] = useState('');
   const [image, setImage] = useState('');
@@ -126,6 +154,9 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [onboardOpen, setOnboardOpen] = useState(
     () => localStorage.getItem('startnow.onboarded') !== '1',
+  );
+  const [guideDismissed, setGuideDismissed] = useState(
+    () => localStorage.getItem(GUIDE_DISMISSED_KEY) === '1',
   );
   const [view, setView] = useState<View>('home');
   const [mode, setMode] = useState<'card' | 'list'>(
@@ -142,13 +173,14 @@ export default function App() {
   const [settingsNotice, setSettingsNotice] = useState('');
   const [adminOpen, setAdminOpen] = useState(false);
   const [crisis, setCrisis] = useState('');
-  const [todos, setTodos] = useState<Todo[]>(() => loadTodos());
+  const [todos, rawSetTodos] = useState<Todo[]>(() => loadTodos());
+  const setTodos: Dispatch<SetStateAction<Todo[]>> = (next) => { touch(); rawSetTodos(next); };
+  const [legacyKeys, setLegacyKeys] = useState<string[]>(() => listLegacyPostKeys());
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [brag, setBrag] = useState<{ id?: string; text: string } | null>(null);
   const [bragText, setBragText] = useState('');
   const [bragTitle, setBragTitle] = useState('');
   const brandClicks = useRef<number[]>([]);
-  const busy = useRef(false);
   const bellRef = useRef<HTMLDivElement>(null);
   const [, refreshClock] = useState(0);
 
@@ -186,21 +218,43 @@ export default function App() {
   const latest = useRef({ cards, personas, world, settings, config, working });
   latest.current = { cards, personas, world, settings, config, working };
 
-  const tick = useCallback(async (override?: { cards?: Card[] }) => {
-    if (busy.current) return;
+  const guardSubmission = (...parts: (string | undefined | null)[]): boolean => {
+    if (!containsCrisis(parts)) return false;
+    // 不把敏感原文复制到额外的 React 状态或日志中。
+    setCrisis('show');
+    return true;
+  };
+
+  const tick = useCallback(async (bragOnly = false) => {
+    if (document.hidden) return;
     const cur = latest.current;
     if (cur.settings.paused || !isReady(cur.config)) return;
-    if (cur.world.callsToday >= cur.settings.dailyCalls) return;
-    busy.current = true;
+    if (cur.world.dayKey === dayKey(Date.now()) &&
+        cur.world.callsToday >= cur.settings.dailyCalls && !isMock(cur.config)) return;
+    const operation = gate.current.start('tick');
+    if (!operation) return;
+    const revision = gate.current.revision();
+    const baseCards = cur.cards;
     try {
       const out = await tickCards({
-        cards: override?.cards ?? cur.cards,
+        cards: baseCards,
         personas: cur.personas,
         settings: cur.settings,
         config: cur.config,
+        bragOnly,
       });
+      if (!gate.current.isCurrent(operation, revision) || latest.current.cards !== baseCards) {
+        // 已调用的模型仍计入本机配额，但不能写入过时的卡片和记忆。
+        if (out.calls) {
+          const day = dayKey(Date.now());
+          setWorld((w) => ({ ...w, dayKey: day,
+            callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls }));
+        }
+        setToast('有新内容，旧回复已跳过；后台会再试');
+        return;
+      }
       const before = new Map(
-        cur.cards.filter((c) => c.authorId === 'me').map((c) => [c.id, c.comments.length]),
+        baseCards.filter((c) => c.authorId === 'me').map((c) => [c.id, c.comments.length]),
       );
       const fresh = out.cards.find(
         (c) => c.authorId === 'me' && (before.get(c.id) ?? 0) < c.comments.length,
@@ -210,14 +264,12 @@ export default function App() {
         const who = cur.personas.find((p) => p.id === last?.authorId)?.name ?? '有人';
         setToast(`${who} 来了你的卡`);
       }
+      // Retire the unrelated every-five-hours canned brag; accepted advice owns this path.
       const nowTs = Date.now();
-      const lastBrag = cur.world.lastBragAt ?? 0;
-      const bragDue =
-        lastBrag > 0 && nowTs - lastBrag > 5 * 3_600_000 && cur.personas.length > 0;
-      const extra = bragDue
-        ? [personaBrag(cur.personas[Math.floor(Math.random() * cur.personas.length)], nowTs)]
-        : [];
-      setCards(extra.length ? [...out.cards, ...extra] : out.cards);
+      const fired = out.cards.find((c) => c.kind === 'brag' && c.sourceCardId &&
+        !baseCards.some((existing) => existing.id === c.id));
+      setCards(out.cards);
+      if (fired) setToast(`${fired.authorName} 发来一张新卡 · AI 剧情模拟`);
       setPersonas(out.personas);
       const day = dayKey(nowTs);
       setWorld((w) => ({
@@ -225,20 +277,40 @@ export default function App() {
         dayKey: day,
         callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls,
         lastTickAt: nowTs,
-        lastBragAt: extra.length ? nowTs : w.lastBragAt ?? nowTs,
+        lastBragAt: w.lastBragAt, // legacy field kept for archive compatibility
         logs: [...out.logs, ...w.logs].slice(0, 20),
       }));
+      const failureNotice = modelFailureNotice(out.logs);
+      if (failureNotice) setToast(failureNotice);
+    } catch {
+      // 不让 setInterval 的异步异常成为未处理 Promise；不冒充角色回帖。
+      setToast('模型暂时不可用，后台稍后再试');
     } finally {
-      busy.current = false;
+      gate.current.finish(operation);
     }
   }, []);
 
   useEffect(() => {
     if (!ready) return;
     const id = window.setInterval(() => void tick(), TICK_MS);
+    const onVisible = () => {
+      if (!document.hidden) void tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     void tick();
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [ready, tick]);
+
+  // React 提交 nudge/advance 的新卡片后才运行 tick，避免 latest 引用尚未更新。
+  useEffect(() => {
+    const pending = tickAfterCommit.current;
+    if (!pending) return;
+    tickAfterCommit.current = null;
+    void tick(pending === 'brag');
+  }, [cards, tick]);
 
   useEffect(() => {
     if (!toast) return;
@@ -252,10 +324,7 @@ export default function App() {
   const send = () => {
     const text = draft.trim();
     if (!text || working) return;
-    if (findCrisis(text)) {
-      setCrisis(text);
-      return;
-    }
+    if (guardSubmission(text, draftTitle)) return;
     if (!ready) {
       setSettingsNotice('先接入一个 API，或者切到演示模式。');
       setSettingsOpen(true);
@@ -279,8 +348,10 @@ export default function App() {
       likes: Math.max(0, (c.likes ?? 0) + (c.likedByMe ? -1 : 1)),
     }));
 
-  const addTodo = (text: string) =>
+  const addTodo = (text: string) => {
+    if (guardSubmission(text)) return;
     setTodos((prev) => [{ id: crypto.randomUUID(), text, at: Date.now() }, ...prev]);
+  };
 
   const toggleTodo = (id: string) =>
     setTodos((prev) =>
@@ -303,9 +374,8 @@ export default function App() {
 
   const submitBrag = () => {
     if (!brag || !bragText.trim()) return;
-    if (findCrisis(bragText)) {
+    if (guardSubmission(bragText, bragTitle)) {
       setBrag(null);
-      setCrisis(bragText);
       return;
     }
     const card = createPlayerCard(
@@ -330,6 +400,11 @@ export default function App() {
   };
 
   const advance = async (hours: number) => {
+    const operation = gate.current.start('advance');
+    if (!operation) {
+      setToast('后台正在处理另一个任务，稍后再推进时间');
+      return;
+    }
     const cur = latest.current;
     const shift = hours * 3_600_000;
     const shifted = cur.cards.map((c) => ({
@@ -338,38 +413,45 @@ export default function App() {
       helperAt: c.helperAt ? c.helperAt - shift : undefined,
       plan: c.plan.map((p) => ({ ...p, at: p.at - shift })),
       pending: c.pending.map((p) => ({ ...p, at: p.at - shift })),
+      pendingBrag: c.pendingBrag ? {
+        ...c.pendingBrag, acceptedAt: c.pendingBrag.acceptedAt - shift,
+        dueAt: c.pendingBrag.dueAt - shift,
+      } : undefined,
       note: c.note ? { ...c.note, dueAt: c.note.dueAt - shift } : undefined,
       comments: c.comments.map((x) => ({ ...x, at: x.at - shift })),
     }));
     setCards(shifted);
-    busy.current = false;
-    let res: { cards: Card[]; personas: Persona[]; calls: number } = {
-      cards: shifted,
-      personas: cur.personas,
-      calls: 0,
-    };
+    const revision = gate.current.revision();
     try {
-      res = await catchUp({
-        cards: shifted,
-        personas: cur.personas,
-        settings: cur.settings,
-        config: cur.config,
-        hours,
+      const res = await catchUp({
+        cards: shifted, personas: cur.personas, settings: cur.settings, config: cur.config, hours,
       });
+      if (!gate.current.isCurrent(operation, revision)) {
+        if (res.calls) {
+          const day = dayKey(Date.now());
+          setWorld((w) => ({ ...w, dayKey: day,
+            callsToday: (w.dayKey === day ? w.callsToday : 0) + res.calls }));
+        }
+        setToast('有新消息，时间推进的旧结果已跳过');
+        return;
+      }
+      // 先预约 effect，React 提交新卡片时才触发下一次 tick。
+      tickAfterCommit.current = 'full';
+      setCards(res.cards);
+      setPersonas(res.personas);
+      if (res.calls) {
+        const day = dayKey(Date.now());
+        setWorld((w) => ({ ...w, dayKey: day,
+          callsToday: (w.dayKey === day ? w.callsToday : 0) + res.calls }));
+      }
+      setDeckIndex(0);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setToast(`过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`);
     } catch {
-      res = { cards: shifted, personas: cur.personas, calls: 0 };
+      setToast('时间已推进，但生成新卡失败；后台计时器会继续尝试');
+    } finally {
+      gate.current.finish(operation);
     }
-    setCards(res.cards);
-    setPersonas(res.personas);
-    if (res.calls) {
-      setWorld((w) => ({ ...w, callsToday: w.callsToday + res.calls }));
-    }
-    setDeckIndex(0);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setToast(
-      `过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`,
-    );
-    await tick({ cards: res.cards });
   };
 
   const openCard = (card: Card, peer?: string) => {
@@ -384,45 +466,73 @@ export default function App() {
     setView('detail');
   };
 
-  const comment = (card: Card, text: string, kind: 'comment' | 'advice', peer?: string) => {
-    if (findCrisis(text)) {
-      setCrisis(text);
-      return;
-    }
-    setPersonas((prev) => notePlayerShare(prev, text));
-    patch(card.id, (c) => addPlayerComment(c, text, Date.now(), settings.speed, kind, peer));
+  const comment = (card: Card, text: string, kind: 'comment' | 'advice', peer?: string, replyTo?: string) => {
+    if (guardSubmission(text)) return false;
+    if (!card.noMemory) setPersonas((prev) => notePlayerShare(prev, text));
+    patch(card.id, (c) => addPlayerComment(c, text, Date.now(), settings.speed, kind, peer, replyTo));
+    return true;
   };
 
-  const advice = async (card: Card) => {
+  const adoptReply = (card: Card, commentId: string) => {
+    const checked = adoptCommentAdvice(card, commentId, personas);
+    if (checked.error) {
+      setToast(checked.error);
+      return;
+    }
+    patch(card.id, (current) => adoptCommentAdvice(current, commentId, personas).card);
+    setToast('已把这条回复作为下一步');
+  };
+
+  const advice = async (card: Card, personaId?: string) => {
+    if (guardSubmission(card.text, card.title,
+      ...card.comments.filter((c) => c.authorKind === 'player').map((c) => c.text))) return;
+    const operation = gate.current.start('advice');
+    if (!operation) {
+      setToast('同伴正在处理另一条消息，稍后再点下一步');
+      return;
+    }
+    const cur = latest.current;
+    const revision = gate.current.revision();
     setWorking(true);
     try {
-      const cur = latest.current;
       const out = await askForAdvice({
-        cards: cur.cards,
-        personas: cur.personas,
-        settings: cur.settings,
-        config: cur.config,
-        cardId: card.id,
+        cards: cur.cards, personas: cur.personas, settings: cur.settings,
+        config: cur.config, cardId: card.id, personaId,
       });
+      if (!gate.current.isCurrent(operation, revision) || latest.current.cards !== cur.cards) {
+        if (out.calls) {
+          const day = dayKey(Date.now());
+          setWorld((w) => ({ ...w, dayKey: day,
+            callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls }));
+        }
+        setToast('刚才有新消息，下一步再点一次');
+        return;
+      }
       setCards(out.cards);
       setPersonas(out.personas);
       if (out.calls) {
         const day = dayKey(Date.now());
-        setWorld((w) => ({
-          ...w,
-          dayKey: day,
-          callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls,
-        }));
+        setWorld((w) => ({ ...w, dayKey: day,
+          callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls }));
       }
       if (out.logs.length) {
         setWorld((w) => ({ ...w, logs: [...out.logs, ...w.logs].slice(0, 20) }));
       }
+      const failureNotice = modelFailureNotice(out.logs);
+      if (failureNotice) setToast(failureNotice);
+    } catch {
+      setToast('暂时无法获取下一步，请稍后重试');
     } finally {
+      gate.current.finish(operation);
       setWorking(false);
     }
   };
 
-  const nudge = async () => {
+  const nudge = () => {
+    if (gate.current.running()) {
+      setToast('后台正在处理消息，稍后再触发');
+      return;
+    }
     const cur = latest.current;
     const now = Date.now();
     let best: { cardId: string; kind: 'plan' | 'pending'; idx: number; at: number } | null = null;
@@ -441,14 +551,11 @@ export default function App() {
       if (target.kind === 'plan') {
         return { ...c, plan: c.plan.map((p, i) => (i === target.idx ? { ...p, at: now - 1 } : p)) };
       }
-      return {
-        ...c,
-        pending: c.pending.map((p, i) => (i === target.idx ? { ...p, at: now - 1 } : p)),
-      };
+      return { ...c, pending: c.pending.map((p, i) =>
+        (i === target.idx ? { ...p, at: now - 1 } : p)) };
     });
+    tickAfterCommit.current = 'full';
     setCards(next);
-    busy.current = false;
-    await tick({ cards: next });
   };
 
   const openSettings = (notice = '') => {
@@ -477,17 +584,70 @@ export default function App() {
   const postAs = (personaId: string) => {
     const persona = personas.find((p) => p.id === personaId);
     if (!persona) return;
-    setCards((prev) => [personaCard(persona), ...prev]);
+    const now = Date.now();
+    const newWorry = personaCard(persona, now);
+    const cancelled = cancelBragsForNewWorry(latest.current.cards, newWorry, now);
+    setCards([newWorry, ...cancelled.cards]);
+    if (cancelled.cancelled.length) {
+      setWorld((world) => ({ ...world, logs: [
+        ...cancelled.cancelled.map((id) => `brag cancelled: newer worry · ${persona.name} · sourceCardId=${id}`),
+        ...world.logs,
+      ].slice(0, 20) }));
+    }
+  };
+
+  /** Debug actions change ONLY pending deadlines; they never backdate the forum feed. */
+  const advanceBrags = (minutes: number) => {
+    if (gate.current.running()) { setToast('另一条模型任务进行中，请稍后测试'); return; }
+    if (settings.paused) { setToast('先在作者后台取消暂停，再测试炫耀任务'); return; }
+    tickAfterCommit.current = 'brag';
+    setCards((prev) => advanceBragMinutes(prev, minutes));
+    setToast(`炫耀排期已快进 ${minutes} 分钟；不会生成其他新烦恼`);
+  };
+  const fireNextBrag = () => {
+    if (gate.current.running()) { setToast('另一条模型任务进行中，请稍后测试'); return; }
+    if (!cards.some((c) => c.pendingBrag)) { setToast('当前没有等待中的炫耀卡'); return; }
+    tickAfterCommit.current = 'brag';
+    setCards((prev) => triggerNextBrag(prev));
+  };
+  const cancelBrags = (personaId: string) => {
+    if (gate.current.running()) { setToast('另一条模型任务进行中，请稍后测试'); return; }
+    const result = cancelBragsForPersona(cards, personaId);
+    setCards(result.cards);
+    setWorld((w) => ({ ...w, logs: [
+      ...result.cancelled.map((id) => `brag cancelled: author test · personaId=${personaId} · sourceCardId=${id}`),
+      ...w.logs,
+    ].slice(0, 20) }));
+    setToast(`取消了 ${result.cancelled.length} 条待发炫耀`);
   };
 
   const patchPersona = (next: Persona) =>
     setPersonas((prev) => prev.map((p) => (p.id === next.id ? next : p)));
 
-  const setMemory = (personaId: string, memory: MemoryEntry[]) =>
+  const setMemory = (personaId: string, memory: MemoryEntry[]) => {
+    if (memory.some((m) => guardSubmission(m.about, m.what))) return;
     setPersonas((prev) => prev.map((p) => (p.id === personaId ? { ...p, memory } : p)));
+  };
+
+  const applyMemoryChange = (next: { cards: Card[]; personas: Persona[] }) => {
+    setCards(next.cards);
+    setPersonas(next.personas);
+  };
+  const forgetMemoryEntry = (personaId: string, entryId: string) =>
+    applyMemoryChange(forgetOne(cards, personas, personaId, entryId));
+  const forgetPersonaMemory = (personaId: string) => {
+    if (window.confirm('删除这个角色的长期记忆？原帖仍会保留。')) {
+      applyMemoryChange(forgetRole(cards, personas, personaId));
+    }
+  };
+  const forgetAllMemory = () => {
+    if (window.confirm('清空所有角色的长期记忆？旧备份导入后可能恢复。')) {
+      applyMemoryChange(forgetAll(cards, personas));
+    }
+  };
 
   const doExport = () => {
-    const raw = exportBundle({ cards, personas, world, settings, identity });
+    const raw = exportBundle({ cards, personas, world, settings, identity, todos });
     const d = new Date();
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(
       d.getDate(),
@@ -500,7 +660,41 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const dismissGuide = () => {
+    setGuideDismissed(true);
+    localStorage.setItem(GUIDE_DISMISSED_KEY, '1');
+  };
+
+  const showRules = () => {
+    setGuideDismissed(false);
+    localStorage.removeItem(GUIDE_DISMISSED_KEY);
+    setHomeTab('forum');
+    setView('home');
+  };
+
+  const resetGuideDismissed = () => {
+    setGuideDismissed(false);
+    localStorage.removeItem(GUIDE_DISMISSED_KEY);
+  };
+
+  const clearNotices = () => {
+    const now = Date.now();
+    setCards((prev) =>
+      prev.map((c) => (c.kind === 'guide' ? c : { ...c, readAt: now })),
+    );
+    setBellOpen(false);
+  };
+
   const doImport = (raw: string) => {
+    try {
+      if (hasCrisisInArchive(JSON.parse(raw))) {
+        setCrisis('show');
+        setToast('该存档含危机表达，未导入任何数据');
+        return;
+      }
+    } catch {
+      // 非 JSON 仍交给现有导入校验显示错误。
+    }
     const bundle = importBundle(raw);
     if (!bundle) {
       alert('这份 JSON 读不了，检查一下是不是本页导出的。');
@@ -513,17 +707,30 @@ export default function App() {
     setWorld(bundle.world);
     setSettings(bundle.settings);
     setIdentity(bundle.identity);
+    setTodos(bundle.todos ?? []);
+    setLegacyKeys(listLegacyPostKeys());
+    resetGuideDismissed();
     setAdminOpen(false);
   };
 
   const doClear = () => {
     clearAll();
-    setCards([buildGuideCard()]);
-    setPersonas(ensureMinds(defaultPersonas()));
+    // 清除持有的 Key 和便签；不能只删除 localStorage 而继续沿用旧内存状态。
+    setConfig(defaultConfig);
+    setCards(buildSeedCards());
+    setPersonas(ensureMinds(seedMemories(defaultPersonas())));
     setWorld(emptyWorld());
     setSettings({ ...defaultSettings });
     setIdentity(loadIdentity());
+    setTodos([]);
+    setMode('card');
+    setHomeTab('step');
+    setOnboardOpen(true);
+    setLegacyKeys([]);
+    resetGuideDismissed();
     setAdminOpen(false);
+    setDrawerOpen(false);
+    setBrag(null);
     setView('home');
   };
 
@@ -531,6 +738,7 @@ export default function App() {
     setCards(buildSeedCards());
     setPersonas((prev) => ensureMinds(seedMemories(prev)));
     setWorld(emptyWorld());
+    resetGuideDismissed();
   };
 
   const guide = cards.find((c) => c.kind === 'guide');
@@ -643,7 +851,14 @@ export default function App() {
             </button>
             {bellOpen && (
               <div className="bell-panel" id="bell-panel">
-                <p className="bell-title">有人回了你</p>
+                <div className="bell-head">
+                  <p className="bell-title">有人回了你</p>
+                  {notices.length > 0 && (
+                    <button className="bell-clear" onClick={clearNotices}>
+                      全部已读
+                    </button>
+                  )}
+                </div>
                 {notices.length === 0 && <p className="bell-empty">还没有新的回复。</p>}
                 {notices.map((n) => (
                   <button
@@ -817,7 +1032,9 @@ export default function App() {
                 </div>
               </div>
 
-              {guide && <GuideCard card={guide} onOpen={() => openCard(guide)} />}
+              {guide && !guideDismissed && (
+                <GuideCard card={guide} onOpen={() => openCard(guide)} onDismiss={dismissGuide} />
+              )}
 
               {feed.length === 0 && (
                 <div className="empty">
@@ -891,14 +1108,37 @@ export default function App() {
 
       {view === 'detail' && detailCard && (
         <div className="feed">
+          {detailCard.sourceCardId && (
+            <div className="advice" role="note">
+              <p className="advice-head">AI 角色模拟执行 · 从你给的建议</p>
+              <p className="advice-label">{detailCard.sourceAdviceText}</p>
+              <button type="button" className="advice-source-link" onClick={() => {
+                const source = cards.find((c) => c.id === detailCard.sourceCardId);
+                if (source) openCard(source);
+                else setToast('原卡已从本地保留期移除');
+              }}>查看原卡</button>
+            </div>
+          )}
+          {detailCard.bragCardId && (
+            <div className="advice" role="note">
+              <p>这一步已有后续炫耀卡 · AI 剧情模拟</p>
+              <button type="button" className="advice-source-link" onClick={() => {
+                const followup = cards.find((c) => c.id === detailCard.bragCardId);
+                if (followup) openCard(followup);
+                else setToast('后续卡已从本地保留期移除');
+              }}>查看后续卡</button>
+            </div>
+          )}
           <CardDetail
+            key={detailCard.id}
             card={detailCard}
             me={identity}
             initialPeer={detailPeer}
             personas={personas}
             busy={working}
-            onComment={(text, kind, peer) => comment(detailCard, text, kind, peer)}
-            onAdvice={() => void advice(detailCard)}
+            onComment={(text, kind, peer, replyTo) => comment(detailCard, text, kind, peer, replyTo)}
+            onAdvice={(personaId) => void advice(detailCard, personaId)}
+            onAdoptAdvice={(commentId) => adoptReply(detailCard, commentId)}
             onShrink={() => patch(detailCard.id, (c) => shrinkAdvice(c))}
             onAccept={() => patch(detailCard.id, (c) => acceptAdvice(c))}
             onDone={() => patch(detailCard.id, (c) => completeCard(c, Date.now(), settings.speed))}
@@ -1014,6 +1254,13 @@ export default function App() {
             )}
           </section>
 
+          <MemoryManager
+            personas={personas}
+            onForgetOne={forgetMemoryEntry}
+            onForgetRole={forgetPersonaMemory}
+            onForgetAll={forgetAllMemory}
+          />
+
           <section className="card section-card">
             <div className="section-head">
               <h3>数据与应用</h3>
@@ -1038,7 +1285,7 @@ export default function App() {
                   </svg>
                 </span>
                 <span className="menu-item-text">
-                  <b>作者后台</b>
+                  <b>作者后台 · 推进时间</b>
                   <span>管理同伴与圈子</span>
                 </span>
               </button>
@@ -1054,6 +1301,36 @@ export default function App() {
                   <span>了解产品玩法</span>
                 </span>
               </button>
+              <button type="button" className="menu-item" onClick={showRules}>
+                <span className="menu-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#8FB78E" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M6 4h9l3 3v13H6z" />
+                    <path d="M9 9h6M9 13h6M9 17h4" />
+                  </svg>
+                </span>
+                <span className="menu-item-text">
+                  <b>论坛规矩</b>
+                  <span>重新打开置顶说明</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="menu-item"
+                onClick={() => {
+                  window.location.href = '/room.html';
+                }}
+              >
+                <span className="menu-item-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#E8A87C" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M5 6.5h14v8.5H9l-4 3z" />
+                    <path d="M9 10h6M9 12.5h4" />
+                  </svg>
+                </span>
+                <span className="menu-item-text">
+                  <b>群聊模式</b>
+                  <span>换一种方式聊（独立页）</span>
+                </span>
+              </button>
               <button type="button" className="menu-item" onClick={doExport}>
                 <span className="menu-item-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="#7BA3C9" strokeWidth="1.8" strokeLinecap="round">
@@ -1066,6 +1343,16 @@ export default function App() {
                   <span>导出你的数据</span>
                 </span>
               </button>
+              {legacyKeys.length > 0 && (
+                <button className="btn btn-ghost danger" onClick={() => {
+                  if (!window.confirm('旧版帖子与当前版本不兼容，确定仅删除这些旧 key 吗？建议先另行备份浏览器数据。')) return;
+                  deleteLegacyPosts();
+                  setLegacyKeys(listLegacyPostKeys());
+                  setToast('旧版帖子数据已从当前浏览器存储移除');
+                }}>
+                  删除不兼容旧帖子（{legacyKeys.length} 项）
+                </button>
+              )}
               <button
                 type="button"
                 className="menu-item danger-item"
@@ -1085,7 +1372,7 @@ export default function App() {
               </button>
             </div>
             <p className="profile-fineprint">
-              卡片、便签、同伴记忆和 API Key 只存在这台浏览器；导出文件会包含它们。
+              卡片、便签和角色记忆保存在此浏览器；模型请求会发送相关内容给所选模型服务。导出文件包含卡片、便签和记忆，不包含 API Key；重置会清除当前模型配置。
             </p>
             <p className="profile-fineprint">
               这里的 {personas.length} 位同伴都是虚构的 AI
@@ -1266,6 +1553,17 @@ export default function App() {
             onPersonas={setPersonas}
             onTick={() => void nudge()}
             onAdvance={(hours) => void advance(hours)}
+            {...{
+              // Optional debug extension: older AdminPanel versions can ignore these props.
+              pendingBrags: cards.filter((c) => c.pendingBrag).map((c) => ({
+                sourceCardId: c.id, personaId: c.authorId, personaName: c.authorName,
+                dueAt: c.pendingBrag!.dueAt,
+              })),
+              onAdvanceBragMinutes: advanceBrags,
+              onFireNextBrag: fireNextBrag,
+              onCancelBrags: cancelBrags,
+              onSimulateNewWorry: postAs,
+            }}
             onSummon={summon}
             onPostAs={postAs}
             onExport={doExport}

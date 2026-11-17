@@ -2,6 +2,10 @@ import type { Card, Identity, LlmConfig, Persona, Todo, World, WorldSettings } f
 import { defaultConfig, isReady, PRESETS } from '../config/providers';
 import { defaultPersonas } from './personas';
 import { buildSeedCards } from './seed';
+import { sanitizeMemoryText } from './memory';
+import { findCrisis } from './safety';
+import { normalizePendingBrag, unsafeBragContent } from './brag';
+import { hasCrisisInArchive, hasPlayerCrisis, isSafeMemoryEntry } from './submissionGuard';
 
 const KEYS = {
   config: 'shudong.config.v1',
@@ -15,6 +19,23 @@ const KEYS = {
 };
 
 const LEGACY_POST_KEYS = ['shudong.posts.v3', 'shudong.posts.v2', 'shudong.posts.v1'];
+const LEGACY_CARD_KEYS = ['shudong.cards.v5', 'shudong.cards.v4', 'shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'];
+const UI_KEYS = ['startnow.onboarded', 'startnow.mode', 'startnow.homeTab'];
+
+/** 旧 posts 格式不兼容：不在用户不知情的情况下静默迁移或丢弃。 */
+export const listLegacyPostKeys = (): string[] => {
+  try { return LEGACY_POST_KEYS.filter((key) => localStorage.getItem(key) !== null); }
+  catch { return []; }
+};
+export const deleteLegacyPosts = (): void => {
+  LEGACY_POST_KEYS.forEach((key) => { try { localStorage.removeItem(key); } catch { /* 存储受限 */ } });
+};
+
+/** 加载老版本角色记忆时执行一次基础结构校验和脱敏。 */
+export const cleanStoredMemory = (rows: unknown): Persona['memory'] =>
+  Array.isArray(rows) ? rows.filter(isSafeMemoryEntry).map((entry) => ({
+    ...entry, about: sanitizeMemoryText(entry.about), what: sanitizeMemoryText(entry.what),
+  })) : [];
 const DAY = 86_400_000;
 
 const read = (key: string): unknown => {
@@ -64,25 +85,25 @@ export function loadConfig(): LlmConfig {
     baseUrl: typeof saved.baseUrl === 'string' ? saved.baseUrl : defaultConfig.baseUrl,
     model: typeof saved.model === 'string' ? saved.model : defaultConfig.model,
     apiKey: typeof saved.apiKey === 'string' ? saved.apiKey : '',
+    fallbackModel:
+      typeof saved.fallbackModel === 'string'
+        ? saved.fallbackModel
+        : PRESETS.find((p) => p.id === providerId)?.fallbackModel ?? '',
   };
   return isReady(config) ? config : defaultConfig;
 }
 
 export const saveConfig = (config: LlmConfig) => write(KEYS.config, config);
 
-const legacyAny = () =>
-  LEGACY_POST_KEYS.some((key) => localStorage.getItem(key) !== null);
-
 const hasLegacyCards = () =>
-  ['shudong.cards.v5', 'shudong.cards.v4', 'shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'].some(
-    (key) => localStorage.getItem(key) !== null,
-  );
+  LEGACY_CARD_KEYS.some((key) => localStorage.getItem(key) !== null);
 
+// `posts.v*` 是很早版本的帖子格式，当前没有兼容迁移；它不应挡住新版开场种子。
 export const isFirstRun = () =>
-  localStorage.getItem(KEYS.cards) === null && !legacyAny() && !hasLegacyCards();
+  localStorage.getItem(KEYS.cards) === null && !hasLegacyCards();
 
 export const needsUpgrade = () =>
-  localStorage.getItem(KEYS.cards) === null && (legacyAny() || hasLegacyCards());
+  localStorage.getItem(KEYS.cards) === null && hasLegacyCards();
 
 const retention = (cards: Card[], now = Date.now()) =>
   cards
@@ -91,7 +112,7 @@ const retention = (cards: Card[], now = Date.now()) =>
     .slice(0, 200);
 
 const normalizeCard = (raw: Partial<Card>): Card | null => {
-  if (!raw || typeof raw.text !== 'string') return null;
+  if (!raw || typeof raw.text !== 'string' || hasPlayerCrisis(raw)) return null;
   const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : Date.now();
   return {
     id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
@@ -100,7 +121,10 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     authorKind:
       raw.authorKind === 'persona' ? 'persona' : raw.authorKind === 'helper' ? 'helper' : 'player',
     title: typeof raw.title === 'string' ? raw.title : undefined,
+    image: typeof raw.image === 'string' && raw.image.startsWith('data:image/') ? raw.image : undefined,
+    origin: raw.origin === 'model' || raw.origin === 'demo' || raw.origin === 'simulated' ? raw.origin : undefined,
     kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'guide' ? 'guide' : 'worry',
+    intro: raw.intro === true,
     likes: typeof raw.likes === 'number' ? raw.likes : 0,
     helperAt: typeof raw.helperAt === 'number' ? raw.helperAt : undefined,
     likedByMe: Boolean(raw.likedByMe),
@@ -110,15 +134,30 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
     plan: Array.isArray(raw.plan) ? raw.plan : [],
     pending: Array.isArray(raw.pending) ? raw.pending : [],
-    comments: Array.isArray(raw.comments) ? raw.comments : [],
+    comments: Array.isArray(raw.comments)
+      ? raw.comments.filter((row) => row && typeof row.text === 'string' &&
+          typeof row.authorId === 'string' &&
+          ['player', 'persona', 'helper'].includes(row.authorKind))
+      : [],
     advice: raw.advice
       ? { ...raw.advice, text: raw.advice.text ?? '一个办法' }
       : undefined,
+    pendingBrag: normalizePendingBrag(raw.pendingBrag, raw),
+    sourceCardId: typeof raw.sourceCardId === 'string' && raw.sourceCardId.length <= 128 ? raw.sourceCardId : undefined,
+    sourceCommentId: typeof raw.sourceCommentId === 'string' && raw.sourceCommentId.length <= 128 ? raw.sourceCommentId : undefined,
+    sourceAdviceText: typeof raw.sourceAdviceText === 'string' && raw.sourceAdviceText.length <= 600 &&
+      !unsafeBragContent(raw.sourceAdviceText) ? raw.sourceAdviceText : undefined,
+    bragCardId: typeof raw.bragCardId === 'string' && raw.bragCardId.length <= 128 ? raw.bragCardId : undefined,
     note: raw.note
       ? { ...raw.note, text: raw.note.text ?? '一件小事' }
       : undefined,
-    doneAt: raw.doneAt,
-    noMemory: raw.noMemory,
+    doneAt: typeof raw.doneAt === 'number' ? raw.doneAt : undefined,
+    seenAt: typeof raw.seenAt === 'number' ? raw.seenAt : undefined,
+    readAt: typeof raw.readAt === 'number' ? raw.readAt : undefined,
+    handledAt: typeof raw.handledAt === 'number' ? raw.handledAt : undefined,
+    refused: typeof raw.refused === 'number' ? raw.refused : undefined,
+    topic: typeof raw.topic === 'string' ? raw.topic : undefined,
+    noMemory: raw.noMemory === true,
   };
 };
 
@@ -144,7 +183,7 @@ export function loadCards(): Card[] {
   return [];
 }
 
-export const saveCards = (cards: Card[]) => write(KEYS.cards, retention(cards));
+export const saveCards = (cards: Card[]) => write(KEYS.cards, retention(cards.filter((c) => !hasPlayerCrisis(c))));
 
 function mergePersonas(rows: unknown[]): Persona[] {
   const defaults = defaultPersonas();
@@ -156,8 +195,9 @@ function mergePersonas(rows: unknown[]): Persona[] {
     return {
       ...base,
       ...found,
-      memory: Array.isArray(found.memory) ? found.memory : [],
-      weekLog: Array.isArray(found.weekLog) ? found.weekLog : [],
+      memory: cleanStoredMemory(found.memory),
+      weekLog: cleanWeekLog(found.weekLog),
+      mind: cleanMind(found.mind),
       weights: found.weights ?? base.weights,
       intimacy: typeof found.intimacy === 'number' ? found.intimacy : base.intimacy,
     } as Persona;
@@ -180,12 +220,27 @@ function mergePersonas(rows: unknown[]): Persona[] {
         weights: row.weights ?? fallback.weights,
         intimacy: typeof row.intimacy === 'number' ? row.intimacy : 10,
         followUp: row.followUp ?? 'sometimes',
-        memory: Array.isArray(row.memory) ? row.memory : [],
-        weekLog: Array.isArray(row.weekLog) ? row.weekLog : [],
+        memory: cleanStoredMemory(row.memory),
+        weekLog: cleanWeekLog(row.weekLog),
+        mind: cleanMind(row.mind),
       } as Persona;
     });
   return [...merged, ...extra];
 }
+
+const cleanWeekLog = (rows: unknown): Persona['weekLog'] =>
+  Array.isArray(rows) ? rows.filter((row) => row && typeof row.at === 'number' &&
+    typeof row.text === 'string' && !findCrisis(row.text)).slice(-8).map((row) => ({
+      at: row.at, text: sanitizeMemoryText(row.text),
+    })) : [];
+
+const cleanMind = (mind: unknown): Persona['mind'] => {
+  if (!mind || typeof mind !== 'object') return undefined;
+  const row = mind as Partial<NonNullable<Persona['mind']>>;
+  if (['thought', 'focus'].some((key) => typeof row[key as 'thought' | 'focus'] !== 'string') ||
+    findCrisis(`${row.thought ?? ''} ${row.focus ?? ''} ${row.movedBy?.what ?? ''}`)) return undefined;
+  return row as Persona['mind'];
+};
 
 export function loadPersonas(): Persona[] {
   const saved = read(KEYS.personas);
@@ -193,7 +248,9 @@ export function loadPersonas(): Persona[] {
   return mergePersonas(saved);
 }
 
-export const savePersonas = (personas: Persona[]) => write(KEYS.personas, personas);
+export const savePersonas = (personas: Persona[]) => write(KEYS.personas, personas.map((p) => ({
+  ...p, memory: cleanStoredMemory(p.memory), weekLog: cleanWeekLog(p.weekLog), mind: cleanMind(p.mind),
+})));
 
 export function loadWorld(now = Date.now()): World {
   const saved = read(KEYS.world) as Partial<World> | null;
@@ -222,12 +279,12 @@ export function loadTodos(): Todo[] {
   const saved = read(KEYS.todos);
   if (!Array.isArray(saved)) return [];
   return saved
-    .filter((t): t is Todo => Boolean(t) && typeof t.text === 'string')
+    .filter((t): t is Todo => Boolean(t) && typeof t.text === 'string' && !findCrisis(t.text))
     .sort((a, b) => b.at - a.at)
     .slice(0, 60);
 }
 
-export const saveTodos = (todos: Todo[]) => write(KEYS.todos, todos.slice(0, 60));
+export const saveTodos = (todos: Todo[]) => write(KEYS.todos, todos.filter((t) => !findCrisis(t.text)).slice(0, 60));
 
 export function loadIdentity(): Identity {
   const saved = read(KEYS.identity) as Partial<Identity> | null;
@@ -261,6 +318,7 @@ export interface Bundle {
   world: World;
   settings: WorldSettings;
   identity: Identity;
+  todos?: Todo[];
 }
 
 export function exportBundle(state: Omit<Bundle, 'version' | 'exportedAt'>): string {
@@ -271,7 +329,7 @@ export function exportBundle(state: Omit<Bundle, 'version' | 'exportedAt'>): str
 export function importBundle(raw: string): Bundle | null {
   try {
     const data = JSON.parse(raw) as Partial<Bundle>;
-    if (!data || data.version !== 3 || !Array.isArray(data.cards)) return null;
+    if (!data || data.version !== 3 || !Array.isArray(data.cards) || hasCrisisInArchive(data)) return null;
     return {
       version: 3,
       exportedAt: typeof data.exportedAt === 'number' ? data.exportedAt : Date.now(),
@@ -287,6 +345,8 @@ export function importBundle(raw: string): Bundle | null {
         ? { ...defaultSettings, ...(data.settings as Partial<WorldSettings>) }
         : { ...defaultSettings },
       identity: (data.identity as Identity) ?? loadIdentity(),
+      todos: Array.isArray(data.todos) ? data.todos.filter((t) =>
+        t && typeof t.text === 'string' && !findCrisis(t.text)).slice(0, 60) : [],
     };
   } catch {
     return null;
@@ -294,7 +354,7 @@ export function importBundle(raw: string): Bundle | null {
 }
 
 export function clearAll() {
-  [...Object.values(KEYS), ...LEGACY_POST_KEYS].forEach((key) => {
+  [...Object.values(KEYS), ...LEGACY_POST_KEYS, ...LEGACY_CARD_KEYS, ...UI_KEYS].forEach((key) => {
     try {
       localStorage.removeItem(key);
     } catch {

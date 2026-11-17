@@ -3,6 +3,18 @@ import { findCrisis } from './safety';
 
 const DAY = 86_400_000;
 
+/** 仅为数据最小化：处理常见联系方式，不宣称可识别全部隐私信息。 */
+export function sanitizeMemoryText(text: string): string {
+  return text
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[邮箱已隐藏]')
+    .replace(/https?:\/\/[^\s<>\"'，。；]+/gi, '[链接已隐藏]')
+    .replace(/(?<!\d)\d{17}[\dXx](?!\d)/g, '[证件号码已隐藏]')
+    .replace(/(?<!\d)(?:\+?86[-\s]?)?1[3-9]\d{9}(?!\d)/g, '[手机号已隐藏]')
+    .replace(/(?<!\d)\+?1[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?!\d)/g, '[电话号码已隐藏]')
+    .replace(/(?:微信(?:号|id)?|wxid|vx|qq(?:号)?|telegram|discord|whatsapp|小红书号|抖音号)[\s:=：]*(?:是|为)?[\s:=：]*[@a-z0-9._-]{5,40}/gi, '[站外账号已隐藏]');
+}
+
+
 export const LIGHT_TTL = 7 * DAY;
 export const DEEP_MAX = 12;
 export const TOTAL_MAX = 40;
@@ -36,7 +48,9 @@ export function inferWeight(text: string): MemoryWeight {
 }
 
 export function pruneMemory(memory: MemoryEntry[], now: number): MemoryEntry[] {
-  const live = memory.filter((m) => m.weight === 'deep' || now - m.at < LIGHT_TTL);
+  const live = memory
+    .filter((m) => !findCrisis(`${m.about} ${m.what}`) && (m.weight === 'deep' || now - m.at < LIGHT_TTL))
+    .map((m) => ({ ...m, about: sanitizeMemoryText(m.about), what: sanitizeMemoryText(m.what) }));
   const deep = live
     .filter((m) => m.weight === 'deep' && !m.merged)
     .sort((a, b) => b.at - a.at);
@@ -71,14 +85,22 @@ export function addMemory(
   entry: Omit<MemoryEntry, 'id'>,
   now: number,
 ): MemoryEntry[] {
+  // 危机表达不进入长期角色记忆；公开求助场景走专用危机层。
+  if (findCrisis(`${entry.about} ${entry.what}`)) return pruneMemory(memory, now);
+  const clean = {
+    ...entry,
+    about: sanitizeMemoryText(entry.about),
+    what: sanitizeMemoryText(entry.what),
+  };
   const key = (value: string) => value.normalize('NFKC').replace(/\s+/g, ' ').trim();
-  // 同一个帖子的同一段事实反复被 tick 看见时，不应重复写入独立记忆。
+  // 已存储的旧版本内容也按脱敏后的文本去重。
   const duplicate = memory.some(
-    (row) => row.postId === entry.postId &&
-      key(row.about) === key(entry.about) && key(row.what) === key(entry.what),
+    (row) => row.postId === clean.postId &&
+      key(sanitizeMemoryText(row.about)) === key(clean.about) &&
+      key(sanitizeMemoryText(row.what)) === key(clean.what),
   );
   if (duplicate) return pruneMemory(memory, now);
-  const next: MemoryEntry = { ...entry, id: crypto.randomUUID() };
+  const next: MemoryEntry = { ...clean, id: crypto.randomUUID() };
   return pruneMemory([next, ...memory], now);
 }
 
@@ -92,11 +114,12 @@ const timeLabel = (at: number, now: number) => {
 };
 
 export function renderMemory(memory: MemoryEntry[], now: number, deep = 6, light = 3): string {
-  if (!memory.length) return '';
-  const deepRows = memory.filter((m) => m.weight === 'deep').slice(0, deep);
-  const lightRows = memory.filter((m) => m.weight === 'light').slice(0, light);
+  const safe = memory.filter((m) => !findCrisis(`${m.about} ${m.what}`));
+  if (!safe.length) return '';
+  const deepRows = safe.filter((m) => m.weight === 'deep').slice(0, deep);
+  const lightRows = safe.filter((m) => m.weight === 'light').slice(0, light);
   const lines = [...deepRows, ...lightRows].map(
-    (m) => `- ${timeLabel(m.at, now)}，${m.about}：${m.what}`,
+    (m) => `- ${timeLabel(m.at, now)}，${sanitizeMemoryText(m.about)}：${sanitizeMemoryText(m.what)}`,
   );
   return `你记得的一些事（模糊的、零碎的，别照着念）：\n${lines.join('\n')}`;
 }
@@ -108,7 +131,7 @@ export function recordReplyMemory(
   postId: string,
   now: number,
 ): MemoryEntry[] {
-  const clean = text.replace(/\s+/g, ' ').trim();
+  const clean = sanitizeMemoryText(text).replace(/\s+/g, ' ').trim();
   const what = clean.length > 34 ? `${clean.slice(0, 34)}…` : clean;
   return addMemory(
     persona.memory,
