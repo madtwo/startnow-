@@ -4,6 +4,7 @@ import { defaultPersonas } from './personas';
 import { buildSeedCards } from './seed';
 import { sanitizeMemoryText } from './memory';
 import { findCrisis } from './safety';
+import { normalizePendingBrag, unsafeBragContent } from './brag';
 import { hasCrisisInArchive, hasPlayerCrisis, isSafeMemoryEntry } from './submissionGuard';
 
 const KEYS = {
@@ -141,6 +142,12 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     advice: raw.advice
       ? { ...raw.advice, text: raw.advice.text ?? '一个办法' }
       : undefined,
+    pendingBrag: normalizePendingBrag(raw.pendingBrag, raw),
+    sourceCardId: typeof raw.sourceCardId === 'string' && raw.sourceCardId.length <= 128 ? raw.sourceCardId : undefined,
+    sourceCommentId: typeof raw.sourceCommentId === 'string' && raw.sourceCommentId.length <= 128 ? raw.sourceCommentId : undefined,
+    sourceAdviceText: typeof raw.sourceAdviceText === 'string' && raw.sourceAdviceText.length <= 600 &&
+      !unsafeBragContent(raw.sourceAdviceText) ? raw.sourceAdviceText : undefined,
+    bragCardId: typeof raw.bragCardId === 'string' && raw.bragCardId.length <= 128 ? raw.bragCardId : undefined,
     note: raw.note
       ? { ...raw.note, text: raw.note.text ?? '一件小事' }
       : undefined,

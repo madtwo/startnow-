@@ -23,6 +23,11 @@ import { introPhaseActive } from './seed';
 import { addMemory, inferWeight, sanitizeMemoryText } from './memory';
 import { describeError, streamChat } from './llm';
 import { actionLabel, inferTrouble, pickActions, smallerAction } from './actions';
+import {
+  canPublishBrag, cancelBragsForNewWorry, fallbackBragText,
+  isGroundedBrag, isNewerPersonaWorry, scheduleAcceptedBrag,
+  unsafeBragContent,
+} from './brag';
 import { HELP_SEEKING_ACTIONS, isHelpSeekingAction, needsHelpSeeking, nextSmallerHelpAction } from './support';
 import {
   boundaryAttemptCount,
@@ -40,6 +45,8 @@ import {
 import { mockCardText } from './personas';
 import {
   ADVICE_DECIDE_RULES,
+  BRAG_CARD_RULES,
+  bragPrompt,
   CARD_RULES,
   cardPrompt,
   cleanLine,
@@ -355,7 +362,7 @@ export function acceptAdvice(card: Card, now = Date.now()): Card {
 export function closeCard(card: Card, now = Date.now()): Card {
   if (isClosed(card)) return card;
   // 关闭意味着停止后续普通角色回复；不能只改 UI 状态而继续执行旧任务。
-  return { ...card, status: 'handled', handledAt: now, plan: [], pending: [], helperAt: undefined };
+  return { ...card, status: 'handled', handledAt: now, plan: [], pending: [], pendingBrag: undefined, helperAt: undefined };
 }
 
 export function completeCard(card: Card, now = Date.now(), speed = 6): Card {
@@ -539,13 +546,6 @@ function reactionLine(persona: Persona): string {
   };
   return pick(pool[persona.id] ?? ['这一步算数。']);
 }
-
-const FOLLOW_LINES: Record<string, string[]> = {
-  shenmo: ['你说的那一步我做了。没想象中那么难。', '照你说的做了。至少今晚能睡踏实点。'],
-  weini: ['嗯……我按你说的做了。好像可以。', '你说的那一步我试了，没有想的那么可怕。'],
-  miaoze: ['你说的那一步我做了，确实比整块想容易。', '按你说的试了一下，能做。'],
-  yanggao: ['你说的那招我用了，还真行。', '按你说的做了，没那么难嘛。'],
-};
 
 const ACCEPT_LINES = ['行，我试试。', '好，这个我能做。', '嗯，那我先做这一步。'];
 const REFUSE_LINES = [
@@ -821,12 +821,43 @@ async function generateAiCard(
   }
 }
 
+/** Generate one fictional, attributable follow-up; errors never masquerade as model successes. */
+async function generateBragCardText(
+  ctx: Ctx, persona: Persona, source: Card, adviceText: string,
+  now: number,
+): Promise<{ text: string; origin: 'model' | 'simulated' }> {
+  const fallback = () => ({
+    text: fallbackBragText(persona, adviceText, source.pendingBrag?.actionId),
+    origin: 'simulated' as const,
+  });
+  if (isMock(ctx.config)) return fallback();
+  try {
+    const raw = await callOnce(
+      ctx,
+      systemFor(persona, '', BRAG_CARD_RULES, ctx.settings.baselineExtra),
+      withUntrustedHistory(bragPrompt(source, adviceText), persona, now),
+      300,
+    );
+    const text = cleanLine(raw.replace(/^(?:炫耀卡|卡片正文|正文)[:：]\s*/, ''), 120);
+    if (!isGroundedBrag(text, adviceText)) {
+      ctx.logs.push(`brag fallback: ${persona.name} 生成的内容不够具体或未通过安全审查，使用标注的模拟文案`);
+      return fallback();
+    }
+    return { text, origin: 'model' };
+  } catch (err) {
+    ctx.logs.push(`brag fallback: ${persona.name} 模型暂不可用：${describeError(err)}`);
+    return fallback();
+  }
+}
+
 export interface TickInput {
   cards: Card[];
   personas: Persona[];
   settings: WorldSettings;
   config: LlmConfig;
   now?: number;
+  /** Author-only: process only scheduled brag jobs, not arrivals/replies/new worries. */
+  bragOnly?: boolean;
 }
 
 export interface TickOutput {
@@ -851,7 +882,8 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
   const limit = isMock(input.config) ? 6 : Math.max(1, input.settings.maxCallsPerTick);
   const speed = scale(input.settings);
 
-  const cards: Card[] = [];
+  let cards: Card[] = [];
+  const firedBragAuthors = new Set<string>();
   let peerScheduled = false;
   for (const original of input.cards) {
     let card: Card = {
@@ -876,11 +908,26 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       continue;
     }
 
+    // A stored job must be revalidated on EVERY tick (also after refresh/import).
+    if (card.pendingBrag && !canPublishBrag(card, [...input.cards, ...cards])) {
+      const newer = isNewerPersonaWorry([...input.cards, ...cards], card);
+      const reason = newer ? 'newer worry' : 'closed/crisis/unsafe/duplicate';
+      ctx.logs.push(`brag cancelled: ${reason} · ${card.authorName} · sourceCardId=${card.id}`);
+      card.pendingBrag = undefined;
+      if (newer) {
+        card.status = 'handled';
+        card.handledAt = now;
+        card.plan = [];
+        card.pending = [];
+      }
+    }
+
     // 处理持久化的关闭状态/到期状态。done 仅允许已安排的祝贺反应，不执行普通回复。
     if (card.status === 'noted' && card.note && now > card.note.dueAt) {
       card = { ...card, status: 'handled', handledAt: now, note: undefined };
     }
-    if ((card.status === 'talking' || card.status === 'advised') && now - card.createdAt > DAY) {
+    if ((card.status === 'talking' || (card.status === 'advised' && !card.pendingBrag)) &&
+        now - card.createdAt > DAY) {
       card = { ...card, status: 'handled', handledAt: now };
     }
     if (card.status === 'handled') {
@@ -920,9 +967,9 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     });
 
     if (
-      !peerScheduled &&
+      !input.bragOnly && !peerScheduled &&
       card.authorKind === 'persona' &&
-      card.status !== 'done' &&
+      card.status !== 'done' && card.kind !== 'brag' &&
       card.pending.length === 0 &&
       card.comments.length < 3 &&
       now - card.createdAt > 10 * MIN &&
@@ -943,7 +990,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     }
 
     if (
-      card.helperAt &&
+      !input.bragOnly && card.helperAt &&
       now >= card.helperAt &&
       !card.comments.some((c) => c.authorId === 'helper')
     ) {
@@ -966,7 +1013,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       };
     }
 
-    for (const item of card.plan.filter((p) => p.at <= now)) {
+    for (const item of (input.bragOnly ? [] : card.plan.filter((p) => p.at <= now))) {
       if (ctx.calls >= limit) break;
       const persona = personas.find((p) => p.id === item.personaId);
       card.plan = card.plan.filter((p) => p !== item);
@@ -1010,7 +1057,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       }
     }
 
-    const ready = card.pending.filter((p) => p.at <= now).sort((a, b) => a.at - b.at)[0];
+    const ready = input.bragOnly ? undefined : card.pending.filter((p) => p.at <= now).sort((a, b) => a.at - b.at)[0];
     if (ready && ctx.calls < limit) {
       const persona = personas.find((p) => p.id === ready.personaId);
       card.pending = card.pending.filter((p) => p !== ready);
@@ -1100,11 +1147,23 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
               replyTo: adviceComment?.id,
             });
             if (accept) {
-              card.advice = {
-                text: adviceText, fromPersonaId: 'me', at: now, accepted: true,
-                origin: isMock(ctx.config) ? 'demo' : 'curated',
-              };
-              card.status = 'advised';
+              // Only an accepted suggestion on the persona's OWN card is executable here.
+              if (!card.advice?.accepted) {
+                card.advice = {
+                  text: adviceText, fromPersonaId: 'me', at: now, accepted: true,
+                  sourceCommentId: adviceComment?.id,
+                  origin: isMock(ctx.config) ? 'demo' : 'curated',
+                };
+                card.status = 'advised';
+                const scheduled = scheduleAcceptedBrag(card, [...input.cards, ...cards], now);
+                if (scheduled.pendingBrag && !card.pendingBrag) {
+                  ctx.logs.push(`brag scheduled · ${persona.name} · sourceCardId=${card.id} · dueAt=${new Date(scheduled.pendingBrag.dueAt).toISOString()}`);
+                } else if (isNewerPersonaWorry([...input.cards, ...cards], card)) {
+                  ctx.logs.push(`brag cancelled: newer worry · ${persona.name} · sourceCardId=${card.id}`);
+                  card = { ...card, status: 'handled', handledAt: now, pending: [], plan: [] };
+                }
+                if (scheduled.pendingBrag) card = scheduled;
+              }
             } else {
               const refused = (card.refused ?? 0) + 1;
               card = { ...card, refused };
@@ -1166,43 +1225,55 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       }
     }
 
-    if (
-      card.authorKind === 'persona' &&
-      card.advice?.accepted &&
-      card.status !== 'done' && card.status !== 'handled' &&
-      now - card.advice.at > 90_000 / speed
-    ) {
-      const label = card.advice.text;
-      card = {
-        ...card,
-        status: 'done',
-        doneAt: now,
-        comments: [
-          ...card.comments,
-          {
-            id: uid(),
-            authorId: card.authorId,
-            authorKind: 'persona',
-            text: pick(FOLLOW_LINES[card.authorId] ?? ['你说的那一步我做了。']),
-            at: now,
-            origin: 'simulated',
-          },
-        ],
-      };
-      if (!card.noMemory) personas = personas.map((p) =>
-        p.id === card.authorId
-          ? {
-              ...p,
-              mind: mindAfterStep(p, now),
-              weekLog: [
-                ...p.weekLog,
-                { at: now, text: sanitizeMemoryText(`照着别人给的小步「${label}」做了一次`) },
-              ].slice(-8),
+    // A completed fictional action is published as a NEW Card, never as a FOLLOW_LINES comment.
+    const job = card.pendingBrag;
+    if (job && job.dueAt <= now && (isMock(ctx.config) || ctx.calls < limit)) {
+      if (!canPublishBrag(card, [...input.cards, ...cards]) ||
+          unsafeBragContent(job.adviceText) || card.advice?.text !== job.adviceText) {
+        ctx.logs.push(`brag cancelled: invalid source · ${card.authorName} · sourceCardId=${card.id}`);
+        card.pendingBrag = undefined;
+      } else {
+        const persona = personas.find((p) => p.id === card.authorId);
+        if (!persona) {
+          card.pendingBrag = undefined;
+          ctx.logs.push(`brag cancelled: missing persona · sourceCardId=${card.id}`);
+        } else {
+          const result = await generateBragCardText(ctx, persona, card, job.adviceText, now);
+          // A second validation is essential if generation becomes async (and for bad archives).
+          if (!canPublishBrag(card, [...input.cards, ...cards]) || unsafeBragContent(result.text)) {
+            card.pendingBrag = undefined;
+            ctx.logs.push(`brag cancelled: unsafe after generation · sourceCardId=${card.id}`);
+          } else {
+            const nextCard: Card = {
+              id: uid(), authorId: persona.id, authorName: persona.name,
+              authorKind: 'persona', kind: 'brag', title: '刚试了这一步',
+              text: result.text, origin: result.origin,
+              sourceCardId: card.id, sourceCommentId: job.sourceCommentId,
+              sourceAdviceText: job.adviceText,
+              likes: 0, likedByMe: false, createdAt: now,
+              // Stuck permits ordinary likes/comments; no automatic responder or helper is queued.
+              status: 'stuck', arrivals: [], plan: [], pending: [], comments: [],
+            };
+            card = {
+              ...card, pendingBrag: undefined, bragCardId: nextCard.id,
+              status: 'done', doneAt: now, plan: [], pending: [], helperAt: undefined,
+            };
+            cards.push(nextCard);
+            firedBragAuthors.add(persona.id);
+            if (!card.noMemory) {
+              personas = personas.map((p) => p.id === persona.id ? {
+                ...p, mind: mindAfterStep(p, now),
+                weekLog: [...p.weekLog, {
+                  at: now, text: sanitizeMemoryText(`剧情里照着建议「${job.adviceText}」模拟做了一次`),
+                }].slice(-8),
+              } : p);
+              personas = rememberOnCard(personas, card, persona.id, '你',
+                `剧情里照着「${job.adviceText}」模拟做了一次`, now);
             }
-          : p,
-      );
-      personas = rememberOnCard(personas, card, card.authorId, '你', `照着「${label}」做了一次`, now);
-      ctx.logs.push(`${card.authorName} 做到了「${label}」`);
+            ctx.logs.push(`brag fired · ${persona.name} · sourceCardId=${card.id} · bragCardId=${nextCard.id} · ${result.origin}`);
+          }
+        }
+      }
     }
 
     cards.push(card);
@@ -1213,9 +1284,10 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     (c) => c.authorKind === 'persona' && !c.intro && c.createdAt <= now && now - c.createdAt < DAY,
   );
   const quota = dailyQuota(input.settings);
-  if (!introActive && todayCards.length < quota && ctx.calls < limit && personas.length) {
-    const candidates = personas.filter((p) => !todayCards.some((c) => c.authorId === p.id));
-    const pool = candidates.length ? candidates : personas;
+  const eligible = personas.filter((p) => !firedBragAuthors.has(p.id));
+  if (!input.bragOnly && !introActive && todayCards.length < quota && ctx.calls < limit && eligible.length) {
+    const candidates = eligible.filter((p) => !todayCards.some((c) => c.authorId === p.id));
+    const pool = candidates.length ? candidates : eligible;
     const persona = pool[Math.floor(Math.random() * pool.length)];
     const recent = cards.filter((c) => c.authorId === persona.id).slice(0, 3).map((c) => c.text);
     const boost = persona.shareBoost ? 1 : 0;
@@ -1249,6 +1321,9 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
           phase: 'reply',
         });
       });
+      const cancelled = cancelBragsForNewWorry(cards, nextCard, now);
+      cards = cancelled.cards;
+      cancelled.cancelled.forEach((id) => ctx.logs.push(`brag cancelled: newer worry · ${persona.name} · sourceCardId=${id}`));
       cards.push(nextCard);
       personas = personas.map((p) =>
         p.id === persona.id
@@ -1374,7 +1449,7 @@ export async function catchUp(
     weekLog: [...p.weekLog],
     mind: ensureMind(p, now),
   }));
-  const cards = [...input.cards];
+  let cards = [...input.cards];
 
   for (let i = 0; i < count; i++) {
     if (cards.filter((c) => c.authorKind === 'persona' && c.createdAt <= now && now - c.createdAt < DAY).length >= quota) break;
@@ -1412,6 +1487,8 @@ export async function catchUp(
     chosen.forEach((p, idx) => {
       card.pending.push({ personaId: p.id, at: at + (2 + idx * 3) * 60_000, phase: 'reply' });
     });
+    const cancelled = cancelBragsForNewWorry(cards, card, now);
+    cards = cancelled.cards;
     cards.push(card);
     personas = personas.map((p) =>
       p.id === persona.id

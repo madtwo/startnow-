@@ -134,6 +134,16 @@ export interface PendingReply {
   sourceCommentId?: string; // 精确关联触发此次待回复的玩家评论，旧存档可为空。
 }
 
+/** A durable job stored on the original persona worry, not a Comment. */
+export interface PendingBrag {
+  personaId: string;
+  acceptedAt: number;
+  dueAt: number;
+  adviceText: string;
+  actionId?: string;
+  sourceCommentId?: string;
+}
+
 export interface Todo {
   id: string;
   text: string;
@@ -163,6 +173,14 @@ export interface Card {
   pending: PendingReply[];
   comments: Comment[];
   advice?: Advice;
+  /** One accepted player suggestion may schedule at most one fictional follow-up card. */
+  pendingBrag?: PendingBrag;
+  /** Provenance on the new persona brag card. */
+  sourceCardId?: string;
+  sourceCommentId?: string;
+  sourceAdviceText?: string;
+  /** Link from source worry to its published follow-up. */
+  bragCardId?: string;
   note?: Note;
   doneAt?: number;
   handledAt?: number;

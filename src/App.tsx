@@ -24,6 +24,7 @@ import { defaultConfig, isMock, isReady } from './config/providers';
 import { HOTLINE } from './lib/crisis';
 import { containsCrisis, hasCrisisInArchive } from './lib/submissionGuard';
 import { createOperationGate } from './lib/operationGate';
+import { advanceBragMinutes, cancelBragsForNewWorry, cancelBragsForPersona, triggerNextBrag } from './lib/brag';
 import { forgetAll, forgetOne, forgetRole } from './lib/memoryControl';
 import { modelFailureNotice } from './lib/modelStatus';
 import {
@@ -36,7 +37,6 @@ import {
   completeCard,
   createPlayerCard,
   notePlayerShare,
-  personaBrag,
   personaCard,
   shrinkAdvice,
   summonPersona,
@@ -133,7 +133,7 @@ export default function App() {
   });
   // 同步变更时立即推进版本号，不依赖 React 下一次 render 的时间。
   const gate = useRef(createOperationGate());
-  const tickAfterCommit = useRef(false);
+  const tickAfterCommit = useRef<'full' | 'brag' | null>(null);
   const [config, rawSetConfig] = useState<LlmConfig>(() => loadConfig());
   const [cards, rawSetCards] = useState<Card[]>(boot.cards);
   const [personas, rawSetPersonas] = useState<Persona[]>(boot.personas);
@@ -225,11 +225,12 @@ export default function App() {
     return true;
   };
 
-  const tick = useCallback(async () => {
+  const tick = useCallback(async (bragOnly = false) => {
     if (document.hidden) return;
     const cur = latest.current;
     if (cur.settings.paused || !isReady(cur.config)) return;
-    if (cur.world.callsToday >= cur.settings.dailyCalls) return;
+    if (cur.world.dayKey === dayKey(Date.now()) &&
+        cur.world.callsToday >= cur.settings.dailyCalls && !isMock(cur.config)) return;
     const operation = gate.current.start('tick');
     if (!operation) return;
     const revision = gate.current.revision();
@@ -240,6 +241,7 @@ export default function App() {
         personas: cur.personas,
         settings: cur.settings,
         config: cur.config,
+        bragOnly,
       });
       if (!gate.current.isCurrent(operation, revision) || latest.current.cards !== baseCards) {
         // 已调用的模型仍计入本机配额，但不能写入过时的卡片和记忆。
@@ -262,14 +264,12 @@ export default function App() {
         const who = cur.personas.find((p) => p.id === last?.authorId)?.name ?? '有人';
         setToast(`${who} 来了你的卡`);
       }
+      // Retire the unrelated every-five-hours canned brag; accepted advice owns this path.
       const nowTs = Date.now();
-      const lastBrag = cur.world.lastBragAt ?? 0;
-      const bragDue =
-        lastBrag > 0 && nowTs - lastBrag > 5 * 3_600_000 && cur.personas.length > 0;
-      const extra = bragDue
-        ? [personaBrag(cur.personas[Math.floor(Math.random() * cur.personas.length)], nowTs)]
-        : [];
-      setCards(extra.length ? [...out.cards, ...extra] : out.cards);
+      const fired = out.cards.find((c) => c.kind === 'brag' && c.sourceCardId &&
+        !baseCards.some((existing) => existing.id === c.id));
+      setCards(out.cards);
+      if (fired) setToast(`${fired.authorName} 发来一张新卡 · AI 剧情模拟`);
       setPersonas(out.personas);
       const day = dayKey(nowTs);
       setWorld((w) => ({
@@ -277,7 +277,7 @@ export default function App() {
         dayKey: day,
         callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls,
         lastTickAt: nowTs,
-        lastBragAt: extra.length ? nowTs : w.lastBragAt ?? nowTs,
+        lastBragAt: w.lastBragAt, // legacy field kept for archive compatibility
         logs: [...out.logs, ...w.logs].slice(0, 20),
       }));
       const failureNotice = modelFailureNotice(out.logs);
@@ -306,9 +306,10 @@ export default function App() {
 
   // React 提交 nudge/advance 的新卡片后才运行 tick，避免 latest 引用尚未更新。
   useEffect(() => {
-    if (!tickAfterCommit.current) return;
-    tickAfterCommit.current = false;
-    void tick();
+    const pending = tickAfterCommit.current;
+    if (!pending) return;
+    tickAfterCommit.current = null;
+    void tick(pending === 'brag');
   }, [cards, tick]);
 
   useEffect(() => {
@@ -412,6 +413,10 @@ export default function App() {
       helperAt: c.helperAt ? c.helperAt - shift : undefined,
       plan: c.plan.map((p) => ({ ...p, at: p.at - shift })),
       pending: c.pending.map((p) => ({ ...p, at: p.at - shift })),
+      pendingBrag: c.pendingBrag ? {
+        ...c.pendingBrag, acceptedAt: c.pendingBrag.acceptedAt - shift,
+        dueAt: c.pendingBrag.dueAt - shift,
+      } : undefined,
       note: c.note ? { ...c.note, dueAt: c.note.dueAt - shift } : undefined,
       comments: c.comments.map((x) => ({ ...x, at: x.at - shift })),
     }));
@@ -431,7 +436,7 @@ export default function App() {
         return;
       }
       // 先预约 effect，React 提交新卡片时才触发下一次 tick。
-      tickAfterCommit.current = true;
+      tickAfterCommit.current = 'full';
       setCards(res.cards);
       setPersonas(res.personas);
       if (res.calls) {
@@ -549,7 +554,7 @@ export default function App() {
       return { ...c, pending: c.pending.map((p, i) =>
         (i === target.idx ? { ...p, at: now - 1 } : p)) };
     });
-    tickAfterCommit.current = true;
+    tickAfterCommit.current = 'full';
     setCards(next);
   };
 
@@ -579,7 +584,41 @@ export default function App() {
   const postAs = (personaId: string) => {
     const persona = personas.find((p) => p.id === personaId);
     if (!persona) return;
-    setCards((prev) => [personaCard(persona), ...prev]);
+    const now = Date.now();
+    const newWorry = personaCard(persona, now);
+    const cancelled = cancelBragsForNewWorry(latest.current.cards, newWorry, now);
+    setCards([newWorry, ...cancelled.cards]);
+    if (cancelled.cancelled.length) {
+      setWorld((world) => ({ ...world, logs: [
+        ...cancelled.cancelled.map((id) => `brag cancelled: newer worry · ${persona.name} · sourceCardId=${id}`),
+        ...world.logs,
+      ].slice(0, 20) }));
+    }
+  };
+
+  /** Debug actions change ONLY pending deadlines; they never backdate the forum feed. */
+  const advanceBrags = (minutes: number) => {
+    if (gate.current.running()) { setToast('另一条模型任务进行中，请稍后测试'); return; }
+    if (settings.paused) { setToast('先在作者后台取消暂停，再测试炫耀任务'); return; }
+    tickAfterCommit.current = 'brag';
+    setCards((prev) => advanceBragMinutes(prev, minutes));
+    setToast(`炫耀排期已快进 ${minutes} 分钟；不会生成其他新烦恼`);
+  };
+  const fireNextBrag = () => {
+    if (gate.current.running()) { setToast('另一条模型任务进行中，请稍后测试'); return; }
+    if (!cards.some((c) => c.pendingBrag)) { setToast('当前没有等待中的炫耀卡'); return; }
+    tickAfterCommit.current = 'brag';
+    setCards((prev) => triggerNextBrag(prev));
+  };
+  const cancelBrags = (personaId: string) => {
+    if (gate.current.running()) { setToast('另一条模型任务进行中，请稍后测试'); return; }
+    const result = cancelBragsForPersona(cards, personaId);
+    setCards(result.cards);
+    setWorld((w) => ({ ...w, logs: [
+      ...result.cancelled.map((id) => `brag cancelled: author test · personaId=${personaId} · sourceCardId=${id}`),
+      ...w.logs,
+    ].slice(0, 20) }));
+    setToast(`取消了 ${result.cancelled.length} 条待发炫耀`);
   };
 
   const patchPersona = (next: Persona) =>
@@ -1069,6 +1108,27 @@ export default function App() {
 
       {view === 'detail' && detailCard && (
         <div className="feed">
+          {detailCard.sourceCardId && (
+            <div className="advice" role="note">
+              <p className="advice-head">AI 角色模拟执行 · 从你给的建议</p>
+              <p className="advice-label">{detailCard.sourceAdviceText}</p>
+              <button type="button" className="advice-source-link" onClick={() => {
+                const source = cards.find((c) => c.id === detailCard.sourceCardId);
+                if (source) openCard(source);
+                else setToast('原卡已从本地保留期移除');
+              }}>查看原卡</button>
+            </div>
+          )}
+          {detailCard.bragCardId && (
+            <div className="advice" role="note">
+              <p>这一步已有后续炫耀卡 · AI 剧情模拟</p>
+              <button type="button" className="advice-source-link" onClick={() => {
+                const followup = cards.find((c) => c.id === detailCard.bragCardId);
+                if (followup) openCard(followup);
+                else setToast('后续卡已从本地保留期移除');
+              }}>查看后续卡</button>
+            </div>
+          )}
           <CardDetail
             key={detailCard.id}
             card={detailCard}
@@ -1493,6 +1553,17 @@ export default function App() {
             onPersonas={setPersonas}
             onTick={() => void nudge()}
             onAdvance={(hours) => void advance(hours)}
+            {...{
+              // Optional debug extension: older AdminPanel versions can ignore these props.
+              pendingBrags: cards.filter((c) => c.pendingBrag).map((c) => ({
+                sourceCardId: c.id, personaId: c.authorId, personaName: c.authorName,
+                dueAt: c.pendingBrag!.dueAt,
+              })),
+              onAdvanceBragMinutes: advanceBrags,
+              onFireNextBrag: fireNextBrag,
+              onCancelBrags: cancelBrags,
+              onSimulateNewWorry: postAs,
+            }}
             onSummon={summon}
             onPostAs={postAs}
             onExport={doExport}
