@@ -101,6 +101,9 @@ export default function ChatRoom({
   return (
     <div className="room">
       <header className="room-head">
+        <a className="room-back" href="/" title="回卡片论坛" aria-label="回卡片论坛">
+          ←
+        </a>
         <div className="room-title">
           <h1>{room.title}</h1>
           <p>
