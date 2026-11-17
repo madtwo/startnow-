@@ -219,6 +219,12 @@ body {
   box-shadow: var(--v2-shadow-sm);
 }
 
+.top-actions .icon-btn svg,
+.top-actions .bell-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
 .icon-btn:hover,
 .bell-btn:hover {
   border-color: var(--v2-line-2);
@@ -227,15 +233,13 @@ body {
 }
 
 .plus-btn {
-  border: 0;
-  background: linear-gradient(135deg, #b9a6ff 0%, #8b74f0 100%);
-  color: #fff;
-  box-shadow: 0 8px 18px rgba(139, 116, 240, 0.28);
+  color: var(--v2-primary-deep);
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .plus-btn:hover {
-  background: linear-gradient(135deg, #a78bfa 0%, #7c65ea 100%);
-  color: #fff;
+  background: var(--v2-primary-soft);
+  color: var(--v2-primary-deep);
 }
 
 .menu-wrap {

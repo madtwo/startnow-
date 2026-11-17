@@ -955,10 +955,10 @@ export default function App() {
                 <path
                   d="M6.8 16.4V11a5.2 5.2 0 0 1 10.4 0v5.4l1.4 1.8H5.4l1.4-1.8Z"
                   stroke="currentColor"
-                  strokeWidth="1.5"
+                  strokeWidth="1.7"
                   strokeLinejoin="round"
                 />
-                <path d="M10.2 20.2a2 2 0 0 0 3.6 0" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M10.2 20.2a2 2 0 0 0 3.6 0" stroke="currentColor" strokeWidth="1.7" />
               </svg>
               {notices.length > 0 && (
                 <span className="bell-dot">{notices.length > 9 ? '9+' : notices.length}</span>
