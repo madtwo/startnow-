@@ -8,19 +8,15 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23a78bfa'/%3E%3Cpath d='M16 8v16M8 16h16M10.3 10.3l11.4 11.4M21.7 10.3L10.3 21.7' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E"
     />
-    <meta
-      name="description"
-      content="StartNow：一个几个人凑的群。卡住了就说一句，会有人陆续接话，然后给你一个现在能做的小步。"
-    />
     <title>StartNow · 群聊</title>
+    <script>
+      location.replace('/?room=1');
+    </script>
   </head>
   <body>
-    <div id="root">
-      <p style="margin:48px auto;max-width:560px;font:14px/1.8 system-ui;color:#6f6b7d;text-align:center">
-        正在打开群聊… 如果一直停在这里，说明脚本没加载成功：确认地址是
-        http://127.0.0.1:5173/room.html，并在终端里运行过 npm run dev。
-      </p>
-    </div>
-    <script type="module" src="/room/src/main.tsx"></script>
+    <p style="margin:48px auto;max-width:560px;font:14px/1.8 system-ui;color:#6f6b7d;text-align:center">
+      群聊已经并入主站，正在跳转… 如果没有自动跳转，请点
+      <a href="/?room=1">这里进入群聊</a>。
+    </p>
   </body>
 </html>

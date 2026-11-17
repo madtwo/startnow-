@@ -1,4 +1,4 @@
-import type { Mood, Persona, PersonaMind } from '../types';
+import type { Archetype, Mood, Persona, PersonaMind } from '../types';
 
 export const MOOD_LABEL: Record<Mood, string> = {
   calm: '平静',
@@ -38,11 +38,37 @@ const templates: Record<string, Omit<PersonaMind, 'lastAct' | 'lastActAt'>> = {
   },
 };
 
+/** 换一批群友时，新人不认识，按原型给一份默认心事。 */
+const archetypeMinds: Record<Archetype, Omit<PersonaMind, 'lastAct' | 'lastActAt'>> = {
+  quiet: {
+    mood: 'calm',
+    thought: '书摊开着，看到第三行就走神了。',
+    focus: '把今晚那一章翻完',
+  },
+  shy: {
+    mood: 'low',
+    thought: '群里消息响了两下，我看了，没想好接什么。',
+    focus: '下次别再只说「都行」',
+  },
+  rational: {
+    mood: 'tense',
+    thought: '表格开了三页，还是没决定先弄哪个。',
+    focus: '挑一件先动手',
+  },
+  warm: {
+    mood: 'warm',
+    thought: '刚吃完饭，脑子里装着两件没处理的事。',
+    focus: '把该问的那句话问出去',
+  },
+};
+
 export function ensureMind(persona: Persona, now = Date.now()): PersonaMind {
-  const fallback = templates[persona.id] ?? {
-    mood: 'calm' as const,
-    thought: persona.weekLog[0]?.text ?? persona.tagline,
-    focus: '先把今天过完',
+  const fallback =
+    templates[persona.id] ??
+    archetypeMinds[persona.archetype ?? 'quiet'] ?? {
+      mood: 'calm' as const,
+      thought: persona.weekLog[0]?.text ?? persona.tagline,
+      focus: '先把今天过完',
   };
   const base = persona.mind ?? { ...fallback, lastAct: 'lurk' as const, lastActAt: now };
   let mind: PersonaMind = {

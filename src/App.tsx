@@ -87,6 +87,7 @@ const GUIDE_DISMISSED_KEY = 'startnow.guideDismissed';
 
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const SettingsDialog = lazy(() => import('./components/SettingsDialog'));
+const RoomView = lazy(() => import('./components/RoomView'));
 
 const AVATAR_COLORS: Record<string, string> = {
   moon: '#7BA3C9',
@@ -97,7 +98,7 @@ const AVATAR_COLORS: Record<string, string> = {
   pebble: '#8C847A',
 };
 
-type View = 'home' | 'post' | 'mine' | 'profile' | 'detail';
+type View = 'home' | 'post' | 'mine' | 'profile' | 'detail' | 'room';
 
 const FORUM_CATS = ['学习', '情绪', '生活', '延期记录', '全部'] as const;
 const CAT_KEYWORDS: Record<string, string[]> = {
@@ -178,7 +179,9 @@ export default function App() {
   const [guideDismissed, setGuideDismissed] = useState(
     () => localStorage.getItem(GUIDE_DISMISSED_KEY) === '1',
   );
-  const [view, setView] = useState<View>('home');
+  const [view, setView] = useState<View>(() =>
+    new URLSearchParams(window.location.search).has('room') ? 'room' : 'home',
+  );
   const [homeTab, setHomeTab] = useState<'step' | 'forum'>(
     () => (localStorage.getItem('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
   );
@@ -830,7 +833,11 @@ export default function App() {
     cards.filter((c) => c.note && c.status === 'noted').length;
 
   return (
-    <div className={`shell ${view === 'home' && homeTab === 'step' ? 'is-home-step' : ''}`}>
+    <div
+      className={`shell ${view === 'home' && homeTab === 'step' ? 'is-home-step' : ''} ${
+        view === 'room' ? 'is-room' : ''
+      }`}
+    >
       <header className="top">
         <div className="top-inner">
           <button type="button" className="brand" onClick={bumpBrand} title="StartNow">
@@ -871,21 +878,14 @@ export default function App() {
             >
               论坛
             </button>
-            <a className="nav-room" href="/room.html" title="进入群聊">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M5 5.5h14v9.5H9l-4 3.5z" />
-                <path d="M9 9.5h6M9 12h4" />
-              </svg>
+            <button
+              type="button"
+              className={view === 'room' ? 'active' : ''}
+              aria-current={view === 'room' ? 'page' : undefined}
+              onClick={() => setView('room')}
+            >
               群聊
-            </a>
+            </button>
             <button
               type="button"
               className={view === 'profile' || view === 'mine' ? 'active' : ''}
@@ -1493,7 +1493,8 @@ export default function App() {
                 type="button"
                 className="menu-item"
                 onClick={() => {
-                  window.location.href = '/room.html';
+                  setMenuOpen(false);
+                  setView('room');
                 }}
               >
                 <span className="menu-item-icon">
@@ -1503,8 +1504,8 @@ export default function App() {
                   </svg>
                 </span>
                 <span className="menu-item-text">
-                  <b>群聊模式</b>
-                  <span>换一种方式聊（独立页）</span>
+                  <b>群聊</b>
+                  <span>和同伴们在群里聊几句</span>
                 </span>
               </button>
               <button type="button" className="menu-item" onClick={doExport}>
@@ -1556,6 +1557,12 @@ export default function App() {
             </p>
           </section>
         </div>
+      )}
+
+      {view === 'room' && (
+        <Suspense fallback={<div className="room-loading">正在打开群聊…</div>}>
+          <RoomView identity={identity} config={config} onOpenApi={() => setSettingsOpen(true)} />
+        </Suspense>
       )}
           </main>
         </div>
@@ -1637,13 +1644,6 @@ export default function App() {
             ['profile', '我的'],
           ] as [string, string][]
         ).map(([id, label]) => {
-          if (id === 'room') {
-            return (
-              <a key="room" className="tab" href="/room.html">
-                群聊
-              </a>
-            );
-          }
           return (
             <button
               key={id}

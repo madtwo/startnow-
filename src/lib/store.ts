@@ -1,4 +1,15 @@
-import type { Card, Identity, LlmConfig, Persona, Todo, World, WorldSettings } from '../types';
+import type {
+  Card,
+  Identity,
+  LlmConfig,
+  Message,
+  Persona,
+  Room,
+  RoomSettings,
+  Todo,
+  World,
+  WorldSettings,
+} from '../types';
 import { defaultConfig, isReady, PRESETS } from '../config/providers';
 import { defaultPersonas } from './personas';
 import { buildSeedCards } from './seed';
@@ -16,6 +27,9 @@ const KEYS = {
   todos: 'shudong.todos.v1',
   identity: 'shudong.identity.v2',
   identityLegacy: 'shudong.identity.v1',
+  room: 'shudong.room.v1',
+  archives: 'shudong.archives.v1',
+  roomSettings: 'shudong.roomsettings.v1',
 };
 
 const LEGACY_POST_KEYS = ['shudong.posts.v3', 'shudong.posts.v2', 'shudong.posts.v1'];
@@ -309,6 +323,74 @@ export function loadIdentity(): Identity {
 }
 
 export const saveIdentity = (identity: Identity) => write(KEYS.identity, identity);
+
+/* ------------------------------------------------------------------ *
+ * 群聊
+ * ------------------------------------------------------------------ */
+
+export const defaultRoomSettings: RoomSettings = {
+  liveliness: 0.5,
+  timeFlow: false,
+  dailyMessages: 400,
+};
+
+export function loadRoomSettings(): RoomSettings {
+  const saved = read(KEYS.roomSettings) as Partial<RoomSettings> | null;
+  if (!saved || typeof saved !== 'object') return { ...defaultRoomSettings };
+  return {
+    liveliness:
+      typeof saved.liveliness === 'number' && Number.isFinite(saved.liveliness)
+        ? Math.max(0, Math.min(1, saved.liveliness))
+        : defaultRoomSettings.liveliness,
+    timeFlow: saved.timeFlow === true,
+    dailyMessages:
+      typeof saved.dailyMessages === 'number' && saved.dailyMessages > 0
+        ? Math.round(saved.dailyMessages)
+        : defaultRoomSettings.dailyMessages,
+  };
+}
+
+export const saveRoomSettings = (settings: RoomSettings) => write(KEYS.roomSettings, settings);
+
+const normalizeRoom = (raw: Partial<Room> | null): Room | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  if (!Array.isArray(raw.messages) || !Array.isArray(raw.cast) || !raw.cast.length) return null;
+  const now = Date.now();
+  return {
+    id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
+    title: typeof raw.title === 'string' ? raw.title : '群聊',
+    createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : now,
+    messages: (raw.messages as Message[]).filter((m) => m && typeof m.text === 'string'),
+    scheduled: Array.isArray(raw.scheduled) ? raw.scheduled : [],
+    steps: Array.isArray(raw.steps) ? raw.steps : [],
+    cast: raw.cast as Persona[],
+    gone: Array.isArray(raw.gone) ? raw.gone : [],
+    lastSeenAt: typeof raw.lastSeenAt === 'number' ? raw.lastSeenAt : now,
+    lastMessageAt: typeof raw.lastMessageAt === 'number' ? raw.lastMessageAt : now,
+    usage:
+      raw.usage && typeof raw.usage === 'object'
+        ? { day: String(raw.usage.day ?? dayKey(now)), messages: Number(raw.usage.messages) || 0 }
+        : { day: dayKey(now), messages: 0 },
+    archivedAt: typeof raw.archivedAt === 'number' ? raw.archivedAt : undefined,
+  };
+};
+
+export function loadRoom(): Room | null {
+  return normalizeRoom(read(KEYS.room) as Partial<Room> | null);
+}
+
+export const saveRoom = (room: Room) => write(KEYS.room, room);
+
+export function loadArchives(): Room[] {
+  const raw = read(KEYS.archives);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => normalizeRoom(row as Partial<Room>))
+    .filter((row): row is Room => Boolean(row))
+    .slice(0, 8);
+}
+
+export const saveArchives = (rooms: Room[]) => write(KEYS.archives, rooms.slice(0, 8));
 
 export interface Bundle {
   version: 3;
