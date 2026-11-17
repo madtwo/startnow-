@@ -26,7 +26,7 @@ export default function CardRow({ card, personas, onClick, onLike }: Props) {
   const brag = card.kind === 'brag';
 
   return (
-    <div
+    <article
       className={`thread-card ${brag ? 'is-brag' : ''}`}
       onClick={onClick}
       onKeyDown={(e) => {
@@ -39,38 +39,54 @@ export default function CardRow({ card, personas, onClick, onLike }: Props) {
       role="button"
       tabIndex={0}
     >
-      <div className="thread-top">
-        {author ? (
-          <Avatar avatarKey={author.avatarKey} name={author.name} color={author.color} size="xs" />
-        ) : (
-          <Avatar avatarKey="petal" className="me" size="xs" />
-        )}
-        <span className="thread-author">{card.authorName}</span>
-        {!mine && <span className="thread-badge">AI</span>}
-        {card.intro && <span className="thread-badge">自我介绍</span>}
-        {mine && <span className="me-badge">你</span>}
-        {brag && <span className="brag-badge">做到了</span>}
-        <time className="thread-time">{timeLabel(card.createdAt)}</time>
-        {unseen && <span className="unread-dot" title="还没点开过" />}
+      {card.image && (
+        <div className="tc-cover">
+          <img src={card.image} alt="" />
+        </div>
+      )}
+
+      <div className="tc-body">
+        <div className="tc-title-line">
+          {card.title && <h3 className="tc-title">{card.title}</h3>}
+          {brag && <span className="tc-tag brag">做到了</span>}
+          {card.intro && <span className="tc-tag">自我介绍</span>}
+          {unseen && <span className="unread-dot" title="还没点开过" />}
+        </div>
+        <p className="tc-text">{card.text.replace(/\s+/g, ' ')}</p>
       </div>
 
-      {card.title && <h3 className="thread-title">{card.title}</h3>}
-      <p className="thread-preview">{card.text.replace(/\s+/g, ' ')}</p>
-
-      <div className="thread-bottom">
-        <span>{card.comments.length ? `${card.comments.length} 条回应` : '还没有人说话'}</span>
-        {card.status === 'handled' && <span className="thread-handled">已处理</span>}
-        <button
-          className={`like ${card.likedByMe ? 'on' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onLike();
-          }}
-          aria-label="点赞"
-        >
-          ♥ {card.likes ?? 0}
-        </button>
-      </div>
-    </div>
+      <footer className="tc-foot">
+        <span className="tc-author">
+          {author ? (
+            <Avatar avatarKey={author.avatarKey} name={author.name} color={author.color} size="xs" />
+          ) : (
+            <Avatar avatarKey="petal" className="me" size="xs" />
+          )}
+          <span className="tc-author-name">{card.authorName}</span>
+          {!mine && <span className="tc-tag">AI</span>}
+          {mine && <span className="tc-tag">你</span>}
+        </span>
+        <time className="tc-time">{timeLabel(card.createdAt)}</time>
+        <span className="tc-actions">
+          <span className="tc-comments">
+            {card.comments.length > 0 ? `${card.comments.length} 条回应` : ''}
+          </span>
+          <button
+            type="button"
+            className={`tc-like ${card.likedByMe ? 'on' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onLike();
+            }}
+            aria-label="点赞"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 20s-7-4.3-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.7-7 9-7 9Z" />
+            </svg>
+            {card.likes ?? 0}
+          </button>
+        </span>
+      </footer>
+    </article>
   );
 }

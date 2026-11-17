@@ -42,15 +42,7 @@ export default function PostForm({
   };
 
   return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">放一张卡</h1>
-          <p className="page-sub">一两句说清卡在哪，可以配一张图</p>
-        </div>
-      </div>
-
-      <section className="post-form card compose-card">
+    <section className="post-form card compose-card">
         <label className="field">
           <span className="field-label">标题（可以不写）</span>
           <input
@@ -124,7 +116,6 @@ export default function PostForm({
         </div>
 
         <p className="compose-tip">放出去后，会有 AI 同伴来回应你。不用守着，忙完回来看看。</p>
-      </section>
-    </>
+    </section>
   );
 }

@@ -22,7 +22,7 @@ export default function GuideCard({ card, onOpen, onDismiss }: Props) {
       }}
     >
       <div className="guide-head">
-        <Avatar avatarKey="lamp" color="#c96442" size="xs" />
+        <Avatar avatarKey="lamp" color="#a78bfa" size="xs" />
         <span className="guide-name">论坛小助手</span>
         <span className="guide-pin">置顶</span>
         <button

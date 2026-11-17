@@ -12,7 +12,6 @@ import {
 import Avatar from './components/Avatar';
 import CardDetail from './components/CardDetail';
 import CardRow from './components/CardRow';
-import CardDeck from './components/CardDeck';
 import GuideCard from './components/GuideCard';
 import NoteDrawer from './components/NoteDrawer';
 import MemoryManager from './components/MemoryManager';
@@ -100,6 +99,27 @@ const AVATAR_COLORS: Record<string, string> = {
 
 type View = 'home' | 'post' | 'mine' | 'profile' | 'detail';
 
+const FORUM_CATS = ['学习', '情绪', '生活', '延期记录', '全部'] as const;
+const CAT_KEYWORDS: Record<string, string[]> = {
+  学习: ['学习', '复习', '作业', '论文', '考试', '上课', '笔记', '背书', '读书', '课程'],
+  情绪: ['情绪', '焦虑', '难过', '压力', '烦', '累', '害怕', '崩溃', '开心'],
+  生活: ['生活', '起床', '吃饭', '睡', '房间', '洗', '运动', '出门', '桌面', '整理'],
+  延期记录: ['延期', '延后', '拖延', '明天', '下周', '之后', '推迟', '改天'],
+};
+
+function forumCategory(card: Card) {
+  const text = `${card.title ?? ''}${card.text}`;
+  const hit = Object.entries(CAT_KEYWORDS).find(([, words]) => words.some((w) => text.includes(w)));
+  return hit?.[0] ?? '生活';
+}
+
+function cardStatusLabel(card: Card) {
+  if (card.status === 'done') return '做到了';
+  if (card.status === 'handled') return '已收起';
+  if (card.status === 'noted') return '已贴便签';
+  return card.comments.length > 0 ? '有回应' : '还在等';
+}
+
 export default function App() {
   const [boot] = useState(() => {
     const withGuide = (cards: Card[]) => {
@@ -159,13 +179,11 @@ export default function App() {
     () => localStorage.getItem(GUIDE_DISMISSED_KEY) === '1',
   );
   const [view, setView] = useState<View>('home');
-  const [mode, setMode] = useState<'card' | 'list'>(
-    () => (localStorage.getItem('startnow.mode') === 'list' ? 'list' : 'card'),
-  );
   const [homeTab, setHomeTab] = useState<'step' | 'forum'>(
     () => (localStorage.getItem('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
   );
-  const [deckIndex, setDeckIndex] = useState(0);
+  const [forumQuery, setForumQuery] = useState('');
+  const [forumCat, setForumCat] = useState<(typeof FORUM_CATS)[number]>('全部');
   const [bellOpen, setBellOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailPeer, setDetailPeer] = useState('');
@@ -192,7 +210,6 @@ export default function App() {
   useEffect(() => saveSettings(settings), [settings]);
   useEffect(() => saveIdentity(identity), [identity]);
   useEffect(() => saveTodos(todos), [todos]);
-  useEffect(() => localStorage.setItem('startnow.mode', mode), [mode]);
   useEffect(() => localStorage.setItem('startnow.homeTab', homeTab), [homeTab]);
 
   useEffect(() => {
@@ -462,7 +479,6 @@ export default function App() {
         setWorld((w) => ({ ...w, dayKey: day,
           callsToday: (w.dayKey === day ? w.callsToday : 0) + res.calls }));
       }
-      setDeckIndex(0);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       setToast(`过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`);
     } catch {
@@ -741,7 +757,6 @@ export default function App() {
     setSettings({ ...defaultSettings });
     setIdentity(loadIdentity());
     setTodos([]);
-    setMode('card');
     setHomeTab('step');
     setOnboardOpen(true);
     setLegacyKeys([]);
@@ -768,8 +783,6 @@ export default function App() {
     [cards],
   );
   const todayStart = new Date().setHours(0, 0, 0, 0);
-  const todays = feed.filter((c) => c.createdAt >= todayStart);
-  const earlier = feed.filter((c) => c.createdAt < todayStart);
   const myCards = useMemo(
     () => cards.filter((c) => c.authorId === 'me').sort((a, b) => b.createdAt - a.createdAt),
     [cards],
@@ -803,20 +816,14 @@ export default function App() {
     return out.sort((a, b) => b.comment.at - a.comment.at);
   }, [cards, personas]);
 
-  useEffect(() => {
-    if (view !== 'home' || mode !== 'card') return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') setDeckIndex((i) => Math.min(i + 1, feed.length - 1));
-      if (e.key === 'ArrowLeft') setDeckIndex((i) => Math.max(i - 1, 0));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [view, mode, feed.length]);
-
-  useEffect(() => {
-    if (deckIndex > feed.length - 1) setDeckIndex(Math.max(0, feed.length - 1));
-  }, [feed.length, deckIndex]);
-
+  const forumFeed = useMemo(() => {
+    const q = forumQuery.trim().toLowerCase();
+    return feed.filter((c) => {
+      if (forumCat !== '全部' && forumCategory(c) !== forumCat) return false;
+      if (!q) return true;
+      return `${c.title ?? ''} ${c.text} ${c.authorName}`.toLowerCase().includes(q);
+    });
+  }, [feed, forumCat, forumQuery]);
 
   const noteCount =
     todos.filter((t) => !t.doneAt).length +
@@ -1098,105 +1105,125 @@ export default function App() {
 
           {homeTab === 'forum' && (
             <>
-              <div className="page-head">
+              <div className="forum-head">
                 <div>
                   <h1 className="page-title">大家在说什么</h1>
                   <p className="page-sub">看看别人卡在哪，也许你也有同感</p>
                 </div>
-                <div className="page-head-tools">
-                  <span className="masthead-date">
-                    {personas.length} 位同伴 · 今天 {todays.length} 张卡
-                  </span>
-                  <div className="mode-switch" role="group" aria-label="显示方式">
-                    <button
-                      className={mode === 'card' ? 'on' : ''}
-                      aria-pressed={mode === 'card'}
-                      onClick={() => setMode('card')}
-                    >
-                      卡片
-                    </button>
-                    <button
-                      className={mode === 'list' ? 'on' : ''}
-                      aria-pressed={mode === 'list'}
-                      onClick={() => setMode('list')}
-                    >
-                      列表
-                    </button>
-                  </div>
-                </div>
+                <label className="forum-search">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="11" cy="11" r="6.5" />
+                    <path d="M16 16l4.5 4.5" />
+                  </svg>
+                  <input
+                    value={forumQuery}
+                    onChange={(e) => setForumQuery(e.target.value)}
+                    placeholder="搜索卡片"
+                    aria-label="搜索卡片"
+                  />
+                </label>
+              </div>
+
+              <div className="forum-chips" role="group" aria-label="卡片分类">
+                {FORUM_CATS.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    className={forumCat === cat ? 'on' : ''}
+                    aria-pressed={forumCat === cat}
+                    onClick={() => setForumCat(cat)}
+                  >
+                    {cat}
+                  </button>
+                ))}
               </div>
 
               {guide && !guideDismissed && (
                 <GuideCard card={guide} onOpen={() => openCard(guide)} onDismiss={dismissGuide} />
               )}
 
-              {feed.length === 0 && (
-                <div className="empty">
-                  <h2>还没有人卡住</h2>
-                  <p>去「发一张」写一句，四位同伴会陆续过来。</p>
+              <div className="forum-layout">
+                <div className="forum-grid">
+                  {forumFeed.map((card) => (
+                    <CardRow
+                      key={card.id}
+                      card={card}
+                      personas={personas}
+                      onClick={() => openCard(card)}
+                      onLike={() => like(card)}
+                    />
+                  ))}
+                  {forumFeed.length === 0 && (
+                    <div className="empty forum-empty">
+                      <h2>没有找到这样的卡</h2>
+                      <p>换个关键词，或者去「发一张」写下自己的。</p>
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {mode === 'card' && feed.length > 0 && (
-                <CardDeck
-                  cards={feed}
-                  personas={personas}
-                  index={deckIndex}
-                  onIndex={setDeckIndex}
-                  onOpen={openCard}
-                  onLike={like}
-                />
-              )}
-
-              {mode === 'list' && todays.length > 0 && (
-                <section className="board">
-                  <h2 className="board-title">今天</h2>
-                  {todays.map((card) => (
-                    <CardRow
-                      key={card.id}
-                      card={card}
-                      personas={personas}
-                      onClick={() => openCard(card)}
-                      onLike={() => like(card)}
-                    />
-                  ))}
-                </section>
-              )}
-
-              {mode === 'list' && earlier.length > 0 && (
-                <section className="board">
-                  <h2 className="board-title">更早</h2>
-                  {earlier.map((card) => (
-                    <CardRow
-                      key={card.id}
-                      card={card}
-                      personas={personas}
-                      onClick={() => openCard(card)}
-                      onLike={() => like(card)}
-                    />
-                  ))}
-                </section>
-              )}
+                <aside className="ai-watch" aria-label="AI 同伴怎么看">
+                  <h2>AI 同伴怎么看</h2>
+                  <div className="ai-watch-bubbles">
+                    <p className="ai-bubble lav">你愿意记录下来，已经很勇敢</p>
+                    <p className="ai-bubble mint">40 分钟也是有效进展</p>
+                    <p className="ai-bubble peach">延后不等于失败，重新开始就好</p>
+                  </div>
+                  <p className="ai-watch-note">演示模式：同伴回复由本地脚本生成</p>
+                </aside>
+              </div>
             </>
           )}
         </div>
       )}
 
       {view === 'post' && (
-        <div className="feed">
-          <PostForm
-            value={draft}
-            title={draftTitle}
-            image={image}
-            busy={working}
-            ready={ready}
-            personas={personas}
-            onChange={setDraft}
-            onTitle={setDraftTitle}
-            onImage={setImage}
-            onSubmit={send}
-            onOpenSettings={() => openSettings()}
-          />
+        <div className="feed post-feed">
+          <div className="page-head">
+            <div>
+              <h1 className="page-title">放一张卡</h1>
+              <p className="page-sub">一两句说清卡在哪，可以配一张图。</p>
+            </div>
+          </div>
+          <div className="post-layout">
+            <PostForm
+              value={draft}
+              title={draftTitle}
+              image={image}
+              busy={working}
+              ready={ready}
+              personas={personas}
+              onChange={setDraft}
+              onTitle={setDraftTitle}
+              onImage={setImage}
+              onSubmit={send}
+              onOpenSettings={() => openSettings()}
+            />
+            <aside className="post-side">
+              <h2>发出去之后</h2>
+              <ol className="post-steps">
+                <li>
+                  <b>写一句卡在哪</b>
+                  <span>比“我要努力”具体一点，比如“高数第三章开不了头”。</span>
+                </li>
+                <li>
+                  <b>同伴可能过来</b>
+                  <span>会有 AI 同伴带着一句回应出现，不用守着。</span>
+                </li>
+                <li>
+                  <b>有用的贴成便签</b>
+                  <span>觉得能用，就贴到下一步里，随时能翻出来。</span>
+                </li>
+              </ol>
+              <p className="post-side-note">不是真人社交，只在论坛上聊。你的卡只留在本机。</p>
+            </aside>
+          </div>
         </div>
       )}
 
@@ -1257,7 +1284,7 @@ export default function App() {
                 setView('home');
               }}
             >
-              ← 回到下一步
+              ← 回到试试
             </button>
           </div>
           {myCards.length === 0 && <p className="view-empty">你还没放过卡。</p>}
@@ -1321,6 +1348,46 @@ export default function App() {
                 <span>今日完成</span>
               </div>
             </div>
+          </section>
+
+          <section className="profile-grid">
+            <article className="section-card">
+              <div className="section-head">
+                <h3>我的任务</h3>
+              </div>
+              {todos
+                .filter((t) => !t.doneAt)
+                .slice(0, 4)
+                .map((t) => (
+                  <div className="task-row" key={t.id}>
+                    <span className="task-dot" aria-hidden="true" />
+                    <span>{t.text}</span>
+                  </div>
+                ))}
+              {todos.filter((t) => !t.doneAt).length === 0 && (
+                <p className="view-empty">还没有任务，去首页记一件小事。</p>
+              )}
+            </article>
+
+            <article className="section-card">
+              <div className="section-head">
+                <h3>我的卡片</h3>
+              </div>
+              <div className="mini-cards">
+                {myCards.slice(0, 4).map((c, i) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`mini-card ${i % 2 ? 'mint' : 'lav'}`}
+                    onClick={() => openCard(c)}
+                  >
+                    <b>{c.title ?? c.text.slice(0, 14)}</b>
+                    <span>{cardStatusLabel(c)}</span>
+                  </button>
+                ))}
+                {myCards.length === 0 && <p className="view-empty">还没有卡片。</p>}
+              </div>
+            </article>
           </section>
 
           <section className="card section-card">
