@@ -21,7 +21,8 @@ data/
 evidence/
 exports/
 expert-review/
-demo/
+demo/*
+!demo/startnow-judge-demo.json
 .tmp-persona-v1.json
 
 # local diff snapshots
