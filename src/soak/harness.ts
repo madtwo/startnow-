@@ -20,6 +20,8 @@ import { streamChat, testConnection } from '../lib/llm';
 import { decomposeViaApi, decomposePrompt, parseDecomposition, recognizeNotice, estimateDailyEffort, DecomposeError } from '../lib/decompose';
 import { isMock } from '../config/providers';
 import { followupTextFor, completionFixtures } from './scenarioFixtures';
+import { extractMaterial } from '../lib/materialVision';
+import { materialFirstStep, validateMaterialStep } from '../lib/materialAdvice';
 import type { Card, Persona, WorldSettings, LlmConfig, Goal } from '../types';
 
 const MIN = 60_000;
@@ -493,6 +495,70 @@ async function runVoices(config: LlmConfig) {
     avgLatencyMs: items.length ? Math.round(items.reduce((s, r) => s + r.latencyMs, 0) / items.length) : null,
   }, null, 1));
   log(`声音测试完成：${items.length} 条，失败 ${failures.length}`, failures.length ? 'warn' : 'ok');
+}
+
+
+/** D4: run 25 unique images through material extraction + anchored advice.
+ * Writes only JSONL metadata (no OCR, no images, no prompts). */
+async function runMaterial(config: LlmConfig) {
+  if (isMock(config)) { log('演示模式无法跑 D4。', 'err'); return; }
+  const manifest = await (await fetch('/material-d4/manifest.json')).json() as {
+    id: string; kind: string; file: string; expectedAnchors: string[]; stepMustIncludeAny: string[];
+  }[];
+  const persona = defaultPersonas().find((p) => p.id === 'miaoze') ?? defaultPersonas()[0];
+  const lines: string[] = [];
+  const originalFetch = window.fetch.bind(window);
+  let usage = { p: 0, c: 0 };
+  window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const res = await originalFetch(input as RequestInfo, init);
+    try {
+      const clone = res.clone();
+      const body = await clone.json();
+      if (body?.usage) {
+        usage.p += Number(body.usage.prompt_tokens) || 0;
+        usage.c += Number(body.usage.completion_tokens) || 0;
+      }
+    } catch { /* SSE / non-JSON */ }
+    return res;
+  }) as typeof fetch;
+  try {
+    for (const row of manifest) {
+      const started = performance.now();
+      const before = { ...usage };
+      const blob = await (await originalFetch(`/${row.file}`)).blob();
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+      const vision = await extractMaterial(config, dataUrl);
+      let anchored = false, actionable = false, fallback = true, text = '';
+      if (vision.ok) {
+        const step = await materialFirstStep({ extraction: vision.extraction, persona, config, now: Date.now(), budget: 600 });
+        if (step) {
+          const check = validateMaterialStep(step.text, vision.extraction);
+          anchored = check.ok;
+          actionable = anchored;
+          fallback = step.source === 'template';
+          text = step.text;
+        }
+      }
+      const latencyMs = Math.round(performance.now() - started);
+      const costUsd = +((usage.p - before.p) * 0.00000015 + (usage.c - before.c) * 0.0000006).toFixed(6);
+      lines.push(JSON.stringify({
+        id: row.id, source: 'real-api', anchored, actionable5m: actionable,
+        latencyMs, costUsd, fallback, requestCount: vision.ok ? 2 + (vision.retried ? 1 : 0) : 1,
+      }));
+      log(`D4 ${row.id} ${anchored ? 'anchor' : 'MISS'} ${latencyMs}ms`, anchored ? 'ok' : 'warn');
+      void text;
+    }
+  } finally {
+    window.fetch = originalFetch as typeof fetch;
+  }
+  await sink(`${runId}-d4.jsonl`, lines.join('\n') + '\n');
+  await sink(`${runId}-d4-meta.json`, JSON.stringify({ total: lines.length, model: config.model, visionModel: config.visionModel }, null, 1));
+  log(`D4 完成 ${lines.length} 条`, 'ok');
 }
 
 /* ---------- 场景文本（用户输入，不是模型话术） ---------- */
@@ -1064,6 +1130,11 @@ async function main() {
 
   if (scenario === 'voices') {
     await runVoices(config);
+    return;
+  }
+
+  if (scenario === 'material') {
+    await runMaterial(config);
     return;
   }
 

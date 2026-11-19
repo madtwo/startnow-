@@ -149,7 +149,7 @@ export async function extractMaterial(config: LlmConfig, imageDataUrl: string,
         const response = await fetch(url,{method:'POST',signal:controller.signal,
           headers:{'Content-Type':'application/json',Authorization:`Bearer ${config.apiKey.trim()}`,
             'x-opencode-session':session},
-          body:JSON.stringify({model:config.visionModel.trim(),stream:false,max_tokens:1800,
+          body:JSON.stringify({model:config.visionModel.trim(),stream:false,max_tokens:1200,
             reasoning_effort:'low',messages:[{role:'user',content:[
               {type:'text',text:attempt===1?REPAIR:VISION_PROMPT},
               {type:'image_url',image_url:{url:imageDataUrl}},
