@@ -10,7 +10,7 @@ import {
   tickCards, catchUp, createPlayerCard, addPlayerComment, askForAdvice,
   acceptAdvice, shrinkAdvice, completeCard,
 } from '../lib/cards';
-import { defaultPersonas } from '../lib/personas';
+import { defaultPersonas, buildPersonaPrompt } from '../lib/personas';
 import { defaultSettings, loadConfig, importBundle, loadSettings } from '../lib/store';
 import { containsCrisis, hasCrisisInArchive } from '../lib/submissionGuard';
 import { makeGoal, shareGoal, toggleCheer, personaCheer } from '../lib/goals';
@@ -412,6 +412,87 @@ async function preflight(config: LlmConfig) {
   }, null, 1));
   log(`usage 字段：${usageSeen ? 'API 返回' : '未返回，后续按字符估算'}`, usageSeen ? 'ok' : 'warn');
   return usageRows;
+}
+
+
+/** Persona voice check: 5 posts + 5 replies each, blind sheet without names.
+ * Usage: /soak.html?scenario=voices&per=5&run=voice1
+ */
+async function runVoices(config: LlmConfig) {
+  if (isMock(config)) {
+    log('当前浏览器是演示模式，无法跑真实声音测试。', 'err');
+    return;
+  }
+  const per = Math.max(1, Math.min(10, Number(qs.get('per') ?? 5)));
+  const personas = defaultPersonas();
+  const playerTexts = [
+    '实验报告拖到今晚，坐不下来。',
+    '开题报告写了两行又删了。',
+    '文献下了一堆，正文还是零字。',
+    '制图周五交，图框还没画。',
+    '数据表里有个数怎么看都不对。',
+  ];
+  const items: { personaId: string; kind: 'post' | 'reply'; text: string; latencyMs: number }[] = [];
+  const failures: string[] = [];
+  const call = async (persona: Persona, kind: 'post' | 'reply', userText: string) => {
+    const started = beginOperation(kind === 'post' ? 'voice_post' : 'voice_reply');
+    const t0 = performance.now();
+    try {
+      const reply = await streamChat({
+        config,
+        signal: AbortSignal.timeout(30_000),
+        onDelta: () => {},
+        maxTokens: kind === 'post' ? 900 : 600,
+        lowEffort: false,
+        messages: [
+          { role: 'system', content: `${buildPersonaPrompt(persona)}
+你现在在论坛里${kind === 'post' ? '发一条公开帖：只写学习/科研里卡住的一刻，30-80 字，带一个具体细节，结尾留白或问一句；不要给建议，不要写自己的解决办法，不要写自己的名字。' : '回复别人的卡：先接住具体细节，20-60 字，用你的口吻；不要总结对方人生，不要写自己的名字。'}
+不要提线下见面、联系方式、治疗或诊断。只输出正文。` },
+          { role: 'user', content: userText },
+        ],
+      });
+      const text = reply.trim().slice(0, 200);
+      if (!text || containsCrisis([text]) || auditCriticalContent(text) || auditSocial(text) || auditTone(text)) {
+        failures.push(`${persona.id}:${kind}:unsafe_or_empty`);
+        return;
+      }
+      items.push({ personaId: persona.id, kind, text, latencyMs: Math.round(performance.now() - t0) });
+      log(`${persona.name} ${kind} ok · ${Math.round(performance.now() - t0)}ms`, 'ok');
+    } catch (err) {
+      failures.push(`${persona.id}:${kind}:${String((err as Error)?.message ?? err).slice(0, 80)}`);
+      log(`${persona.name} ${kind} 失败`, 'err');
+    } finally {
+      await drainMeter();
+      void started;
+    }
+  };
+  for (const persona of personas) {
+    for (let i = 0; i < per; i++) {
+      await call(persona, 'post', `今天第 ${i + 1} 次想开始，但又卡住了。写一条公开帖。`);
+    }
+    for (let i = 0; i < per; i++) {
+      await call(persona, 'reply', playerTexts[i % playerTexts.length]);
+    }
+  }
+  const rand = seeded(seed);
+  const shuffled = [...items].sort(() => rand() - 0.5);
+  const blind = shuffled.map((row, i) => ({
+    id: `v${String(i + 1).padStart(2, '0')}`,
+    kind: row.kind,
+    text: row.text,
+  }));
+  const mapping = shuffled.map((row, i) => ({
+    id: `v${String(i + 1).padStart(2, '0')}`,
+    personaId: row.personaId,
+    kind: row.kind,
+  }));
+  await sink(`${runId}-voices-blind.json`, JSON.stringify(blind, null, 1));
+  await sink(`${runId}-voices-mapping.json`, JSON.stringify(mapping, null, 1));
+  await sink(`${runId}-voices-meta.json`, JSON.stringify({
+    model: config.model, per, seed, total: items.length, failures,
+    avgLatencyMs: items.length ? Math.round(items.reduce((s, r) => s + r.latencyMs, 0) / items.length) : null,
+  }, null, 1));
+  log(`声音测试完成：${items.length} 条，失败 ${failures.length}`, failures.length ? 'warn' : 'ok');
 }
 
 /* ---------- 场景文本（用户输入，不是模型话术） ---------- */
@@ -978,6 +1059,11 @@ async function main() {
 
   if (scenario === 'safety') {
     await runSafety();
+    return;
+  }
+
+  if (scenario === 'voices') {
+    await runVoices(config);
     return;
   }
 
