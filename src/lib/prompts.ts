@@ -177,9 +177,28 @@ const thread = (card: Card) =>
     .map((c) => `${c.authorKind === 'player' ? '卡主' : personaNames.get(c.authorId) ?? c.authorId}：${c.text}`)
     .join('\n');
 
+const latestComment = (card: Card, sourceCommentId?: string) =>
+  (sourceCommentId && card.comments.find((c) => c.id === sourceCommentId)) ||
+  [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
+
+/** 玩家这条是在回本角色/关心本角色，而不是把本角色当树洞求助。 */
+export function commentFocusesOnPersona(
+  card: Card,
+  persona: Persona,
+  sourceCommentId?: string,
+): boolean {
+  const latest = latestComment(card, sourceCommentId);
+  if (!latest || latest.authorKind !== 'player' || wantsDirectAdvice(latest.text)) return false;
+  if (/^(嗯+|哦+|啊+|哈+|好+|收到|谢谢)[。！!？?…]*$/.test(latest.text.trim())) return false;
+  if (latest.peer === persona.id) return true;
+  if (latest.peer) return false;
+  if (card.authorKind !== 'persona' || card.authorId !== persona.id) return false;
+  const adviceToMe = /我一般|我的话|我会|我都是|我平常|我习惯/.test(latest.text);
+  return adviceToMe || playerIsFocusingOnPersona(latest.text, persona.name);
+}
+
 export const commentPrompt = (card: Card, persona: Persona, sourceCommentId?: string) => {
-  const latest = (sourceCommentId && card.comments.find((c) => c.id === sourceCommentId)) ||
-    [...card.comments].reverse().find((c) => c.authorKind !== 'helper');
+  const latest = latestComment(card, sourceCommentId);
   const target = latest
     ? latest.authorKind === 'player'
       ? '公开评论里的网友'
@@ -205,18 +224,23 @@ export const commentPrompt = (card: Card, persona: Persona, sourceCommentId?: st
   const introLine = card.intro
     ? '\n这是一张自我介绍卡，不是求助，也不是采访。不要安慰、不要说「辛苦了」「你已经很棒了」，不要给建议或小动作；也不要追问具体信息（作息、课表、住哪、感情这些都不要问）。像论坛里打招呼：一句「你好 / 欢迎 / 先眼熟一下」就好，最多顺带说一下自己是谁。'
     : '';
-  const replyingToMe = latest?.authorKind === 'player' && (
-    latest.peer === persona.id ||
-    (!latest.peer && card.authorKind === 'persona' && card.authorId === persona.id)
-  );
-  const pureReaction = latest ? /^(嗯+|哦+|啊+|哈+|好+|收到|谢谢)[。！!？?…]*$/.test(latest.text.trim()) : false;
-  const focusLine = replyingToMe && latest && !pureReaction && !wantsDirectAdvice(latest.text)
+  const focusLine = !card.intro && commentFocusesOnPersona(card, persona, sourceCommentId)
     ? '\n对方这条是在回你、关心你或给你支招，不是向你求助。先回应关于你自己的那一句；不要反问对方的情况，也不要给对方下一步。'
     : '';
+  const kindLine = card.intro ? '' :
+    card.vulnerability?.kind === 'missed'
+      ? '\n这是一张没做到/失败卡，不是求助。只接住结果，不分析原因、不规划下一次、不给下一步。'
+      : card.kind === 'brag'
+        ? '\n这是一张完成/炫耀卡，不是求助。只回应对方做到的具体那一步或结果，不给下一步、不分析原因，也不要空泛夸奖。'
+        : card.kind === 'life'
+          ? '\n这是一张生活分享卡，不是求助。接一个具体细节，或说半句自己的小事；不要给建议、不要追问。'
+          : card.kind === 'goal' || card.kind === 'progress'
+            ? '\n这是一张目标/进度卡，不是求助。可以回应具体目标或打气；不要接管目标、不要列步骤、不要追问对方的执行情况。'
+            : '';
   return `【本次发言上下文】
 频道：公开论坛评论
 双方不在同一物理地点（physical_copresence=false）
-关系：${relationshipLabel(persona.intimacy)}${latestLine}${inviteLine}${campusLine}${focusLine}
+关系：${relationshipLabel(persona.intimacy)}${latestLine}${inviteLine}${campusLine}${focusLine}${kindLine}
 
 卡片：
 """

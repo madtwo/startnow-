@@ -69,6 +69,7 @@ import {
   cardPrompt,
   cleanLine,
   COMMENT_RULES,
+  commentFocusesOnPersona,
   commentPrompt,
   decidePrompt,
   systemFor,
@@ -860,6 +861,21 @@ function errorNotice(name: string, willRetry: boolean): string {
   return `${name} 这一轮没有生成回复，可能是模型超时、限流或服务暂不可用。${next}没有使用演示台词代替；也可以主动切换演示模式。`;
 }
 
+const CARE_ADVICE = /你应该|你可以|你试试|建议你|不如你|要不你|你先|你得|至少你|下次你|建议(?:你)?|试试(?:把|先)?|不如先/;
+const CARE_FALLBACK: Record<string, string> = {
+  shenmo: '我这边也常分神，坐着坐着手就摸过去了。',
+  weini: '嗯……我也差不多，专心不了太久。',
+  miaoze: '我自己的专注也一般，常常没坐多久就走神。',
+  yanggao: '我也坐不住太久，一会儿就想摸点别的。',
+};
+/** In a care/about-me turn, keep only self-focused statements; drop questions and advice. */
+function careSafeLine(text: string): string {
+  const kept = text.split(/(?<=[。！？!?…])/).map((part) => part.trim()).filter(Boolean)
+    .filter((part) => !/[?？]/.test(part) && !CARE_ADVICE.test(part));
+  const joined = kept.join('').trim();
+  return /我|自己|俺/.test(joined) ? joined : '';
+}
+
 /** A single, bounded peer reaction to a fictional result. Never uses regular
  * arrival routes, queues, memory, helper, or another peer's text as context. */
 async function generateResultPeerReaction(
@@ -1007,8 +1023,19 @@ async function generateComment(
       withUntrustedHistory(commentPrompt(card, persona, sourceCommentId), persona, Date.now()),
       1800, 20_000, `${persona.id}:${card.id}`,
     );
-    const line = cleanLine(text);
+    let line = cleanLine(text);
     if (!line) throw new Error('模型返回空文本');
+    if (!card.intro && commentFocusesOnPersona(card, persona, sourceCommentId)) {
+      const safe = careSafeLine(line);
+      if (!safe) {
+        ctx.logs.push(`${persona.name} 关心场景只剩问句/建议，改用克制的自述`);
+        return {kind:'reply',text:CARE_FALLBACK[persona.id] ?? '我这边也常常坐不住，过一会儿就走神。',origin:'curated'};
+      }
+      if (safe !== line) {
+        ctx.logs.push(`${persona.name} 关心场景剔除问句/建议`);
+        line = safe;
+      }
+    }
     const growthReferenced=GROWTH_REFERENCE.test(line);
     if (growthReferenced && (ctx.growthReferencesThisTick?.has(persona.id) ||
         !canReferenceGrowthFromCards(ctx.historyCards??[],persona.id,ctx.tickNow??Date.now()))) {

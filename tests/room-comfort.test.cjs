@@ -44,9 +44,10 @@ test('论坛里玩家回复并安慰/支招同伴时，同伴先回应自己而�
   assert.match(prompt, /不要给对方下一步/);
 });
 
-test('同伴自己的帖子下，玩家未点名的评论也走同一条边界', () => {
-  const prompt = commentPrompt(forumCard('你背两页就摸手机，会不会很累', undefined, 'persona'), shenmo);
-  assert.match(prompt, /不是向你求助/);
+test('同伴自己的帖子下，明确问同伴或给同伴支招才走同一条边界', () => {
+  assert.match(commentPrompt(forumCard('你背两页就摸手机，会不会很累', undefined, 'persona'), shenmo), /不是向你求助/);
+  assert.match(commentPrompt(forumCard('我的话一般会把手机锁起来', undefined, 'persona'), shenmo), /不是向你求助/);
+  assert.doesNotMatch(commentPrompt(forumCard('论文一个字写不出来', undefined, 'persona'), shenmo), /不是向你求助/);
 });
 
 test('论坛里玩家明确求助或只是普通短评时不触发关心规则', () => {
