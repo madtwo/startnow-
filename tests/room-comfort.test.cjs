@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { lib } = require('./_ts-loader.cjs');
-const { roomPrompt } = lib('prompts');
+const { roomPrompt, commentPrompt } = lib('prompts');
 const { defaultPersonas } = lib('personas');
 
 const cast = defaultPersonas();
@@ -26,4 +26,26 @@ test('玩家明确要下一步、谈自己的问题或同伴互聊时，不触�
   assert.doesNotMatch(say('你能给我一个下一步吗'), /不是向你求助/);
   assert.doesNotMatch(say('我简历删到第五遍，怎么办'), /不是向你求助/);
   assert.doesNotMatch(say('魏姐最近怎么样', { mode: 'peer', replyIsPlayer: false }), /不是向你求助/);
+});
+
+const forumCard = (text, peer, authorKind = 'player') => ({
+  id: 'forum-care', authorId: authorKind === 'player' ? 'me' : 'shenmo',
+  authorName: authorKind === 'player' ? '匿' : '沈默', authorKind,
+  kind: 'worry', text: '背病理总是想摸手机。', createdAt: 1, status: 'talking',
+  arrivals: [], plan: [], pending: [],
+  comments: [{ id: 'c1', authorId: 'me', authorKind: 'player', text, at: 2, kind: 'comment', peer }],
+});
+const shenmo = cast.find((persona) => persona.id === 'shenmo');
+
+test('论坛里玩家回复并安慰/支招同伴时，同伴先回应自己而不是反问或给建议', () => {
+  const prompt = commentPrompt(forumCard('我的话一般会把手机锁起来', 'shenmo'), shenmo);
+  assert.match(prompt, /不是向你求助/);
+  assert.match(prompt, /不要反问对方/);
+  assert.match(prompt, /不要给对方下一步/);
+});
+
+test('论坛里玩家明确求助或只是普通短评时不触发关心规则', () => {
+  assert.doesNotMatch(commentPrompt(forumCard('你能给我一个下一步吗', 'shenmo'), shenmo), /不是向你求助/);
+  assert.doesNotMatch(commentPrompt(forumCard('嗯嗯', 'shenmo'), shenmo), /不是向你求助/);
+  assert.doesNotMatch(commentPrompt(forumCard('我最近背书也卡住了', undefined), shenmo), /不是向你求助/);
 });

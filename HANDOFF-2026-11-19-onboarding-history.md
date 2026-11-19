@@ -37,11 +37,12 @@
 - 模型失败/无 Key/演示模式使用本地安全文案。
 - 原 AI 目标卡仍对其他同伴静默；卡主仍可回复玩家自己的评论。
 
-### 4. 群聊“被关心”边界
+### 4. 群聊/论坛“被关心”边界
 
-- 玩家问同伴近况/安慰同伴时（如“魏姐这么好的学校也有就业焦虑吗”），当轮 `roomPrompt` 会明确：先回答关于自己的事，不给建议、不追问、不拐回玩家之前的困难。
-- `ROOM_RULES` 同步加入同一规则；明确要下一步或聊玩家自己的问题时不受影响。
-- 不改群聊消息结构、存储键或 `RoomView` 路由。
+- 玩家问同伴近况/安慰同伴/给同伴支招时，当轮 `roomPrompt` 与 `commentPrompt` 会明确：先回答关于自己的事，不给建议、不追问、不拐回玩家之前的困难。
+- 覆盖例：群聊“魏姐这么好的学校也有就业焦虑吗”、论坛“我的话一般会把手机锁起来”回复沈默。
+- `ROOM_RULES`、`COMMENT_RULES` 同步加入同一规则；明确要下一步或聊玩家自己的问题时不受影响。
+- 不改群聊消息结构、存储键或 `RoomView` 路由；论坛只增加上下文行。
 
 ### 5. 调试推进时间
 
@@ -64,11 +65,12 @@
 - `src/App.tsx`：开场 UI、历史分区、推进时间、离线同伴兜底。
 - `src/components/PostForm.tsx`：自我介绍模式。
 - `src/components/CardRow.tsx`：玩家自我介绍标签。
-- `src/lib/prompts.ts`、`src/lib/room.ts`：群聊“被关心”边界，只透传本轮回复目标，不改消息结构。
+- `src/lib/prompts.ts`、`src/lib/room.ts`：群聊/论坛“被关心”边界；群聊只透传本轮回复目标，不改消息结构。
 
 ## 队友合并注意
 
 - `RoomView`、群聊路由和群聊存储键没有改动；`room.ts` 只改了 prompt 参数透传，队友可以继续独立开发群聊。
+- 论坛 `commentPrompt` 新增“玩家回复/关心本角色”行；合 `prompts.ts` 时保留 `COMMENT_RULES` 的这条边界。
 - 从 `origin/main` 开分支；若从旧分支合入，重点冲突在 `App.tsx`、`PostForm.tsx`、`store.ts`。
 - 合 `App.tsx` 时保留：
   - `openingPhase` 门禁与 `splitForumCards` 分区；
