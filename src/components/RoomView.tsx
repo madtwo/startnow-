@@ -10,11 +10,14 @@ import {
   addStep,
   catchUpRoom,
   completeStep,
+  discardArchive,
   dropStep,
+  MAX_ARCHIVES,
   newRoom,
   postPlayerMessage,
   requestStep as askStep,
   rerollRoom,
+  restoreArchive,
   shrinkStep,
   tickRoom,
   usedToday,
@@ -177,12 +180,35 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
   };
 
   const reroll = () => {
-    if (!window.confirm('这 4 位会离开，聊天记录会收进「旧群聊」，只能看不能再回。继续？')) return;
+    if (archives.length >= MAX_ARCHIVES) {
+      setToast('旧群聊已经满了，先去「旧群聊」里舍弃一个再换人。');
+      setPanel('archive');
+      return;
+    }
+    if (!window.confirm('这 4 位会离开，聊天记录会收进「旧群聊」，之后还能放回当下。继续？')) return;
     const { room: next, archived } = rerollRoom(latest.current.room, Date.now());
     setRoom(next);
-    setArchives((prev) => [archived, ...prev].slice(0, 8));
+    setArchives((prev) => [archived, ...prev].slice(0, MAX_ARCHIVES));
     setPanel('none');
     setToast('换了一批群友');
+  };
+
+  const restore = (id: string) => {
+    const out = restoreArchive(latest.current.room, archives, id, Date.now());
+    if (!out) {
+      setToast('这个群聊找不到了。');
+      return;
+    }
+    setRoom(out.room);
+    setArchives(out.archives);
+    setPanel('none');
+    setToast('把这个群聊放回了当下');
+  };
+
+  const discard = (id: string) => {
+    if (!window.confirm('舍弃之后就找不回来了，确定吗？')) return;
+    setArchives((prev) => discardArchive(prev, id));
+    setToast('已经舍弃');
   };
 
   /* ---- 派生 ---- */
@@ -262,7 +288,14 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
               onClose={() => setPanel('none')}
             />
           )}
-          {panel === 'archive' && <ArchivePanel archives={archives} onClose={() => setPanel('none')} />}
+          {panel === 'archive' && (
+            <ArchivePanel
+              archives={archives}
+              onRestore={restore}
+              onDiscard={discard}
+              onClose={() => setPanel('none')}
+            />
+          )}
         </div>
       )}
 

@@ -34,6 +34,8 @@ interface Row {
   message: Message;
   first: boolean;
   last: boolean;
+  /** 要显示在上面的引用；已经引用过同一句就不重复挂 */
+  quoted?: Message;
 }
 
 export default function ChatRoom({
@@ -65,6 +67,10 @@ export default function ChatRoom({
 
   const rows = useMemo<Row[]>(() => {
     const sorted = [...room.messages].sort((a, b) => a.at - b.at);
+    const position = new Map<string, number>();
+    sorted.forEach((m, i) => position.set(m.id, i));
+    // 同一句被连续回复时，只在上一次引用之后隔了几条才再挂一次
+    const lastShown = new Map<string, number>();
     return sorted.map((message, index) => {
       const prev = sorted[index - 1];
       const next = sorted[index + 1];
@@ -72,7 +78,18 @@ export default function ChatRoom({
         prev && prev.kind === message.kind && prev.authorId === message.authorId && message.at - prev.at < 180_000;
       const sameNext =
         next && next.kind === message.kind && next.authorId === message.authorId && next.at - message.at < 180_000;
-      return { message, first: !samePrev, last: !sameNext };
+      let quoted: Message | undefined;
+      if (message.kind === 'chat' && message.replyTo) {
+        const target = position.get(message.replyTo);
+        const shown = lastShown.get(message.replyTo);
+        const adjacent = message.replyTo === prev?.id;
+        const recentlyShown = shown !== undefined && index - shown <= 6;
+        if (target !== undefined && !adjacent && !recentlyShown) {
+          quoted = sorted[target];
+          lastShown.set(message.replyTo, index);
+        }
+      }
+      return { message, first: !samePrev, last: !sameNext, quoted };
     });
   }, [room.messages]);
 
@@ -117,7 +134,7 @@ export default function ChatRoom({
       </header>
 
       <div className="room-list" ref={listRef}>
-        {rows.map(({ message, first, last }) => {
+        {rows.map(({ message, first, last, quoted }) => {
           if (message.kind === 'system') {
             return (
               <div key={message.id} className="msg-system">
@@ -126,7 +143,6 @@ export default function ChatRoom({
             );
           }
           const mine = message.authorKind === 'player';
-          const quoted = byId.get(message.replyTo ?? '');
           return (
             <div
               key={message.id}

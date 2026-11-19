@@ -1,5 +1,6 @@
 import type { Archetype, Gender, Persona, TroubleKind } from '../types';
 import { forumPersonaMindPrompt } from './forumPersonaMind';
+import { generateCast } from './castGen';
 
 const base = {
   memory: [],
@@ -510,31 +511,10 @@ export function seedToPersona(seed: PersonaSeed): Persona {
   };
 }
 
-const shuffle = <T,>(rows: T[]): T[] => {
-  const rest = [...rows];
-  for (let i = rest.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [rest[i], rest[j]] = [rest[j], rest[i]];
-  }
-  return rest;
-};
-
-/** 换一批群友：每个原型各抽一个，保证群里不是四个闷葫芦或四个话痨。 */
+/**
+ * 换一批群友：名字、学校、专业、年级、性格都是现拼的（见 castGen）。
+ * 每个原型各出一个，保证群里不是四个闷葫芦或四个话痨。
+ */
 export function pickCast(size = 4): Persona[] {
-  const seeds = allSeeds();
-  const byArchetype = new Map<Archetype, PersonaSeed[]>();
-  for (const archetype of ARCHETYPES) {
-    byArchetype.set(
-      archetype,
-      shuffle(seeds.filter((s) => s.archetype === archetype)),
-    );
-  }
-  const picked: PersonaSeed[] = [];
-  const order = shuffle(ARCHETYPES);
-  for (const archetype of order) {
-    const pool = byArchetype.get(archetype) ?? [];
-    if (pool[0]) picked.push(pool[0]);
-    if (picked.length >= size) break;
-  }
-  return picked.slice(0, size).map((seed) => seedToPersona(seed));
+  return generateCast(size);
 }

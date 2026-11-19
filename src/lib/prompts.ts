@@ -300,6 +300,7 @@ export const ROOM_RULES = `这是几个大学生凑在一块儿的群聊。你�
 - 不要同时回答好几个人；不要总结大家刚才说了什么；不用「首先」「总之」「希望对你有帮助」。
 - 你不是客服、不是心理咨询师、不是人生导师：可以给一个具体的小办法，也可以不给。
 - 一次只露一点自己的事，像真的在认识人。
+- 你只知道群里出现过的内容，加上自己设定里的事；不记得没发生过的共同经历，也不要编造别人说过的话。
 - 不主动提自己是 AI；被问到就承认。`;
 
 export interface RoomLine {
@@ -319,17 +320,25 @@ function playerIsFocusingOnPersona(text: string, selfName: string): boolean {
   return (nameHit || youHit) && (aboutThem || comfort);
 }
 
+export type RoomMode = 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise';
+
 /** 群聊里这一句的上下文。说话的人是谁，在 system 里由 buildPersonaPrompt 给。 */
 export const roomPrompt = (
   cast: Persona[],
   recent: RoomLine[],
   opts: {
-    mode: 'reply' | 'peer' | 'ambient' | 'react';
+    mode: RoomMode;
     replyName?: string;
     topic?: string;
     selfName?: string;
     replyText?: string;
     replyIsPlayer?: boolean;
+    /** advise 模式：这条建议绑定的动作，保证两个人的建议不一样 */
+    advice?: { label: string; minutes: number };
+    /** 这一轮里别人已经说过的，避免重复 */
+    alreadySaid?: string[];
+    /** 你和对方熟到什么程度 */
+    relation?: string;
   },
 ): string => {
   const who = cast.map((p) => `${p.name}（${p.tagline}）`).join('、');
@@ -343,14 +352,33 @@ export const roomPrompt = (
         ? `你正要接 ${opts.replyName ?? '群里另一个人'} 的话。可以同意、可以不同意、也可以扯到自己身上。`
         : opts.mode === 'react'
           ? '群里有人刚说自己做完了一件很小的事。应一声就好，一句话，别夸成大事。'
-          : '没人跟你说话。你可以随口说一句自己此刻的事，也可以只发半句；不要点名要谁回答。';
-  const focus =
-    opts.mode === 'reply' && opts.replyIsPlayer && opts.selfName && opts.replyText &&
-    playerIsFocusingOnPersona(opts.replyText, opts.selfName)
-      ? '\n对方这条是在关心你或问你的近况，不是向你求助。先用一句话回应关于你自己的事；不要给建议、不要追问对方，也不要把话题拐回对方之前的困难。'
-      : '';
+          : opts.mode === 'comfort'
+            ? `先接住 ${opts.replyName ?? '对方'} 这句。这一轮不给建议、不分析原因、不追问原因，1–2 句就够；可以只说「嗯」「在的」，也可以说自己类似的感受，但别抢话、别总结、别说「加油」。`
+            : opts.mode === 'advise'
+              ? `群里已经有人陪过他了。你给一个具体的小办法：${opts.advice?.label ?? '一件五分钟能做完的事'}（${opts.advice?.minutes ?? 5} 分钟能做完）。用你自己的口气说出来，别用「建议」「你应该」「你可以试试」开头，不用说这是谁给的，一句话，30 字以内。`
+              : '没人跟你说话。你可以随口说一句自己此刻的事，也可以只发半句；不要点名要谁回答，也不要给谁建议。';
+  // 玩家这条是在关心你 / 问你的近况：先回应关于你自己的事。
+  // 三种模式都要，只是说法不同：陪伴时不给建议，给建议时先用半句回应再给办法。
+  const playerAsksAboutMe =
+    Boolean(opts.replyIsPlayer) &&
+    Boolean(opts.selfName) &&
+    Boolean(opts.replyText) &&
+    playerIsFocusingOnPersona(opts.replyText ?? '', opts.selfName ?? '');
+  const focus = !playerAsksAboutMe
+    ? ''
+    : opts.mode === 'advise'
+      ? '\n对方刚才也在问你自己的情况。给办法之前，先用半句回应关于你自己的事（别长篇讲自己），再把办法说出来。'
+      : opts.mode === 'reply' || opts.mode === 'comfort'
+        ? '\n对方这条是在关心你或问你的近况，不是向你求助。先用一句话回应关于你自己的事；不要给建议、不要追问对方，也不要把话题拐回对方之前的困难。'
+        : '';
   const mood = opts.topic ? `\n【群里现在在说的大概是】${opts.topic}` : '';
-  return `【群里还有谁】${who}${mood}
+  const relation = opts.relation ? `\n【你和这个人的关系】${opts.relation}` : '';
+  const said = opts.alreadySaid?.length
+    ? `\n【这一轮别人已经说过】（不要重复，也不要换个说法重复）\n${opts.alreadySaid
+        .map((line) => `- ${line}`)
+        .join('\n')}`
+    : '';
+  return `【群里还有谁】${who}${mood}${relation}${said}
 【最近几句】
 ${history}
 

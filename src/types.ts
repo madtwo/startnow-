@@ -47,6 +47,22 @@ export interface WeekFact {
 
 export type Mood = 'calm' | 'low' | 'tense' | 'warm' | 'restless';
 
+/** 一个人此刻的处境：由专业 × 年级 × 当下时间推算出来，按天刷新。 */
+export interface PersonaSituation {
+  /** 生成这一版处境的日期（toDateString），用来判断要不要刷新 */
+  day: string;
+  /** 现在（或这两天）在忙什么 */
+  agenda: string;
+  /** 最近卡在哪 */
+  worry: string;
+  /** 他确实懂的东西，决定能接什么话 */
+  knows: string[];
+  /** 忙闲系数，影响发消息频率 */
+  busy: number;
+  /** 给人看的忙闲说法 */
+  busyLabel: string;
+}
+
 export interface PersonaMind {
   mood: Mood;
   thought: string;
@@ -88,6 +104,16 @@ export interface Persona {
   lastDistillAt: number;
   weekLog: WeekFact[];
   mind?: PersonaMind;
+  /** 对每个人的熟悉度：key 是 'me' 或别人的 personaId，从 0 开始 */
+  relations?: Record<string, number>;
+  /** 上次改熟悉度的时间，用来做衰减 */
+  relationsAt?: number;
+  /** 此刻的处境（专业 × 年级 × 时间） */
+  situation?: PersonaSituation;
+  /** 整体话多话少，由性格和忙闲算出来 */
+  chattiness?: number;
+  /** 大概几点醒着 [开始, 结束)，可跨零点 */
+  awake?: [number, number];
 }
 
 export interface Identity {
@@ -369,7 +395,7 @@ export interface NextStep {
   doneAt?: number;
 }
 
-export type ScheduleIntent = 'reply' | 'peer' | 'ambient' | 'react';
+export type ScheduleIntent = 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise';
 
 export interface ScheduledMessage {
   id: string;
@@ -380,6 +406,10 @@ export interface ScheduledMessage {
   stepId?: string;
   /** 追话深度，用来限制 AI 之间无限接龙 */
   depth?: number;
+  /** intent 为 advise 时，这条建议绑定的动作，用来保证两个人的建议不一样 */
+  adviceId?: string;
+  /** 同一轮里第几个给建议，用来让两条建议的句式也不一样 */
+  adviceVariant?: number;
 }
 
 export interface RoomUsage {

@@ -1227,3 +1227,10 @@
     font-size: 11px;
   }
 }
+
+/* 旧群聊：放回当下 / 舍弃 */
+.room-view .archive-actions{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
