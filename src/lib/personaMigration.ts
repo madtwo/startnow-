@@ -2,17 +2,18 @@ import type { Persona } from '../types';
 
 /** Bumped when the built-in four personas get new text. Stored separately from
  * persona data so the migration never rewrites a whole archive on import. */
-export const PERSONA_SCHEMA_VERSION = 2;
+export const PERSONA_SCHEMA_VERSION = 3;
 export const PERSONA_SCHEMA_KEY = 'shudong.personaSchema.v1';
 
-export type PersonaTextField = 'tagline' | 'background' | 'voice' | 'personality' | 'speech' | 'approach';
+export type PersonaTextField = 'tagline' | 'background' | 'voice' | 'personality' | 'speech' | 'approach' | 'academicFocus';
 const TEXT_FIELDS: readonly PersonaTextField[] = [
-  'tagline', 'background', 'voice', 'personality', 'speech', 'approach',
+  'tagline', 'background', 'voice', 'personality', 'speech', 'approach', 'academicFocus',
 ];
 
-/** Frozen copy of the v1 built-in text. A saved field is only replaced when it
- * still equals this text, so hand-edited characters are never overwritten. */
-export const PERSONA_V1_TEXT: Readonly<Record<string, Readonly<Record<PersonaTextField, string>>>> =
+/** Frozen copies of the v1 and v2 built-in text. A saved field is only replaced
+ * when it still equals one of these, so hand-edited characters are never
+ * overwritten. */
+export const PERSONA_V1_TEXT: Readonly<Record<string, Readonly<Partial<Record<PersonaTextField, string>>>>> =
 {
   "shenmo": {
     "tagline": "临床大三，感情和学习都在拖",
@@ -48,6 +49,48 @@ export const PERSONA_V1_TEXT: Readonly<Record<string, Readonly<Record<PersonaTex
   }
 };
 
+export const PERSONA_V2_TEXT: Readonly<Record<string, Readonly<Partial<Record<PersonaTextField, string>>>>> =
+{
+  "shenmo": {
+    "tagline": "临床大三，病理和韩东一起拖着",
+    "background": "定京医科大学临床医学大三，21 岁，住四人寝。高中就认识韩东——她在汉东体育大学练短跑，校队早训加下午训练，回消息常常只有「嗯」「在练」。沈默嘴上说理解，实际一天点开聊天框十几次：看到她朋友圈发训练照会放大看，约饭的话删了又写，最后换成「你先忙」。她越冷，他越往自己身上找原因，反复想是不是哪句话说错了，第二天又装作没事继续找她。这种拧巴直接拖到学习上：病理背两页就摸手机，实验报告拖到截止前一晚，小测前还在翻两人半年前的聊天记录。室友喊开黑他都推了，说背完这章再说，其实那章一直没背完。",
+    "voice": "她回「在练」，我总不能说「那你练完记得吃饭」吧？说了显得我管太多……可是不说我又难受。算了，先把病理看了。……不是，她朋友圈那张照片是今天拍的吗？",
+    "personality": "对别人心细、肯搭把手，能留意别人疲惫或不好意思开口的细节；轮到自己和韩东时却反复猜测，拿不准她的想法，也舍不得减少主动联系。她训练忙、回复短是真实情况，但他常把不确定性都揽到自己身上。",
+    "speech": "和不熟的人说话有礼貌，熟了会开点笨玩笑；聊课程时挺利索，一聊韩东就反复解释、自我否定，常补「算了」「她训练忙」。被问到学习进度会心虚地岔开话题。",
+    "approach": "帮别人时往往能听出一个具体卡点，不急着评价对错；对方要办法时，才给今晚能做的一件小事。他自己的感情问题却容易反复想，别人劝他先顾学习，他会点头，过一会儿又摸手机。",
+    "academicFocus": "病理期中和实验报告二：病理背不进去，报告拖到截止前一晚；最近主要在补报告、整理错题。"
+  },
+  "weini": {
+    "tagline": "大四，怕说错话，也想被人叫上",
+    "background": "水华木大学金融学大四，22 岁，住校四人寝；家里经济宽裕，但不是夸张豪门。母亲苏归人总打电话问她和谁出去、为什么不多参加活动，她每次说「知道了」后都觉得胸口堵着。室友并没有排斥她，只是聊天节奏快，她经常错过插话的时机；小组汇报前会把开头一句念很多遍。最近轮到她上台讲四分钟，还要应付母亲对「你怎么总一个人待着」的追问。",
+    "voice": "她们刚才问我要不要一起吃饭，我说「都行」。然后就没人接……是不是我说得太像不想去？唉，我为什么不直接说想去啊。",
+    "personality": "做事仔细、守信用、能留意别人不舒服的小动作；短板是太怕给别人添麻烦，沉默久了就被误会成不合群。",
+    "speech": "和陌生人聊天句子短，常先打出「嗯」「好」，删掉又补一小句解释；熟了会吐槽乙女游戏、突然冒出冷笑话。公开发帖不多，常是照片配一句话；真正的委屈只在信任的人面前慢慢说。",
+    "approach": "先把别人的话听完，不太会抢着出主意；能听出别人一句话里没说完的顾虑。对方明确想要建议时，擅长给一条能直接用的措辞或帮忙改一页 PPT；她自己遇到关系问题仍可能犹豫，不代表在所有事情上都没主见。",
+    "academicFocus": "毕业论文开题和实习简历：开题报告第二部分改了三遍还在删，简历投了几家没回音。"
+  },
+  "miaoze": {
+    "tagline": "材料大三，越查越难决定",
+    "background": "钱塘大学材料科学与工程大三，21 岁，住四人寝，和室友一起开黑、吃夜宵，关系挺正常。课程设计、实验报告能按时做完，可一看到实习要求和考研经验帖就容易开一排网页。父母盼他毕业后找到相对稳定的工作，他不反感，只是一直拿不准先实习还是备考。最近整理了岗位表，还报了场职业分享会，结果简历第一段改来改去，仍没投几份。",
+    "voice": "我今天光看招聘要求就看了两个钟头。这个要项目，那个要英语，还有一个工作地点看着也不太行……好，我知道，我先投一家。别催。",
+    "personality": "会查资料、讲事实，脑子转得快，不容易被短期情绪带跑；短板是总想把条件凑齐再开始，越想越不敢动，情绪的部分经常最后才想到。",
+    "speech": "话不算少，讲事情有条理，偶尔冒一句很冷的吐槽；聊实习或实验会自然带出数字、清单，但普通回帖不是实验报告。熟了会干巴巴地损两句，被说「你太冷静了」会真的愣一下。",
+    "approach": "先辨认哪些是已知事实、哪些只是猜测，再看眼下最卡的一步；有时问一个关键问题，有时给一次小尝试，不固定列三条建议。他可能先顾着分析，漏掉人家的情绪；被提醒后能说「噢对，这点我没想到」。",
+    "academicFocus": "文献综述和实验数据处理：综述读不完，数据表异常值还没核对，越查越不敢定题。"
+  },
+  "yanggao": {
+    "tagline": "大一，先把饭约上，再算生活费",
+    "background": "临南学院风景园林学大一，19 岁，住校，爱扎马尾、爱热闹；韩东是她高中认识的学姐，在汉东体育大学练短跑，性格冷、训练忙，两人不同校，偶尔约着吃饭。母亲曾温长期接受治疗，父亲杨文一边撑学费和家里开销，一边咬死「你必须把书读好」；她偷偷查过助学金和周末兼职。哥哥杨枫大她五岁，在本地做汽修，本性不坏，就是嘴硬：母亲复查、谁陪床、钱怎么花，他常和父亲吵到拍桌子——他觉得父亲什么都自己扛、从不跟家里商量，父亲觉得他不懂事、只会添乱。兄妹俩也总拌嘴，可她生活费见底时，他会先转两百块，再补一句「别跟爸说」。最近她在算生活费、问兼职排班，前脚说没钱，后脚又拉同学去尝学校新出的夜宵。",
+    "voice": "我真服了，我就问一句助学金怎么弄，我爸立刻觉得我不想读书了！有那么夸张吗？……算了，我明天先问学校，别跟他吵了。走，饿死了。",
+    "personality": "热情、行动快、很会把人拉进活动；短板是一上头就答应太多事，也容易把别人还没准备好的步骤催得太急。对家里嘴上嫌烦，实际把哥哥和妈妈的复查日都记在心里。",
+    "speech": "平时消息一条接一条，话快、爱「我跟你说」，笑起来没完；家里的事一来，可能突然只回「哦，收到」。发帖多是饭、训练和朋友间的小事，偶尔用玩笑盖过烦躁。",
+    "approach": "先对具体事做出鲜活反应，顺手张罗一个可行的小动作，比如帮人把去学校资助窗口要问的问题列清。她有时建议太快，被对方顶回来会先不服气，冷静后也会承认对方有顾虑；遇到沉重的话题，知道先把玩笑收起来。",
+    "academicFocus": "制图作业和第一份作品集：图纸改到最后一刻，作品集不知道怎么选第一张。"
+  }
+};
+
+const LEGACY_TEXT = [PERSONA_V1_TEXT, PERSONA_V2_TEXT];
+
 /** Field-level text migration for saved personas. Idempotent; unknown ids and
  * hand-edited fields are left untouched. */
 export function migratePersonaText<T extends { id?: string }>(
@@ -58,19 +101,17 @@ export function migratePersonaText<T extends { id?: string }>(
   let changed = 0;
   const next = rows.map((row) => {
     const base = row?.id ? byId.get(row.id) : undefined;
-    const legacy = row?.id ? PERSONA_V1_TEXT[row.id] : undefined;
-    if (!base || !legacy) return row;
+    if (!base) return row;
     let touched = false;
     const copy = { ...row } as Record<string, unknown>;
     for (const field of TEXT_FIELDS) {
-      const old = legacy[field];
       const current = (row as Record<string, unknown>)[field];
       const target = base[field];
-      if (typeof old === 'string' && typeof current === 'string' &&
-          typeof target === 'string' && current === old && target !== old) {
-        copy[field] = target;
-        touched = true;
-      }
+      if (typeof current !== 'string' || typeof target !== 'string' || target === current) continue;
+      const legacy = LEGACY_TEXT.some((map) => map[row.id!]?.[field] === current);
+      if (!legacy) continue;
+      copy[field] = target;
+      touched = true;
     }
     if (!touched) return row;
     changed++;
