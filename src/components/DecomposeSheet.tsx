@@ -45,6 +45,8 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
     () => (mode === 'grill' ? grillQuestions(goal, answers) : goalQuestions(goal, answers)),
     [mode, goal, answers],
   );
+  // Grill shows every prompt at once; the list must not disappear as answers are typed.
+  const grillPrompts = useMemo(() => grillQuestions(goal, {}), [goal]);
   useEffect(() => {
     try { saveDecomposeDraft(localStorage, { goal, manualSteps, answers, confirmedDeadline: deadline, mode }); }
     catch { /* storage may be unavailable */ }
@@ -86,6 +88,11 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
       setPlan({title:goal.trim().slice(0,120), assumptions:[],
         steps:lines.map((text)=>({text,minutes:20,kind:'other' as const}))});
       setChecked(lines.map((_,i)=>i)); setSource('manual');setPhase('preview');return;
+    }
+    if (mode === 'grill') {
+      if (grillPrompts.length) setPhase('questions');
+      else void generate(answers, true);
+      return;
     }
     setQuestionIndex(Object.values(answers).filter((v) => Boolean(v?.trim())).length);setAnswer('');
     if (questions.length) setPhase('questions');
@@ -242,8 +249,23 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
         {elapsed >= 20 && <p>还在拆，你可以继续等，也可以取消。</p>}
         <div className="sheet-actions"><button className="btn btn-ghost" onClick={stopCurrent}>取消拆解（保留输入）</button></div>
       </>}
-      {phase==='questions' && <>
-        <p className="meeting-label">问题 {Math.min(questionIndex + 1, mode==='grill'?5:3)}/{mode==='grill'?5:3} · 可以跳过</p>
+      {phase==='questions' && mode==='grill' && <>
+        <p className="meeting-label">一次填完；不想回答的留空，也可以直接拆解。</p>
+        <div className="grill-form">
+          {grillPrompts.map((q)=><label className="field" key={q.field}>
+            <span className="field-label">{q.text}</span>
+            <textarea rows={2} maxLength={180} value={answers[q.field] ?? ''}
+              aria-label={q.text}
+              onChange={(e)=>setAnswers((prev)=>({ ...prev, [q.field]: e.target.value }))}/>
+          </label>)}
+        </div>
+        <div className="sheet-actions">
+          <button className="btn btn-ghost" onClick={()=>void generate(answers, true)}>跳过，直接拆解</button>
+          <button className="btn btn-primary" disabled={busy} onClick={()=>void generate(answers, false)}>用这些答案拆解</button>
+        </div>
+      </>}
+      {phase==='questions' && mode!=='grill' && <>
+        <p className="meeting-label">问题 {Math.min(questionIndex + 1, 3)}/3 · 可以跳过</p>
         <p>{questions[0]?.text}</p>
         <input aria-label="回答关键问题" value={answer} onChange={(e)=>setAnswer(e.target.value)} maxLength={180}/>
         <div className="sheet-actions">
