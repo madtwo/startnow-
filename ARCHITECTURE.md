@@ -305,6 +305,7 @@ mock 模式下，`mockComment` 有 35% 概率接上一条其他同伴的话；�
 ### 数据
 
 - `Room`：`messages` / `scheduled` / `steps` / `cast` / `gone` / `usage`；当前房间只有一个，换人或放回时会进存档。
+- `Room.title` 默认是「你 + 群友昵称」（人多折成「等 N 人」）；点标题可以自己改名，改过 `titleEdited` 就不再自动生成。旧版本的地点名会在加载时被换成新写法。
 - `Message`：冗余存 `authorName / color / avatarKey`——换一批群友之后，历史消息仍然有名字和头像。
 - `ScheduledMessage.intent`：`reply | peer | ambient | react | comfort | advise`；`advise` 额外带 `adviceId`（这条建议绑的动作）和 `adviceVariant`（换句式用）。
 - `Persona` 在群聊侧多三层：`relations`（对 'me' 和彼此，从 0 开始）、`situation`（此刻处境，按天刷新）、`chattiness` + `awake`（话量与作息）。

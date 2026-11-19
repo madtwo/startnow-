@@ -12,9 +12,11 @@ import {
   completeStep,
   discardArchive,
   dropStep,
+  ensureRoomTitle,
   MAX_ARCHIVES,
   newRoom,
   postPlayerMessage,
+  renameRoom,
   requestStep as askStep,
   rerollRoom,
   restoreArchive,
@@ -46,7 +48,10 @@ interface Props {
 export default function RoomView({ identity, config, onOpenApi }: Props) {
   const [roomSettings, setRoomSettings] = useState<RoomSettings>(() => loadRoomSettings());
   const [archives, setArchives] = useState<Room[]>(() => loadArchives());
-  const [room, setRoom] = useState<Room>(() => loadRoom() ?? newRoom(pickCast(4)));
+  const [room, setRoom] = useState<Room>(() => {
+    const saved = loadRoom();
+    return saved ? ensureRoomTitle(saved, identity.name) : newRoom(pickCast(4), Date.now(), identity.name);
+  });
   const [panel, setPanel] = useState<Panel>('none');
   const [working, setWorking] = useState(false);
   const [toast, setToast] = useState('');
@@ -179,6 +184,8 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
     setToast('做完了。群里会看到。');
   };
 
+  const rename = (title: string) => setRoom((prev) => renameRoom(prev, title));
+
   const reroll = () => {
     if (archives.length >= MAX_ARCHIVES) {
       setToast('旧群聊已经满了，先去「旧群聊」里舍弃一个再换人。');
@@ -186,7 +193,7 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
       return;
     }
     if (!window.confirm('这 4 位会离开，聊天记录会收进「旧群聊」，之后还能放回当下。继续？')) return;
-    const { room: next, archived } = rerollRoom(latest.current.room, Date.now());
+    const { room: next, archived } = rerollRoom(latest.current.room, identity.name, Date.now());
     setRoom(next);
     setArchives((prev) => [archived, ...prev].slice(0, MAX_ARCHIVES));
     setPanel('none');
@@ -250,6 +257,7 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
         apiLabel={configLabel(config)}
         apiReady={ready}
         onSend={send}
+        onRename={rename}
         onOpenSteps={() => setPanel('steps')}
         onOpenRoom={() => setPanel('room')}
         onOpenArchive={() => setPanel('archive')}

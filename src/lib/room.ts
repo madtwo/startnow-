@@ -35,8 +35,6 @@ const pick = <T,>(rows: T[]): T => rows[Math.floor(Math.random() * rows.length)]
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 const dayKey = (ts: number) => new Date(ts).toDateString();
 
-const TITLES = ['晚自习后', '走廊尽头', '六楼茶水间', '宿舍楼下', '图书馆三楼'];
-
 /* ------------------------------------------------------------------ *
  * 关系：群里的人一开始互不相识，也从零开始认识你
  * ------------------------------------------------------------------ */
@@ -196,7 +194,25 @@ const spend = (room: Room, now: number): Room => ({
   usage: { day: dayKey(now), messages: usedToday(room, now) + 1 },
 });
 
-export const newRoom = (cast: Persona[], now = Date.now()): Room => {
+/** 群名默认就是「都有谁」：你 + 群友的昵称，人多了折成「等 N 人」。 */
+export const defaultRoomTitle = (playerName: string, cast: Persona[]): string => {
+  const names = [playerName.trim() || '我', ...cast.map((p) => p.name)].filter(Boolean);
+  if (!names.length) return '群聊';
+  const head = names.slice(0, 3).join('、');
+  return names.length > 3 ? `${head} 等 ${names.length} 人` : head;
+};
+
+/** 用户改过名就不再自动生成；没改过的旧房间顺手换成新写法。 */
+export const ensureRoomTitle = (room: Room, playerName: string): Room =>
+  room.titleEdited ? room : { ...room, title: defaultRoomTitle(playerName, room.cast) };
+
+export const renameRoom = (room: Room, title: string): Room => {
+  const clean = title.trim().replace(/\s+/g, ' ').slice(0, 24);
+  if (!clean) return room;
+  return { ...room, title: clean, titleEdited: true };
+};
+
+export const newRoom = (cast: Persona[], now = Date.now(), playerName = '我'): Room => {
   const people = (cast.length ? cast : pickCast(4)).map((p) => ({
     ...p,
     mind: ensureMind(p, now),
@@ -204,7 +220,7 @@ export const newRoom = (cast: Persona[], now = Date.now()): Room => {
   const first = pick(people);
   const room: Room = {
     id: uid(),
-    title: pick(TITLES),
+    title: defaultRoomTitle(playerName, people),
     createdAt: now,
     messages: [
       systemMessage('几个大学生凑的群。卡住了就说一句，不用讲清前因后果。', now),
@@ -1082,10 +1098,14 @@ export async function catchUpRoom(input: TickInput): Promise<TickOutput> {
  * 换一批群友：旧房间进存档（只读），新房间只有你的人设、没有旧记录。
  * 你自己加的步骤留着——那是你的东西，不是他们的。
  */
-export function rerollRoom(room: Room, now = Date.now()): { room: Room; archived: Room } {
+export function rerollRoom(
+  room: Room,
+  playerName = '我',
+  now = Date.now(),
+): { room: Room; archived: Room } {
   const archived: Room = { ...cloneRoom(room), archivedAt: now };
   archived.messages = archived.messages.slice(-150);
-  const next = newRoom(pickCast(4), now);
+  const next = newRoom(pickCast(4), now, playerName);
   next.steps = room.steps
     .filter((s) => s.ownerId === 'me' && !s.doneAt)
     .map((s) => ({ ...s, fromPersonaId: undefined, fromName: s.fromName }));

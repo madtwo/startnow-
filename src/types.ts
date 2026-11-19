@@ -438,6 +438,8 @@ export interface Room {
   lastMessageAt: number;
   usage: RoomUsage;
   archivedAt?: number;
+  /** 用户自己改过群名；改过之后就不再按群友名字自动生成 */
+  titleEdited?: boolean;
 }
 
 /** 玩家的两个旋钮：多热闹、时间停不停。 */

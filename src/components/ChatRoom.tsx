@@ -12,6 +12,8 @@ interface Props {
   apiLabel: string;
   apiReady: boolean;
   onSend: (text: string, mentions: string[], replyTo?: string) => void;
+  /** 用户自己改群名 */
+  onRename: (title: string) => void;
   onOpenSteps: () => void;
   onOpenRoom: () => void;
   onOpenArchive: () => void;
@@ -48,6 +50,7 @@ export default function ChatRoom({
   apiLabel,
   apiReady,
   onSend,
+  onRename,
   onOpenSteps,
   onOpenRoom,
   onOpenArchive,
@@ -57,6 +60,8 @@ export default function ChatRoom({
   const [replyTo, setReplyTo] = useState<string>('');
   const [mentions, setMentions] = useState<string[]>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const byId = useMemo(() => {
@@ -115,11 +120,46 @@ export default function ChatRoom({
     setMentionOpen(false);
   };
 
+  const commitTitle = () => {
+    const clean = titleDraft.trim();
+    if (clean && clean !== room.title) onRename(clean);
+    setEditingTitle(false);
+  };
+
   return (
     <div className="room">
       <header className="room-head">
         <div className="room-title">
-          <h1>{room.title}</h1>
+          {editingTitle ? (
+            <input
+              className="room-title-input"
+              value={titleDraft}
+              autoFocus
+              maxLength={24}
+              placeholder="给这个群起个名字"
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitTitle();
+                if (e.key === 'Escape') setEditingTitle(false);
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="room-title-btn"
+              title="点一下改群名"
+              onClick={() => {
+                setTitleDraft(room.title);
+                setEditingTitle(true);
+              }}
+            >
+              <h1>{room.title}</h1>
+              <span className="room-title-edit" aria-hidden="true">
+                改
+              </span>
+            </button>
+          )}
           <p>
             {room.cast.length} 位群友 · {room.messages.filter((m) => m.kind === 'chat').length} 条
           </p>

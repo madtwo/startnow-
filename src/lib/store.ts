@@ -550,6 +550,7 @@ const normalizeRoom = (raw: Partial<Room> | null): Room | null => {
         ? { day: String(raw.usage.day ?? dayKey(now)), messages: Number(raw.usage.messages) || 0 }
         : { day: dayKey(now), messages: 0 },
     archivedAt: typeof raw.archivedAt === 'number' ? raw.archivedAt : undefined,
+    titleEdited: raw.titleEdited === true,
   };
 };
 

@@ -1234,3 +1234,51 @@
   flex-direction: column;
   gap: 8px;
 }
+
+/* 群名：点一下可以改 */
+.room-view .room-title-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:0;
+  border:0;
+  background:none;
+  color:inherit;
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.room-view .room-title-btn h1{
+  margin:0;
+}
+.room-view .room-title-edit{
+  flex:none;
+  padding:1px 6px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  font-size:10px;
+  line-height:1.6;
+  color:var(--tertiary);
+  opacity:0;
+  transition:opacity var(--ease);
+}
+.room-view .room-title-btn:hover .room-title-edit,
+.room-view .room-title-btn:focus-visible .room-title-edit{
+  opacity:1;
+}
+.room-view .room-title-input{
+  width:min(320px, 60vw);
+  padding:3px 8px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--surface-strong);
+  color:var(--ink);
+  font-family:var(--serif);
+  font-size:18px;
+  font-weight:600;
+  letter-spacing:0.04em;
+}
+.room-view .room-title-input:focus{
+  outline:none;
+  border-color:color-mix(in srgb, var(--accent) 50%, transparent);
+}

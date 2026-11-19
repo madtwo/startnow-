@@ -115,6 +115,26 @@ test('新房间只排一条「欢迎新人」，不是四个人先自己聊起�
   assert.equal(fresh.scheduled[0].intent, 'welcome');
 });
 
+test('群名默认是「你 + 群友昵称」，改过之后不再自动生成', () => {
+  const cast = generateCast(4, NOW);
+  const title = room.defaultRoomTitle('小安', cast);
+  assert.ok(title.startsWith('小安、'), `群名应该从你开始：${title}`);
+  assert.ok(title.includes(cast[0].name) && title.includes(cast[1].name));
+  assert.ok(title.includes('等 5 人'), `人多应该折叠：${title}`);
+
+  const created = room.newRoom(cast, NOW, '小安');
+  assert.equal(created.title, title);
+  assert.ok(!created.titleEdited);
+
+  const renamed = room.renameRoom(created, '  考研搭子  ');
+  assert.equal(renamed.title, '考研搭子');
+  assert.equal(renamed.titleEdited, true);
+  assert.equal(room.ensureRoomTitle(renamed, '小安').title, '考研搭子', '改过的名字不该被覆盖');
+
+  const legacy = { ...created, title: '晚自习后' };
+  assert.equal(room.ensureRoomTitle(legacy, '小安').title, title, '旧的地点名应该被换成新写法');
+});
+
 test('你说话之后，排着的 AI 互聊要让位', () => {
   const base = freshRoom();
   const withPeer = {
