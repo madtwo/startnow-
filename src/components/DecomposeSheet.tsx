@@ -203,15 +203,15 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
             placeholder="例如：周三前把实验报告写完，数据已经跑完。" /></label>
         <label className="field"><span className="field-label">确认的截止日期（可空；不填不会当成真实 DDL）</span>
           <input type="date" value={deadline} onChange={(e)=>setDeadline(e.target.value)} /></label>
-        {mode==='ai' && <label className="field"><span className="field-label">老师通知截图（可选）</span>
+        {<label className="field"><span className="field-label">老师通知 / 作业材料截图（可选）</span>
           <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" disabled={busy || !config.visionModel?.trim()}
             onChange={(e)=>{const file=e.currentTarget.files?.[0];e.currentTarget.value='';void upload(file);}}/>
-          <small>{config.visionModel?.trim() ? '只有你主动上传才发送到视觉模型；原文可能含老师姓名/群名，导出前请注意隐私。' : '当前没有配置视觉模型。请把通知文字粘贴到输入框。'}</small></label>}
+          <small>{config.visionModel?.trim() ? '三种拆解方式都可上传；只有你主动上传才发送到视觉模型，原文可能含老师姓名/群名，导出前请注意隐私。' : '当前没有配置视觉模型。请把通知文字粘贴到输入框。'}</small></label>}
         {visionBusy && <div role="status" aria-live="polite" className="meeting-vision-preview">
           <p>正在识别通知…通常需要 5–15 秒（重试可能更久）。</p>
           <button type="button" className="btn btn-ghost" onClick={cancelVision}>取消识图</button>
         </div>}
-        {mode==='ai' && visionResult && <section className="meeting-vision-preview" aria-label="识图结果核对" role="region">
+        {visionResult && <section className="meeting-vision-preview" aria-label="识图结果核对" role="region">
           <h3>{visionResult.format==='fields'?'识别结果（请核对）':'识别原文（请核对）'}</h3>
           <p role="status">{visionNotice}</p>
           {visionResult.format==='fields' ? <>

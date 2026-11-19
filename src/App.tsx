@@ -52,6 +52,7 @@ import {
 } from './lib/cards';
 import { buildGuideCard, buildSeedCards, seedMemories, introPhaseActive } from './lib/seed';
 import { COMPETITION_MODE, competitionSummary } from './lib/competition';
+import { FORUM_VIEWS, matchesForumView, type ForumView } from './lib/forumFilters';
 import { buildCompetitionSeedCards } from './lib/competitionSeed';
 import { extractMaterial } from './lib/materialVision';
 import { captureFirstStep, captureVisionTemplate } from './lib/materialCapture';
@@ -244,6 +245,7 @@ export default function App() {
   );
   const [forumQuery, setForumQuery] = useState('');
   const [forumCat, setForumCat] = useState<(typeof FORUM_CATS)[number]>('全部');
+  const [forumView, setForumView] = useState<ForumView>('全部');
   const [bellOpen, setBellOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailPeer, setDetailPeer] = useState('');
@@ -1370,10 +1372,11 @@ export default function App() {
     const q = forumQuery.trim().toLowerCase();
     return feed.filter((c) => {
       if (forumCat !== '全部' && forumCategory(c) !== forumCat) return false;
+      if (!matchesForumView(c, forumView)) return false;
       if (!q) return true;
       return `${c.title ?? ''} ${c.text} ${c.authorName}`.toLowerCase().includes(q);
     });
-  }, [feed, forumCat, forumQuery]);
+  }, [feed, forumCat, forumView, forumQuery]);
 
   const noteCount =
     todos.filter((t) => !t.doneAt).length +
@@ -1699,7 +1702,7 @@ export default function App() {
                 </label>
               </div>
 
-              <div className="forum-chips" role="group" aria-label="卡片分类">
+              <div className="forum-chips" role="group" aria-label="话题分类">
                 {FORUM_CATS.map((cat) => (
                   <button
                     key={cat}
@@ -1709,6 +1712,19 @@ export default function App() {
                     onClick={() => setForumCat(cat)}
                   >
                     {cat}
+                  </button>
+                ))}
+              </div>
+              <div className="forum-chips forum-view-chips" role="group" aria-label="帖子类型">
+                {FORUM_VIEWS.map((view) => (
+                  <button
+                    key={view}
+                    type="button"
+                    className={forumView === view ? 'on' : ''}
+                    aria-pressed={forumView === view}
+                    onClick={() => setForumView(view)}
+                  >
+                    {view === '全部' ? '全部类型' : view}
                   </button>
                 ))}
               </div>

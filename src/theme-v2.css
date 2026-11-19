@@ -1877,3 +1877,7 @@ body {
     font-size: 11.5px;
   }
 }
+
+.forum-view-chips {
+  margin-top: -10px;
+}
