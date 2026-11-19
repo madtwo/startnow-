@@ -870,7 +870,7 @@ const CARE_FALLBACK: Record<string, string> = {
 };
 /** In a care/about-me turn, keep only self-focused statements; drop questions and advice. */
 function careSafeLine(text: string): string {
-  const kept = text.split(/(?<=[。！？!?…])/).map((part) => part.trim()).filter(Boolean)
+  const kept = text.split(/(?<=[，,；;。！？!?…])/).map((part) => part.trim()).filter(Boolean)
     .filter((part) => !/[?？]/.test(part) && !CARE_ADVICE.test(part));
   const joined = kept.join('').trim();
   return /我|自己|俺/.test(joined) ? joined : '';
@@ -997,43 +997,54 @@ async function generateComment(
   }
 
   try {
+    const careRule = careFocus
+      ? ' 对方是在关心你，不是求助：先直接回答对方问你的感受/近况，再说一句你自己的具体状态或做过的事；不能出现问号，不要给建议，不要追问对方。'
+      : '';
+    const rules = `${COMMENT_RULES}${careRule}${
+      persona.intimacy < 22 && card.comments.length === 0
+        ? ' 你和这个人还不熟：句子短一点，别急着给建议，可以说「我也说不好」。'
+        : ''
+    }${
+      shortContact
+        ? ' 对方只是打招呼或短句：只回一句自然的话，不要给下一步或行动建议，不要续写自己的读书/复习计划。'
+        : ''
+    }${
+      persona.shareBoost
+        ? ' 你刚听对方说了一件挺重的事。可以回应，但不要比较、不要说教。'
+        : ''
+    }${
+      (isHeavyShare(card.text) || needsHelpSeeking(card.text))
+        ? ' 这是用户的脆弱自述：先接住具体感受，不能拿食堂、打球或自己的经历打岔；不要诊断。'
+        : ''
+    }`;
+    const userPrompt = withUntrustedHistory(commentPrompt(card, persona, sourceCommentId), persona, Date.now());
     const text = await callOnce(
-      ctx,
-      systemFor(
-        persona,
-        '',
-        `${COMMENT_RULES}${
-          careFocus
-            ? ' 对方是在关心你，不是求助：只写一句关于你自己的陈述，不能出现问号，不要给建议，不要追问对方。'
-            : ''
-        }${
-          persona.intimacy < 22 && card.comments.length === 0
-            ? ' 你和这个人还不熟：句子短一点，别急着给建议，可以说「我也说不好」。'
-            : ''
-        }${
-          shortContact
-            ? ' 对方只是打招呼或短句：只回一句自然的话，不要给下一步或行动建议，不要续写自己的读书/复习计划。'
-            : ''
-        }${
-          persona.shareBoost
-            ? ' 你刚听对方说了一件挺重的事。可以回应，但不要比较、不要说教。'
-            : ''
-        }${
-          (isHeavyShare(card.text) || needsHelpSeeking(card.text))
-            ? ' 这是用户的脆弱自述：先接住具体感受，不能拿食堂、打球或自己的经历打岔；不要诊断。'
-            : ''
-        }`,
-        ctx.settings.baselineExtra,
-      ),
-      withUntrustedHistory(commentPrompt(card, persona, sourceCommentId), persona, Date.now()),
-      1800, 20_000, `${persona.id}:${card.id}`,
+      ctx, systemFor(persona, '', rules, ctx.settings.baselineExtra),
+      userPrompt, 1800, 20_000, `${persona.id}:${card.id}`,
     );
     let line = cleanLine(text);
     if (!line) throw new Error('模型返回空文本');
     if (careFocus) {
-      const safe = careSafeLine(line);
+      let safe = careSafeLine(line);
+      if (!safe && ctx.calls < Math.max(1, ctx.settings.maxCallsPerTick)) {
+        ctx.logs.push(`${persona.name} 关心场景首次输出不合格，重试一次`);
+        try {
+          const retryText = await callOnce(
+            ctx,
+            systemFor(persona, '',
+              `${rules} 上一条不合格：直接写你自己的感受或做过的事，1–2 句；不能有问号，不要建议或追问对方。`,
+              ctx.settings.baselineExtra),
+            `${userPrompt}\n上一条没有通过。请重写：只写你自己的感受/经历，不能有问号，不能给建议，不能问对方。`,
+            800, 20_000, `${persona.id}:${card.id}:care-retry`,
+          );
+          safe = careSafeLine(cleanLine(retryText));
+          if (safe) ctx.logs.push(`${persona.name} 关心场景重试通过`);
+        } catch (err) {
+          ctx.logs.push(`${persona.name} 关心场景重试失败：${describeError(err)}`);
+        }
+      }
       if (!safe) {
-        ctx.logs.push(`${persona.name} 关心场景只剩问句/建议，改用克制的自述`);
+        ctx.logs.push(`${persona.name} 关心场景仍不合格，改用克制的自述`);
         return {kind:'reply',text:CARE_FALLBACK[persona.id] ?? '我这边也常常坐不住，过一会儿就走神。',origin:'curated'};
       }
       if (safe !== line) {

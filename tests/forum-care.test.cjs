@@ -67,10 +67,29 @@ test('a clean self-report in a care turn is kept as model output', async () => {
   assert.equal(reply.origin, 'model');
 });
 
-test('advice-only model output in a care turn falls back to a calm self-report', async () => {
+test('a self-clause followed by a question in the same sentence is retained', async () => {
+  const { output } = await generate(() => json('我复习两页就摸一次手机，你复习的时候会不会也这样？'));
+  const reply = output.cards[0].comments.filter((row) => row.authorId === 'shenmo').at(-1);
+  assert.equal(reply.text, '我复习两页就摸一次手机，');
+  assert.doesNotMatch(reply.text, /[?？]|你复习/);
+});
+
+test('invalid care output gets one stricter retry before falling back', async () => {
+  let calls = 0;
+  const { output } = await generate(() => {
+    calls += 1;
+    return json(calls === 1 ? '你可以试试把手机交给室友。' : '我试过把手机放远，还是会惦记。');
+  });
+  const reply = output.cards[0].comments.filter((row) => row.authorId === 'shenmo').at(-1);
+  assert.equal(reply.text, '我试过把手机放远，还是会惦记。');
+  assert.equal(calls, 2);
+  assert.match(output.logs.join(' '), /重试通过/);
+});
+
+test('advice-only model output after retry falls back to a calm self-report', async () => {
   const { output } = await generate(() => json('你可以试试把手机交给室友，肯定能管住。'));
   const reply = output.cards[0].comments.filter((row) => row.authorId === 'shenmo').at(-1);
   assert.match(reply.text, /我|自己/);
   assert.doesNotMatch(reply.text, /[?？]|你可以|试试/);
-  assert.match(output.logs.join(' '), /关心场景只剩问句\/建议/);
+  assert.match(output.logs.join(' '), /关心场景仍不合格/);
 });
