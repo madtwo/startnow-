@@ -573,7 +573,7 @@ async function runMaterial(config: LlmConfig) {
         sourceSha256, humanReviewed: false, modelName: config.visionModel,
         captureMode, stepSource: captureMode === 'vision-template' ? 'template' : undefined,
         anchored, actionable5m: actionable,
-        latencyMs, costUsd, fallback: captureMode === 'vision-template' ? false : fallback, requestCount,
+        latencyMs, costUsd, fallback: captureMode === 'vision-template' ? !anchored : fallback, requestCount,
       }));
       log(`D4 ${row.id} ${anchored ? 'anchor' : 'MISS'} ${latencyMs}ms`, anchored ? 'ok' : 'warn');
     }

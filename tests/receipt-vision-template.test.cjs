@@ -15,7 +15,7 @@ test('template capture sends ONE vision request, no advice LLM, retains a checka
  state.isMock=false;state.streamCalls=0;let requests=0,budgets=0;
  global.fetch=async(_url,req)=>{requests++;const body=JSON.parse(req.body);
    assert.equal(body.messages[0].content[1].type,'image_url');
-   assert.equal(body.max_tokens,1200);
+   assert.equal(body.max_tokens,1000);
    return packet(JSON.stringify(base()));};
  const result=await captureVisionTemplate({config:cfg,imageDataUrl:image,onModelAttempt:()=>budgets++});
  assert.equal(result.ok,true);assert.equal(requests,1);assert.equal(budgets,1);assert.equal(state.streamCalls,0);

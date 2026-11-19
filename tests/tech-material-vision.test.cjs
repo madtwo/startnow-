@@ -36,7 +36,7 @@ test('one format retry produces validated material, vision headers, and capped g
   global.fetch=async(url,opts)=>{record=JSON.parse(opts.body);assert.match(opts.headers['x-opencode-session'],/test-session/);attempts++;
     return {ok:true,json:async()=>({choices:[{message:{content:attempts===1?'BAD':JSON.stringify(make())}}]})};};
   const x=await extractMaterial(cfg,'data:image/png;base64,aQ==');
-  assert.equal(x.ok,true);assert.equal(x.retried,true);assert.equal(attempts,2);assert.equal(record.max_tokens,1200);assert.equal(record.reasoning_effort,'low');
+  assert.equal(x.ok,true);assert.equal(x.retried,true);assert.equal(attempts,2);assert.equal(record.max_tokens,1000);assert.equal(record.reasoning_effort,'low');
 });
 test('auth, 429 and missing session preserve distinct error codes and do not retry',async()=>{
   state.isMock=false;
