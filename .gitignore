@@ -26,3 +26,7 @@ demo/
 
 # local diff snapshots
 startnow-*.diff
+
+# generated D4 precheck images
+public/material-d4/
+*.before-v4-scripts.bak

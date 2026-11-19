@@ -77,6 +77,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.goto(URL, { waitUntil: 'networkidle2', timeout: 30000 });
   await closeOverlays();
   await inspect('home');
+  if (await clickText('发一张卡')) { await closeOverlays(); await inspect('post-form'); }
   if (await clickText('日程')) { await closeOverlays(); await inspect('schedule'); }
   if (await clickText('论坛')) { await closeOverlays(); await inspect('forum'); }
   const opened = await page.evaluate(() => {
