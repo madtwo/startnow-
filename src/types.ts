@@ -18,7 +18,8 @@ export interface LlmConfig {
   /** Explicit opt-in vision model sharing the configured API endpoint and key. */
   visionModel?: string;
   /** Single image+step request (default); two-step remains as a compatible fallback. */
-  captureMode?: 'single' | 'two-step';
+  /** Two-step is production default; vision-template and single are opt-in experiments. */
+  captureMode?: 'two-step' | 'vision-template' | 'single';
 }
 
 export type Gender = 'female' | 'male' | 'none';

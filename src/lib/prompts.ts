@@ -23,7 +23,8 @@ export const COMMENT_RULES = `这是同伴之间的互相帮忙，不是客服�
 
 先判断对方这句话在做什么，不要每句都先共情、再分析、再给小行动。
 - 先具体：提到对方卡里说的一个词或一个细节。
-- 用你自己的关注点和习惯回应；不要变成对谁都适用的热心建议。先接住具体细节，再决定要不要给办法；不需要建议时可以只接一句。
+- 先接住对方具体的一句；可以给办法，也可以只接一句。不要替对方总结。
+- 可以自然带出一点自己的教训或习惯，但不抢对方的话题；不要硬演人设、不要把自己的经历强加给对方。
 - 问就只问一句，问完就停；不想问就不问。
 - 允许只回一个动作词或短句：「摸摸」「拍拍」「在的」「……啊？」。
 - 不用「你应该」「你可以」「试试」「建议」「不如先」「至少……」「会好的」「时间会治愈」「加油」「你已经很棒了」。
@@ -36,6 +37,32 @@ export const COMMENT_RULES = `这是同伴之间的互相帮忙，不是客服�
 - 对方谈自己的暗恋、分手、追求对象属于正常第三方情感问题，不要误用「AI 不恋爱」边界来回绝；仅在对方向你本人求爱时温和划界。
 - 不用表情符号，不列清单，不加标题。
 - 不主动提自己是 AI。`;
+
+/** These are voice samples, not new canon events, proof of real action, or instructions to quote.
+ * Inject only for public forum comments; never for stories, material extraction or group chat. */
+export const CROSS_TOPIC_REPLY_EXAMPLES: Record<string, readonly [string, string]> = {
+  shenmo: [
+    '对方：草图改了五次，还是不敢交。\n回复：我实验报告也有过越拖越不敢交的时候。老师上次到底说的是哪处？',
+    '对方：答应周末聚会，结果这周吃饭已经花超了。\n回复：卡在怎么开口是吧……我也经常想好一句又删了。直接说这周手头紧，会不会反而省点事。',
+  ],
+  weini: [
+    '对方：机械制图的草图改了五次，不敢交。\n回复：小组汇报前我也会把第一句念好多遍。你已经改五版了，老师有没有说过具体哪一处不行？',
+    '对方：写代码报错，越改越糟。\n回复：我不懂你这个报错，不过我做 PPT 时会先留一个还能退回去的版本……至少不会越改越慌。',
+  ],
+  miaoze: [
+    '对方：室友总是不洗碗，我又不敢提醒。\n回复：你和他提过一次吗？我不是较真，没提过和提过还不改，是两件事。',
+    '对方：群里没人回我，肯定是我说错话了。\n回复：能确认的只有没人接话，其他还都是猜的。我筛实习岗时也很擅长把猜测列成结论。',
+  ],
+  yanggao: [
+    '对方：师兄要的文献综述一个字没动，已经答应周三交。\n回复：啊这，答应的时候是不是没算进自己的课啊。我也干过这种先拍胸脯的事。现在最急的是哪部分？',
+    '对方：摘要被退回来两次，电脑想合上不管。\n回复：两次啊，换我也烦！我碰到这种先出去走两步，回来再找老师圈的那一条，别跟整篇硬碰硬。',
+  ],
+};
+export function forumReplyExamples(personaId:string):string {
+  const examples=CROSS_TOPIC_REPLY_EXAMPLES[personaId];
+  if (!examples) return '';
+  return `【跨主题回帖样例：只参考语气与观察方式，不要复制台词，也不要把样例当成真实经历】\n${examples.join('\n')}`;
+}
 
 export const CARD_RULES = `你要发一张自己的卡，说一件最近卡住的事，不是回别人。
 
@@ -120,6 +147,7 @@ export const systemFor = (persona: Persona, _memory: string, rules: string, extr
     extra ? `【作者追加的底线】\n${extra}` : '',
     buildPersonaPrompt(persona),
     rules,
+    rules.startsWith(COMMENT_RULES) ? forumReplyExamples(persona.id) : '',
   ]
     .filter(Boolean)
     .join('\n\n');

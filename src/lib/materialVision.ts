@@ -125,7 +125,7 @@ export const validMaterialImage = (imageDataUrl: string): boolean =>
   /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(imageDataUrl) && imageDataUrl.length <= MAX_IMAGE;
 
 export async function extractMaterial(config: LlmConfig, imageDataUrl: string,
-  opts: {signal?:AbortSignal;onModelAttempt?:()=>void} = {}): Promise<MaterialResult> {
+  opts: {signal?:AbortSignal;onModelAttempt?:()=>void;maxAttempts?:1|2} = {}): Promise<MaterialResult> {
   const failure = (code:MaterialError,retried=false): MaterialResult =>
     ({ok:false,code,message:MESSAGES[code],retried});
   if (!validMaterialImage(imageDataUrl)) return failure('invalid_image');
@@ -141,7 +141,7 @@ export async function extractMaterial(config: LlmConfig, imageDataUrl: string,
   const session = scopedOpenCodeSessionId('material-vision');
   const url = `${config.baseUrl.trim().replace(/\/+$/,'')}/chat/completions`;
   try {
-    for (let attempt=0;attempt<2;attempt++) {
+    for (let attempt=0;attempt<(opts.maxAttempts??2);attempt++) {
       if (total.signal.aborted) return failure(deadlineExpired?'timeout':'cancelled',attempt>0);
       try {opts.onModelAttempt?.();} catch {return failure('rate_limit',attempt>0);}
       const controller = new AbortController();
@@ -161,23 +161,23 @@ export async function extractMaterial(config: LlmConfig, imageDataUrl: string,
         });
         if (!response.ok) {
           const classified=materialErrorFromHttp(response.status,await response.text().catch(()=>''));
-          if (attempt===0 && classified.retryable) continue;
+          if (attempt===0 && (opts.maxAttempts??2)>1 && classified.retryable) continue;
           return failure(classified.code,attempt>0);
         }
         const content = materialResponseText(await response.json().catch(()=>null));
         if (!content || content.length > MAX_RESPONSE) {
-          if (attempt===0) continue;
-          return failure('format_invalid',true);
+          if (attempt===0 && (opts.maxAttempts??2)>1) continue;
+          return failure('format_invalid',attempt>0);
         }
         const parsed = parseMaterialExtraction(content);
         if (parsed.extraction) return {ok:true,extraction:parsed.extraction,retried:attempt>0};
         if (parsed.error==='unsafe_output') return failure('unsafe_output',attempt>0);
-        if (attempt===0) continue;
-        return failure(parsed.error ?? 'format_invalid',true);
+        if (attempt===0 && (opts.maxAttempts??2)>1) continue;
+        return failure(parsed.error ?? 'format_invalid',attempt>0);
       } catch (err) {
         if (total.signal.aborted) return failure(deadlineExpired?'timeout':'cancelled',attempt>0);
-        if (attempt===0) continue;
-        return failure(attemptExpired || ['TimeoutError','AbortError'].includes((err as Error)?.name)?'timeout':'server',true);
+        if (attempt===0 && (opts.maxAttempts??2)>1) continue;
+        return failure(attemptExpired || ['TimeoutError','AbortError'].includes((err as Error)?.name)?'timeout':'server',attempt>0);
       } finally {
         clearTimeout(timer);
         total.signal.removeEventListener('abort',stop);

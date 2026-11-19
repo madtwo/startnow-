@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const dir=path.join(root,'tests');
 const files=fs.readdirSync(dir).filter(n=>(n==='copy-v4.test.cjs'||n==='persona-migration.test.cjs'||
-  /^tech-.*\.test\.(?:cjs|mjs)$/.test(n)||/^followup-.*\.test\.(?:cjs|mjs)$/.test(n)));
+  /^tech-.*\.test\.(?:cjs|mjs)$/.test(n)||/^followup-.*\.test\.(?:cjs|mjs)$/.test(n)||/^receipt-.*\.test\.(?:cjs|mjs)$/.test(n)));
 if(files.length<4){console.error('未发现足够 v4 测试文件，未运行');process.exit(2);}
 // Some existing .mjs tests import .ts sources directly. Node 22+ requires
 // explicit strip-types; CommonJS tests keep using their original tech-loader.

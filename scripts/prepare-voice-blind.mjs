@@ -26,10 +26,10 @@ for(const line of lines){
  byId.set(row.id,row);
 }
 const csv=(value)=>'"'+String(value).replace(/"/g,'""').replace(/\r?\n/g,' ')+'"';
-console.log('id,replyText,guessPersona,reason,independentReviewer,modelName,seed');
+console.log('id,replyText,guessPersona,reason,independentReviewer,modelName,seed,reviewerId');
 for(const entry of cases){
  const r=byId.get(entry.id);
  if(!r){console.error('缺少题目',entry.id);process.exit(1);}
- console.log([r.id,r.replyText,'','','',r.modelName,r.seed].map(csv).join(','));
+ console.log([r.id,r.replyText,'','','',r.modelName,r.seed,''].map(csv).join(','));
 }
 console.error('仅向独立评审发送生成的 blind.csv；不要提供含 personaId 的场景答案文件。');

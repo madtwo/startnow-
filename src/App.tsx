@@ -54,7 +54,7 @@ import { buildGuideCard, buildSeedCards, seedMemories, introPhaseActive } from '
 import { COMPETITION_MODE, competitionSummary } from './lib/competition';
 import { buildCompetitionSeedCards } from './lib/competitionSeed';
 import { extractMaterial } from './lib/materialVision';
-import { captureFirstStep } from './lib/materialCapture';
+import { captureFirstStep, captureVisionTemplate } from './lib/materialCapture';
 import { confirmedDeadline } from './lib/deadline';
 import { ensureMinds } from './lib/mind';
 import { defaultPersonas } from './lib/personas';
@@ -556,19 +556,23 @@ export default function App() {
       const sourceCard=current.cards.find(c=>c.id===cardId);
       const presenter=(sourceCard && advicePersonaFor(sourceCard,current.personas)) ||
         current.personas.find(p=>p.id==='miaoze') || current.personas[0];
-      const single=current.config.captureMode!=='two-step' && Boolean(presenter);
-      const result=single && presenter
+      const mode=current.config.captureMode ?? 'two-step';
+      const result=mode==='single' && presenter
         ? await captureFirstStep({config:current.config,imageDataUrl,persona:presenter,now:started,
             signal:controller.signal,onModelAttempt:()=>reserveMeetingCall('vision')})
-        : await extractMaterial(current.config,imageDataUrl,{
+        : mode==='vision-template' && presenter
+          ? await captureVisionTemplate({config:current.config,imageDataUrl,
+              signal:controller.signal,onModelAttempt:()=>reserveMeetingCall('vision')})
+          : await extractMaterial(current.config,imageDataUrl,{
             signal:controller.signal,onModelAttempt:()=>reserveMeetingCall('vision'),
           });
       if (controller.signal.aborted || externalTabChanged.current) return;
       // MaterialResult (legacy) has no step. Keep the union explicit so type
       // checking cannot accidentally treat extracted text as a verified action.
-      const capturedStep=result.ok && 'step' in result
-        ? (result.step as { text: string; anchorId: string; source: 'model' | 'template' })
-        : undefined;
+      const capturedStep: {text:string;anchorId:string;source:'model'|'template'} | undefined =
+        result.ok && 'step' in result
+          ? (result.step as { text: string; anchorId: string; source: 'model' | 'template' })
+          : undefined;
       setCards(prev=>prev.map(c=>c.id===cardId && c.image===imageDataUrl && c.materialAttemptAt===started
         ? result.ok
           ? {...c,material:result.extraction,materialError:undefined,
@@ -579,7 +583,9 @@ export default function App() {
           : {...c,material:undefined,materialCaptureStep:undefined,materialError:result.code}
         : c));
       setToast(result.ok
-        ? ('step' in result ? '已找到材料锚点和今天的一步，请核对后领取' : '已提取可见材料片段，请核对后请 AI 给第一步')
+        ? ('step' in result
+            ? (capturedStep?.source==='template' ? '已识别可见片段，本地模板准备了一步；请先核对原图' : '已找到材料锚点和今天的一步，请核对后领取')
+            : '已提取可见材料片段，请核对后请 AI 给第一步')
         : '没看清这张图，可以重试，或把关键文字粘贴进来。');
     } catch {
       if (!controller.signal.aborted && !externalTabChanged.current) {
@@ -1763,7 +1769,7 @@ export default function App() {
               ready={ready}
               personas={personas}
               visionModel={config.visionModel ?? ''}
-              captureMode={config.captureMode==='two-step'?'two-step':'single'}
+              captureMode={config.captureMode==='vision-template'||config.captureMode==='single'?config.captureMode:'two-step'}
               onCaptureModeChange={(captureMode) => {
                 const next={...config,captureMode};
                 setConfig(next);saveConfig(next);

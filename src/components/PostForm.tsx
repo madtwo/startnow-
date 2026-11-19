@@ -11,8 +11,8 @@ interface Props {
   ready: boolean;
   personas: Persona[];
   visionModel: string;
-  captureMode: 'single' | 'two-step';
-  onCaptureModeChange: (value:'single'|'two-step')=>void;
+  captureMode: 'two-step' | 'vision-template' | 'single';
+  onCaptureModeChange: (value:'two-step'|'vision-template'|'single')=>void;
   onVisionModelChange: (model: string) => void;
   onChange: (value: string) => void;
   onTitle: (value: string) => void;
@@ -101,12 +101,14 @@ export default function PostForm({
         {image && <label className="field">
           <span className="field-label">识别方式</span>
           <select value={captureMode} aria-label="材料识别方式"
-            onChange={e=>onCaptureModeChange(e.target.value==='two-step'?'two-step':'single')}
+            onChange={e=>onCaptureModeChange(e.target.value==='vision-template'?'vision-template':e.target.value==='single'?'single':'two-step')}
             style={{maxWidth:'100%'}}>
-            <option value="single">一步完成：识别材料并给第一步（推荐）</option>
-            <option value="two-step">兼容模式：先识别，再给下一步</option>
+            <option value="two-step">默认：先识别，再由 AI 给下一步（两次调用）</option>
+            <option value="vision-template">实验：只识别一次，由本地模板给第一步</option>
+            <option value="single">实验：AI 一次生成识别和步骤（实测较慢）</option>
           </select>
         </label>}
+        {image && <p className="compose-tip">目前默认使用两步模式。模板实验模式仅做一次视觉请求，不再请求文字模型；15 秒内完成仍需实测验证。</p>}
         <div className="post-form-foot">
           <div className="who">
             <span className="who-avatars">

@@ -4,7 +4,7 @@ import { scopedOpenCodeSessionId, validateLlmEndpointBase } from './llm';
 import { templateMaterialStep, validateMaterialStep, type MaterialStep } from './materialAdvice';
 import {
   materialErrorFromHttp, materialErrorMessage, materialResponseText, parseMaterialExtraction,
-  redactMaterialText, validMaterialImage,
+  redactMaterialText, validMaterialImage, extractMaterial,
   type MaterialError, type MaterialExtraction,
 } from './materialVision';
 
@@ -124,4 +124,29 @@ export async function captureFirstStep(input: {
     clearTimeout(totalTimer);
     input.signal?.removeEventListener('abort',stopOverall);
   }
+}
+
+/** Experimental low-call-count capture: one *vision request* to extract the
+ * visible evidence, then a deterministic local action. No second LLM call.
+ * Do not market this as <=15s until actual measured D4 passes.
+ */
+export async function captureVisionTemplate(input: {
+  config:LlmConfig; imageDataUrl:string; signal?:AbortSignal;
+  onModelAttempt?:()=>void;
+}): Promise<CaptureResult> {
+  const started=Date.now();
+  const extracted=await extractMaterial(input.config,input.imageDataUrl,{
+    signal:input.signal,onModelAttempt:input.onModelAttempt,maxAttempts:1,
+  });
+  if (input.signal?.aborted) return {
+    ok:false,code:'cancelled',message:materialErrorMessage('cancelled'),retried:false,
+  };
+  if (!extracted.ok) return extracted;
+  const step=templateMaterialStep(extracted.extraction);
+  if (!step) return {ok:false,code:'advice_invalid',
+    message:'已找到可见片段，但无法验证安全、具体的本地第一步；请手动核对。',retried:false};
+  const checked=validateMaterialStep(step.text,extracted.extraction);
+  if (!checked.ok || checked.anchorId!==step.anchorId) return {ok:false,code:'advice_invalid',
+    message:'本地第一步没有通过材料锚点校验，请手动核对。',retried:false};
+  return {ok:true,extraction:extracted.extraction,step,retried:false,latencyMs:Date.now()-started};
 }

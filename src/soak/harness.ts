@@ -22,7 +22,7 @@ import { isMock } from '../config/providers';
 import { followupTextFor, completionFixtures } from './scenarioFixtures';
 import { extractMaterial } from '../lib/materialVision';
 import { materialFirstStep, validateMaterialStep } from '../lib/materialAdvice';
-import { captureFirstStep } from '../lib/materialCapture';
+import { captureFirstStep, captureVisionTemplate } from '../lib/materialCapture';
 import type { Card, Persona, WorldSettings, LlmConfig, Goal } from '../types';
 
 const MIN = 60_000;
@@ -534,7 +534,16 @@ async function runMaterial(config: LlmConfig) {
         reader.readAsDataURL(blob);
       });
       let anchored = false, actionable = false, fallback = true, requestCount = 1;
-      if ((qs.get('capture') ?? 'single') === 'single') {
+      const captureMode = qs.get('capture') ?? 'two-step';
+      if (captureMode === 'vision-template') {
+        const capture = await captureVisionTemplate({ config, imageDataUrl: dataUrl });
+        if (capture.ok) {
+          anchored = validateMaterialStep(capture.step.text, capture.extraction).ok;
+          actionable = anchored;
+          fallback = capture.step.source === 'template';
+          requestCount = capture.retried ? 2 : 1;
+        }
+      } else if (captureMode === 'single') {
         const capture = await captureFirstStep({ config, imageDataUrl: dataUrl, persona, now: Date.now() });
         if (capture.ok) {
           anchored = validateMaterialStep(capture.step.text, capture.extraction).ok;
@@ -557,9 +566,14 @@ async function runMaterial(config: LlmConfig) {
       }
       const latencyMs = Math.round(performance.now() - started);
       const costUsd = +((usage.p - before.p) * 0.00000015 + (usage.c - before.c) * 0.0000006).toFixed(6);
+      const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+      const sourceSha256 = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
       lines.push(JSON.stringify({
-        id: row.id, source: 'real-api', anchored, actionable5m: actionable,
-        latencyMs, costUsd, fallback, requestCount,
+        id: row.id, source: 'real-api', imageOrigin: qs.get('imageOrigin') ?? 'synthetic-test',
+        sourceSha256, humanReviewed: false, modelName: config.visionModel,
+        captureMode, stepSource: captureMode === 'vision-template' ? 'template' : undefined,
+        anchored, actionable5m: actionable,
+        latencyMs, costUsd, fallback: captureMode === 'vision-template' ? false : fallback, requestCount,
       }));
       log(`D4 ${row.id} ${anchored ? 'anchor' : 'MISS'} ${latencyMs}ms`, anchored ? 'ok' : 'warn');
     }

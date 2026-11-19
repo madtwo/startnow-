@@ -28,10 +28,12 @@ function install(){
         hasPlayerCrisis:()=>false,hasCrisisInArchive:()=>false,isSafeMemoryEntry:()=>true,
       };
       if(request==='./baseline')return {auditCriticalContent:(s)=>/(?:自杀|自残|治愈)/.test(s),auditSocial:(s)=>/(?:微信|QQ号|加好友|线下见面)/i.test(s),auditTone:(s)=>/(?:滚开|傻逼)/.test(s)};
-      if(request==='./personas')return {defaultPersonas:()=>[]};
+      if(request==='./personas')return {defaultPersonas:()=>[],buildPersonaPrompt:()=> '角色原有设定'};
       if(request==='./personaMigration')return {migratePersonaText:rows=>({rows,changed:false}),PERSONA_SCHEMA_KEY:'test',PERSONA_SCHEMA_VERSION:1};
       if(request==='./seed')return {buildSeedCards:()=>[]};
-      if(request==='./memory')return {sanitizeMemoryText:(s)=>String(s)};
+      if(request==='./memory')return {sanitizeMemoryText:(s)=>String(s),renderMemory:()=>''};
+      if(request==='./dialogue')return {isOfflineInvite:()=>false,relationshipLabel:()=>''};
+      if(request==='./mind')return {mindPrompt:()=>''};
       if(request==='./safety')return {findCrisis:(s)=>/(?:我要自杀|自残)/.test(String(s))};
       if(request==='./brag')return {normalizePendingBrag:()=>undefined,unsafeBragContent:()=>false};
       if(request==='./goalStorage')return {parseGoals:(v)=>Array.isArray(v)?v:null,

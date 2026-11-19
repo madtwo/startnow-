@@ -119,7 +119,7 @@ export function loadConfig(): LlmConfig {
     visionModel: typeof saved.visionModel === 'string' ? saved.visionModel.slice(0, 200).trim() : '',
     // Measured 2026-11-19: single-call DS4.1 drops anchors to 19/25 and P95 to 44.6s;
     // keep the two-step flow as the safe default until a faster vision model is verified.
-    captureMode: saved.captureMode === 'single' ? 'single' : 'two-step',
+    captureMode: saved.captureMode === 'vision-template' || saved.captureMode === 'single' ? saved.captureMode : 'two-step',
   };
   return isReady(config) ? config : defaultConfig;
 }
