@@ -261,7 +261,8 @@ const generateLine = async (
 ): Promise<string> => {
   if (isMock(ctx.config)) return mockLine(persona, mode);
   ctx.calls += 1;
-  const replyName = findMessage(room, replyTo)?.authorName;
+  const replyMessage = findMessage(room, replyTo);
+  const replyName = replyMessage?.authorName;
   const topic = room.messages.filter((m) => m.kind === 'chat').slice(-1)[0]?.text;
   try {
     const text = await streamChat({
@@ -271,7 +272,11 @@ const generateLine = async (
         {
           role: 'user',
           content: withUntrustedHistory(
-            roomPrompt(room.cast, recentLines(room), { mode, replyName, topic }),
+            roomPrompt(room.cast, recentLines(room), {
+              mode, replyName, topic, selfName: persona.name,
+              replyText: replyMessage?.text,
+              replyIsPlayer: replyMessage?.authorKind === 'player',
+            }),
             persona,
             now,
           ),

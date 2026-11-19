@@ -1,6 +1,7 @@
 import type { Card, Persona } from '../types';
 import { BASELINE } from './baseline';
 import { isOfflineInvite, relationshipLabel } from './dialogue';
+import { wantsDirectAdvice } from './directAdvice';
 import { mindPrompt } from './mind';
 import { buildPersonaPrompt, defaultPersonas } from './personas';
 import { renderMemory, sanitizeMemoryText } from './memory';
@@ -262,6 +263,7 @@ export const ROOM_RULES = `这是几个大学生凑在一块儿的群聊。你�
 - 可以说半句、说「嗯」「啊？」、说自己刚走神了。群里不需要每句都有用。
 - 可以回任何人，也可以只顺着自己的心事说一句；可以插话，也可以不接。
 - 别人说了自己做了什么，应一声就够了，别夸成「你真棒」「太厉害了」。
+- 对方在安慰你、夸你或问你自己的近况时，先回应关于你自己的那一句；不要顺势给对方建议，也不要用问题把话题推回对方。
 - 不要同时回答好几个人；不要总结大家刚才说了什么；不用「首先」「总之」「希望对你有帮助」。
 - 你不是客服、不是心理咨询师、不是人生导师：可以给一个具体的小办法，也可以不给。
 - 一次只露一点自己的事，像真的在认识人。
@@ -272,6 +274,18 @@ export interface RoomLine {
   text: string;
 }
 
+/** 玩家这条是在关心/询问说话者本人，而不是在求助。 */
+function playerIsFocusingOnPersona(text: string, selfName: string): boolean {
+  const clean = text.normalize('NFKC').replace(/\s+/g, '');
+  if (!clean || wantsDirectAdvice(clean)) return false;
+  const nameHit = [selfName, `${selfName[0]}姐`, `${selfName[0]}哥`, `${selfName[0]}同学`]
+    .some((value) => value.length > 1 && clean.includes(value));
+  const youHit = /你|您/.test(clean);
+  const aboutThem = /(焦虑|压力|累|难受|辛苦|还好吗|好吗|怎么样|最近|就业|工作|实习|论文|开题|复习|考试|毕业|家里|身体|睡|吃|心情)/.test(clean);
+  const comfort = /(辛苦|心疼|抱抱|拍拍|别太|别难过|不容易|安慰|撑住|缓缓)/.test(clean);
+  return (nameHit || youHit) && (aboutThem || comfort);
+}
+
 /** 群聊里这一句的上下文。说话的人是谁，在 system 里由 buildPersonaPrompt 给。 */
 export const roomPrompt = (
   cast: Persona[],
@@ -280,6 +294,9 @@ export const roomPrompt = (
     mode: 'reply' | 'peer' | 'ambient' | 'react';
     replyName?: string;
     topic?: string;
+    selfName?: string;
+    replyText?: string;
+    replyIsPlayer?: boolean;
   },
 ): string => {
   const who = cast.map((p) => `${p.name}（${p.tagline}）`).join('、');
@@ -294,11 +311,16 @@ export const roomPrompt = (
         : opts.mode === 'react'
           ? '群里有人刚说自己做完了一件很小的事。应一声就好，一句话，别夸成大事。'
           : '没人跟你说话。你可以随口说一句自己此刻的事，也可以只发半句；不要点名要谁回答。';
+  const focus =
+    opts.mode === 'reply' && opts.replyIsPlayer && opts.selfName && opts.replyText &&
+    playerIsFocusingOnPersona(opts.replyText, opts.selfName)
+      ? '\n对方这条是在关心你或问你的近况，不是向你求助。先用一句话回应关于你自己的事；不要给建议、不要追问对方，也不要把话题拐回对方之前的困难。'
+      : '';
   const mood = opts.topic ? `\n【群里现在在说的大概是】${opts.topic}` : '';
   return `【群里还有谁】${who}${mood}
 【最近几句】
 ${history}
 
-${task}
+${task}${focus}
 只输出你要说的那一句：不要加名字前缀，不要加引号，不要解释你在做什么。`;
 };
