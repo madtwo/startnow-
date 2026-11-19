@@ -4,7 +4,7 @@ import ChatRoom from './ChatRoom';
 import CrisisCard from './CrisisCard';
 import RoomPanel from './RoomPanel';
 import StepPanel from './StepPanel';
-import { configLabel, isReady } from '../config/providers';
+import { configLabel, isMock, isReady } from '../config/providers';
 import { pickCast } from '../lib/personas';
 import {
   addStep,
@@ -157,8 +157,19 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
       return;
     }
     const at = Date.now();
+    // 演示模式的台词是模板，一条消息一个人接就够了，免得显得吵
+    const cap = isMock(latest.current.config) ? 1 : undefined;
     setRoom((prev) =>
-      postPlayerMessage(prev, text, identity, mentions, replyTo, at, latest.current.roomSettings.liveliness),
+      postPlayerMessage(
+        prev,
+        text,
+        identity,
+        mentions,
+        replyTo,
+        at,
+        latest.current.roomSettings.liveliness,
+        cap,
+      ),
     );
   };
 

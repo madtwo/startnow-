@@ -467,6 +467,8 @@ interface ReactionOptions {
   aiTrigger?: boolean;
   /** 兜底规则：玩家的话太久没人接，强制安排一个人回 */
   forced?: boolean;
+  /** 覆盖默认上限：演示模式下一个就够，别太吵 */
+  max?: number;
 }
 
 /** 这个人对这条消息的插嘴概率。 */
@@ -520,7 +522,7 @@ function considerReactions(
   }
 
   const queued = new Set(room.scheduled.map((s) => s.personaId));
-  const limit = opts.forced ? 1 : opts.aiTrigger ? 1 : 2;
+  const limit = opts.max ?? (opts.forced || opts.aiTrigger ? 1 : 2);
   const candidates = room.cast
     .filter((p) => p.id !== trigger.authorId && !queued.has(p.id))
     .map((p) => ({ p, chance: reactionChance(room, p, trigger, now, liveliness) }))
@@ -925,6 +927,8 @@ export function postPlayerMessage(
   replyTo: string | undefined,
   now: number,
   liveliness: number,
+  /** 演示模式传 1：台词是模板，人多会显得吵 */
+  maxReactions?: number,
 ): Room {
   const clean = text.trim();
   if (!clean) return room;
@@ -951,7 +955,7 @@ export function postPlayerMessage(
 
   // 交给统一反应机制：谁接、几个人接，由每个人自己的阈值决定。
   // 负面情绪在 considerReactions 里走「先安慰、再建议」的专用通道。
-  return considerReactions(next, message, now, liveliness);
+  return considerReactions(next, message, now, liveliness, { max: maxReactions });
 }
 
 /** 玩家自己加一条下一步。 */
