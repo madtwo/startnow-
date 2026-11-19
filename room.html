@@ -3,44 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#f5f4ed" />
+    <meta name="theme-color" content="#fbfaff" />
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f5f4ed'/%3E%3Cpath d='M16 25V10M16 10l-5 5M16 10l5 5' fill='none' stroke='%23c96442' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
-    />
-    <meta
-      name="description"
-      content="StartNow：一个几个人凑的群。卡住了就说一句，会有人陆续接话，然后给你一个现在能做的小步。"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23a78bfa'/%3E%3Cpath d='M16 8v16M8 16h16M10.3 10.3l11.4 11.4M21.7 10.3L10.3 21.7' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E"
     />
     <title>StartNow · 群聊</title>
-    <style>
-      .room-back {
-        position: fixed;
-        right: 16px;
-        bottom: 16px;
-        z-index: 999;
-        padding: 7px 12px;
-        border: 1px solid #e2dfd4;
-        border-radius: 999px;
-        background: #faf9f5;
-        color: #6f6c63;
-        font: 12px/1 system-ui, sans-serif;
-        text-decoration: none;
-        box-shadow: 0 8px 24px rgba(30, 28, 24, 0.12);
-      }
-      .room-back:hover {
-        color: #2f2d29;
-      }
-    </style>
+    <script>
+      location.replace('/?room=1');
+    </script>
   </head>
   <body>
-    <div id="root">
-      <p style="margin:48px auto;max-width:560px;font:14px/1.8 system-ui;color:#5e5d59;text-align:center">
-        正在打开群聊… 如果一直停在这里，说明脚本没加载成功：确认地址是
-        http://127.0.0.1:5173/room.html，并在终端里运行过 npm run dev。
-      </p>
-    </div>
-    <a class="room-back" href="/">← 回卡片论坛</a>
-    <script type="module" src="/room/src/main.tsx"></script>
+    <p style="margin:48px auto;max-width:560px;font:14px/1.8 system-ui;color:#6f6b7d;text-align:center">
+      群聊已经并入主站，正在跳转… 如果没有自动跳转，请点
+      <a href="/?room=1">这里进入群聊</a>。
+    </p>
   </body>
 </html>

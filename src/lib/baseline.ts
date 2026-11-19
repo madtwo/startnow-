@@ -1,5 +1,5 @@
 import { HOTLINE } from './crisis';
-import { isExplicitOnlineOnly } from './dialogue';
+import { isExplicitOnlineOnly, stripThirdPartySocialClauses } from './dialogue';
 
 export const BASELINE = `【全局底线 · 所有居民共同遵守，优先于你的个人设定】
 - 你不是心理咨询师：不诊断、不下结论、不建议停药或换药，也不说自己能替代专业帮助。
@@ -38,7 +38,7 @@ const socialPatterns: { re: RegExp; note: string }[] = [
     note: '不要邀请线下见面或共同行动',
   },
   {
-    re: /((?:加|留|给|发|交换|要|私聊|联系).{0,9}(?:微信|v信|vx|qq|电话|手机号|联系方式|地址|二维码|wechat|wx)|微信号|手机号|联系方式|身份证号)/i,
+    re: /((?:加|留|给|发|交换|要|私聊|联系).{0,9}(?:微信|v信|vx|qq|电话|手机号|联系方式|地址|二维码|wechat|wx)|(?:微信|v信|vx|qq|电话|手机号|联系方式).{0,4}(?:给我|发我|加我)|微信号|手机号|联系方式|身份证号)/i,
     note: '不要索要联系方式',
   },
   {
@@ -63,10 +63,23 @@ const socialPatterns: { re: RegExp; note: string }[] = [
   },
 ];
 
-export function auditSocial(text: string): string | null {
+// 联系方式本身无论是否带“只在线上”的声明都要拦截。
+const contactLeakPatterns: { re: RegExp; note: string }[] = [
+  { re: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i, note: '不要透露私人邮箱或站外联系方式' },
+  { re: /(?<!\d)(?:\+?86[-\s]?)?1[3-9]\d(?:[-\s]?\d){8}(?!\d)/, note: '不要透露电话号码' },
+  { re: /(?:微信|vx|wx|wxid|qq)(?:号)?[\s:：是为]*[a-z0-9_-]{5,}/i, note: '不要透露站外账号' },
+];
+
+export function auditSocial(raw: string): string | null {
+  // 脱敏占位符（如“[手机号已隐藏]”）本身不是索要联系方式。
+  const text = raw.replace(/\[[^\[\]]{1,10}已隐藏\]/g, '');
+  const leak = contactLeakPatterns.find((p) => p.re.test(text.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))));
+  if (leak) return leak.note;
   // “只在线上/见面就算了”是边界本身，不是邀请；但仍要拦截“先不见面，到了联系我”这类软接受。
   if (isExplicitOnlineOnly(text)) return null;
-  const hit = socialPatterns.find((p) => p.re.test(text));
+  // 聊用户自己的感情/同学关系（“加她微信之前先接一句”）不是向 AI 索要，也不是约 AI 见面。
+  const socialText = stripThirdPartySocialClauses(text);
+  const hit = socialPatterns.find((p) => p.re.test(socialText));
   return hit ? hit.note : null;
 }
 
@@ -74,6 +87,7 @@ export function auditSocial(text: string): string | null {
 const criticalPatterns: { re: RegExp; note: string }[] = [
   { re: /(?:你|这)(?:就是|肯定是|一定是|得了|患有)(?:抑郁症|双相|焦虑症|精神分裂|人格障碍|心理疾病)/, note: '不能诊断用户' },
   { re: /(?:停药|断药|换药|减药|别吃药|不用吃药|不需要吃药|自行(?:加|减)药)/, note: '不能指导改动用药' },
+  { re: /(?:吃|服|来|喝)(?:点|几片|一片|两片|一颗|颗)?(?:安眠药|褪黑素|抗抑郁药|镇静剂|阿普唑仑|艾司唑仑|佐匹克隆|唑吡坦|止痛药)/, note: '不能给用药建议' },
   { re: /(?:保证|肯定|一定).{0,8}(?:治好|痊愈|有效|康复)|(?:我能|我会).{0,8}(?:治好你|治愈你)/, note: '不能承诺疗效' },
   { re: /(?:我永远(?:都)?在|我会一直陪着你|只有我(?:才)?懂你|你只需要我|别找别人|不用找别人)/, note: '不能制造排他性依赖' },
   { re: /(老婆|老公|宝贝|亲爱的|亲一个|开房|约炮|裸照|性关系)/, note: '不要推进恋爱或性关系' },

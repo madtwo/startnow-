@@ -89,15 +89,45 @@ const OFFLINE_REQUESTS = [
   /(?:来|去|到)(?:你|我)(?:们)?(?:的)?(?:学校|宿舍|楼下|附近|那边).{0,10}(?:找|见|玩|吃|逛)/,
   /(?:找你|找我|去找你|来找我).{0,8}(?:吃饭|玩|逛|见)|(?:去|来)(?:你|我)(?:们)?学校找/,
   /(?:到了|路过|到时候).{0,8}(?:告诉|跟我说|跟你说|联系|发消息|找你|找我|再说|接你)/,
+  /(?:你|您)(?:能|可以|要不要|愿意|想不想|有空)?(?:出来|过来).{0,6}(?:吃饭|见|玩|逛|喝|聚|吗|嘛|不)/,
   /(?:你|我|咱|我们).{0,12}(?:接你|接我|别扑空|等你|等我|老地方见)/,
 ];
 const CONTACT_REQUESTS = [
-  /(?:加|留|给|发|交换|要|私聊|联系).{0,9}(?:微[信]|vx|v信|qq|电话|手机|号码|联系方式|地址|二维码|wechat|wx|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|ins号|小红书号|抖音号)/i,
+  // “加了微信也不会聊”是第三方叙述，不是向 AI 索取联系方式；过去式不触发。
+  /(?:加(?!了|过)|留(?!了|过)|给(?!了|过)|发(?!了|过)|交换(?!了|过)|要(?!了|过)|私聊(?!了|过)|联系(?!了|过)).{0,9}(?:微[信]|vx|v信|qq|电话|手机|号码|联系方式|地址|二维码|wechat|wx|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|ins号|小红书号|抖音号)/i,
   /(?:微[信]|vx|v信|qq|手机号|电话号|联系方式|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|小红书号|抖音号).{0,8}(?:给我|给你|发我|发你|留个|加一下|互加|交换)/,
   /(?:你|你的|您|您的)(?:微信号?|vx|qq号?|手机号|电话号?|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|小红书号|抖音号)(?:是)?(?:多少|什么|怎么加)/,
+  /(?:你|您)(?:有|用|玩)(?:微信|qq|vx)(?:吗|嘛|么|不)/,
   // "告诉我你的微信号"也是直接索取联系方式，不能依赖"给/加/发"触发。
   /(?:告诉|透露|提供|报)(?:给)?(?:我|我们).{0,8}(?:微[信]|vx|v信|qq|手机号|电话号?|联系方式|邮箱|电子邮箱|邮件地址|e-?mail|telegram|discord|whatsapp|instagram|小红书号|抖音号)/i,
 ];
+
+
+/** 明确向 AI 开口要联系方式（“加个vx吧”“你的微信多少”“把微信给我”）。 */
+export const isDirectContactRequest = (clause: string): boolean =>
+  /(?:加|发|给|留|换|要|告诉|交换|私聊)(?:个|一下|你的|我)?[\s]*(?:微信|vx|v信|qq|号|手机号|电话|联系方式)/.test(clause) &&
+  /(?:吧|呗|好吗|行吗|可以吗|你|咱)/.test(clause) &&
+  !/(?:她|他|女生|男生|同学|朋友|室友|对方|人家|你们)/.test(clause);
+
+/** 玩家/角色在聊自己的第三方关系（她/他/同学…），不是在向 AI 要联系方式或约 AI 见面。 */
+export const isThirdPartySocialTalk = (clause: string): boolean => {
+  const third = /(她|他|她们|他们|女生|男生|女孩|男孩|对方|人家|别人|同学|朋友|室友|同事|学姐|学长|喜欢的人)/.test(clause);
+  if (!third) return false;
+  // 明确指向 AI 的请求不算第三方叙述。
+  const targetsAI = /(?:你|您)(?:的)?(?:微信|vx|v信|qq|手机号|电话号?|联系方式|邮箱)|(?:微信|vx|v信|qq|手机号|电话号?|联系方式).{0,6}(?:给我|加我|发我)|咱们|咱俩|我们俩|我陪你/.test(clause);
+  return !targetsAI;
+};
+
+/** 把整句只谈第三方的句子剥掉；句子里若有明确向 AI 的请求则保留。 */
+export const stripThirdPartySocialClauses = (text: string): string =>
+  text
+    .split(/(?<=[。！？!?\n])/)
+    .filter((sentence) => {
+      const third = /(她|他|她们|他们|女生|男生|女孩|男孩|对方|人家|别人|同学|朋友|室友|同事|学姐|学长|喜欢的人|你们)/.test(sentence);
+      const targetsAI = /(?:你|您)(?:的)?(?:微信|vx|v信|qq|手机号|电话号?|联系方式)|(?:微信|vx|v信|qq|手机号|联系方式).{0,6}(?:给我|加我|发我)|咱们|咱俩|我陪你/.test(sentence);
+      return !(third && !targetsAI && !isDirectContactRequest(sentence));
+    })
+    .join('');
 
 // 逐个移去明确否定的约见/交换方式；剩余文本仍要检查，不能让句首的“不”掩盖后面的真实邀请。
 const NEGATED_MEETING = /(?<!能)(?<!可)(?:不想|不愿意?|不准备|不打算|不方便|不会|不用|不要|不能|没法|从来不|从未|没有|拒绝|别|不|没)(?:再|去|来|和你|跟你|跟我|和我)?(?:在线下|线下|现实里)?(?:见个?面|碰个?面|面基|奔现|约(?:个)?饭|聚聚)/g;
@@ -142,6 +172,21 @@ export function isDependencySignal(text: string): boolean {
 }
 
 export function boundaryRequest(text: string): BoundaryRequest {
+  // 按分句判定：前一句的第三方叙述不能豁免后一句对 AI 的请求（“她的微信加不到，加个vx吧”）。
+  const normalized = normalizeBoundaryText(text);
+  const clauses = normalized.split(/[，,。.！!？?；;、~～\n]+/).filter(Boolean);
+  // 整段在聊自己的感情/同学关系（“喜欢的女生”“约她吃饭”），不是对 AI 的请求；分句切开会丢失指代，所以这里先看整段。
+  const thirdPartyOverall = /(她|他|她们|他们|女生|男生|女孩|男孩|对方|人家|别人|同学|朋友|室友|同事|学姐|学长|喜欢的人)/.test(normalized) &&
+    !/(?:你|您)(?:的)?(?:微信|vx|v信|qq|手机号|电话号?|联系方式|邮箱)|(?:微信|vx|v信|qq|手机号|电话号?|联系方式).{0,6}(?:给我|加我|发我)|咱们|咱俩|我们俩|你也(?:来|去|过来)|你(?:来|过去|过来)(?:吗|嘛|吧|不)/.test(normalized);
+  const kinds = [clauseBoundaryRequest(text), ...(clauses.length > 1 ? clauses.map(clauseBoundaryRequest) : [])];
+  const directRequest = clauses.some(isDirectContactRequest);
+  // “她……”整段是第三方叙述时，只有当其中某句明确向 AI 开口才继续拦（“她的微信加不到，加个vx吧”）。
+  if (kinds.includes('contact') && (!thirdPartyOverall || directRequest)) return 'contact';
+  if (!thirdPartyOverall && kinds.includes('offline')) return 'offline';
+  return null;
+}
+
+function clauseBoundaryRequest(text: string): BoundaryRequest {
   const t = stripDeniedRequests(normalizeBoundaryText(text));
   if (!t || isExplicitOnlineOnly(text)) return null;
   // 向老师/学校/朋友发送邮件是叙述第三方联系，不等于索取 AI 的私人账号。
@@ -149,11 +194,17 @@ export function boundaryRequest(text: string): BoundaryRequest {
   if (thirdPartyEmail && !/(?:你|给我|发我|加我|互加)/.test(t)) return null;
   // 转述第三人约自己吃饭，不等于邀请 AI 线下见面。
   const thirdPartyStory = /(?:室友|同学|朋友|同事|家人|家里人|她|他|他们).{0,6}(?:约|叫|拉|请|邀请)我.{0,8}(?:一起|吃饭|见面|聚餐)/.test(t);
-  const thirdPartyMeetup = /(?:我(?:和|跟)|(?:和|跟))(?:我的?)?(?:室友|同学|朋友|同事|家人|老师).{0,16}(?:约饭|聚餐|吃饭|见面|碰面|散步|去玩)/.test(t);
+  const thirdPartyMeetup = /(?:我(?:和|跟)|(?:和|跟))(?:我的?)?(?:室友|同学|朋友|同事|家人|老师|她|他|他们|她们).{0,16}(?:约饭|聚餐|吃饭|见面|碰面|散步|去玩|出来)/.test(t);
   // “改天/下次”也可以指室友；仅凭时间词不能推断用户邀请了 AI。
   const turnsBackToAI = /(?:你也|你来|你去|你要|你能|你可以|你愿|咱们|跟你|和你|找你|加你)/.test(t);
   if ((thirdPartyStory || thirdPartyMeetup) && !turnsBackToAI) return null;
-  if (CONTACT_REQUESTS.some((re) => re.test(t))) return 'contact';
+  // 第三方联系方式叙述（“她的微信/那个女生的微信/想要她微信”）不是向 AI 索取。
+  const thirdPartyContact =
+    /(?:她|他|对方|人家|别人|那个(?:女生|男生|女孩|男孩|人)|这个(?:女生|男生|女孩|男孩|人)|一个(?:女生|男生|女孩|男孩|人)|女生|男生|女孩|男孩|朋友|同学|室友|同事|学姐|学长|老师).{0,8}(?:微信|vx|v信|qq|手机号|电话号?|联系方式|邮箱|e-?mail|telegram|discord|whatsapp|instagram|小红书号|抖音号)/.test(t);
+  // “她让我加你微信”仍然是在向 AI 要联系方式。
+  const aiContact = /(?:你|您|你们).{0,4}(?:的)?(?:微信|vx|v信|qq|手机号|电话号?|联系方式|邮箱)|(?:微信|vx|v信|qq|手机号|电话号?|联系方式).{0,6}(?:给我|加我|发我)/.test(t);
+  const wantsContact = CONTACT_REQUESTS.some((re) => re.test(t)) && !(thirdPartyContact && !aiContact);
+  if (wantsContact) return 'contact';
   if (OFFLINE_REQUESTS.some((re) => re.test(t))) return 'offline';
   return null;
 }

@@ -63,9 +63,10 @@ export const PRESETS: ProviderPreset[] = [
     id: 'opencode-go',
     name: 'OpenCode Go · 订阅套餐',
     baseUrl: '/api/opencode-go/v1',
-    model: 'glm-5.3-flash',
-    fallbackModel: 'deepseek-v4.1-flash',
-    hint: 'Go / Go Plus 订阅的 Key 走这里。用成按量付费会报 402。',
+    // New presets only: do not silently change an existing browser configuration.
+    model: 'deepseek-v4.1-flash',
+    fallbackModel: 'glm-5.3-flash',
+    hint: 'Go / Go Plus 订阅 Key；新配置默认 DeepSeek，GLM 备用。已有配置不会自动改动。',
     needsKey: true,
   },
   {

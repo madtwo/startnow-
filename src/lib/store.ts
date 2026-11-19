@@ -1,11 +1,27 @@
-import type { Card, Identity, LlmConfig, Persona, Todo, World, WorldSettings } from '../types';
+import type {
+  Card,
+  DailySummary,
+  Goal,
+  Identity,
+  LlmConfig,
+  Message,
+  Persona,
+  Room,
+  RoomSettings,
+  ScheduleItem,
+  Todo,
+  World,
+  WorldSettings,
+} from '../types';
 import { defaultConfig, isReady, PRESETS } from '../config/providers';
 import { defaultPersonas } from './personas';
+import { migratePersonaText, PERSONA_SCHEMA_KEY, PERSONA_SCHEMA_VERSION } from './personaMigration';
 import { buildSeedCards } from './seed';
 import { sanitizeMemoryText } from './memory';
 import { findCrisis } from './safety';
 import { normalizePendingBrag, unsafeBragContent } from './brag';
 import { hasCrisisInArchive, hasPlayerCrisis, isSafeMemoryEntry } from './submissionGuard';
+import { parseGoals, parseSchedule, parseSummaries } from './goalStorage';
 
 const KEYS = {
   config: 'shudong.config.v1',
@@ -16,11 +32,19 @@ const KEYS = {
   todos: 'shudong.todos.v1',
   identity: 'shudong.identity.v2',
   identityLegacy: 'shudong.identity.v1',
+  room: 'shudong.room.v1',
+  archives: 'shudong.archives.v1',
+  roomSettings: 'shudong.roomsettings.v1',
+  goals: 'shudong.goals.v1',
+  schedule: 'shudong.schedule.v1',
+  summaries: 'shudong.summaries.v1',
 };
 
 const LEGACY_POST_KEYS = ['shudong.posts.v3', 'shudong.posts.v2', 'shudong.posts.v1'];
 const LEGACY_CARD_KEYS = ['shudong.cards.v5', 'shudong.cards.v4', 'shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'];
-const UI_KEYS = ['startnow.onboarded', 'startnow.mode', 'startnow.homeTab'];
+const UI_KEYS = ['startnow.onboarded', 'startnow.mode', 'startnow.homeTab', 'startnow.calendarView', 'shudong.decomposeDraft.v1', 'shudong.decomposeUsage.v1'];
+// Independent room.html stores, same origin; a user's full reset should include these.
+const ROOM_KEYS = ['shudong.room.v1', 'shudong.archives.v1', 'shudong.roomsettings.v1'];
 
 /** 旧 posts 格式不兼容：不在用户不知情的情况下静默迁移或丢弃。 */
 export const listLegacyPostKeys = (): string[] => {
@@ -58,7 +82,7 @@ const write = (key: string, value: unknown) => {
 export const defaultSettings: WorldSettings = {
   paused: false,
   maxArrivals: 3,
-  aiCardLimit: 2,
+  aiCardLimit: 8,
   dailyCalls: 60,
   maxCallsPerTick: 2,
   speed: 6,
@@ -89,6 +113,7 @@ export function loadConfig(): LlmConfig {
       typeof saved.fallbackModel === 'string'
         ? saved.fallbackModel
         : PRESETS.find((p) => p.id === providerId)?.fallbackModel ?? '',
+    visionModel: typeof saved.visionModel === 'string' ? saved.visionModel.slice(0, 200).trim() : '',
   };
   return isReady(config) ? config : defaultConfig;
 }
@@ -111,6 +136,10 @@ const retention = (cards: Card[], now = Date.now()) =>
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 200);
 
+const isTimedPersonaRow = (row: unknown): row is { personaId: string; at: number } =>
+  Boolean(row) && typeof (row as { personaId?: unknown }).personaId === 'string' &&
+  Number.isFinite((row as { at?: unknown }).at);
+
 const normalizeCard = (raw: Partial<Card>): Card | null => {
   if (!raw || typeof raw.text !== 'string' || hasPlayerCrisis(raw)) return null;
   const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : Date.now();
@@ -123,7 +152,11 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     title: typeof raw.title === 'string' ? raw.title : undefined,
     image: typeof raw.image === 'string' && raw.image.startsWith('data:image/') ? raw.image : undefined,
     origin: raw.origin === 'model' || raw.origin === 'demo' || raw.origin === 'simulated' ? raw.origin : undefined,
-    kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'guide' ? 'guide' : 'worry',
+    kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'guide' ? 'guide' :
+      raw.kind === 'goal' ? 'goal' : raw.kind === 'progress' ? 'progress' : 'worry',
+    goalId: typeof raw.goalId === 'string' && raw.goalId.length <= 128 ? raw.goalId : undefined,
+    cheerCount: Number.isInteger(raw.cheerCount) && (raw.cheerCount as number) >= 0 && (raw.cheerCount as number) <= 100000 ? raw.cheerCount : 0,
+    cheeredByMe: raw.cheeredByMe === true,
     intro: raw.intro === true,
     likes: typeof raw.likes === 'number' ? raw.likes : 0,
     helperAt: typeof raw.helperAt === 'number' ? raw.helperAt : undefined,
@@ -131,16 +164,16 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     text: raw.text,
     createdAt,
     status: raw.status ?? 'stuck',
-    arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
-    plan: Array.isArray(raw.plan) ? raw.plan : [],
-    pending: Array.isArray(raw.pending) ? raw.pending : [],
+    arrivals: Array.isArray(raw.arrivals) ? raw.arrivals.filter((id): id is string => typeof id === 'string') : [],
+    plan: Array.isArray(raw.plan) ? raw.plan.filter(isTimedPersonaRow) : [],
+    pending: Array.isArray(raw.pending) ? raw.pending.filter(isTimedPersonaRow) : [],
     comments: Array.isArray(raw.comments)
       ? raw.comments.filter((row) => row && typeof row.text === 'string' &&
           typeof row.authorId === 'string' &&
           ['player', 'persona', 'helper'].includes(row.authorKind))
       : [],
-    advice: raw.advice
-      ? { ...raw.advice, text: raw.advice.text ?? '一个办法' }
+    advice: raw.advice && typeof raw.advice === 'object'
+      ? { ...raw.advice, text: typeof raw.advice.text === 'string' ? raw.advice.text : '一个办法' }
       : undefined,
     pendingBrag: normalizePendingBrag(raw.pendingBrag, raw),
     sourceCardId: typeof raw.sourceCardId === 'string' && raw.sourceCardId.length <= 128 ? raw.sourceCardId : undefined,
@@ -148,8 +181,8 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     sourceAdviceText: typeof raw.sourceAdviceText === 'string' && raw.sourceAdviceText.length <= 600 &&
       !unsafeBragContent(raw.sourceAdviceText) ? raw.sourceAdviceText : undefined,
     bragCardId: typeof raw.bragCardId === 'string' && raw.bragCardId.length <= 128 ? raw.bragCardId : undefined,
-    note: raw.note
-      ? { ...raw.note, text: raw.note.text ?? '一件小事' }
+    note: raw.note && typeof raw.note === 'object'
+      ? { ...raw.note, text: typeof raw.note.text === 'string' ? raw.note.text : '一件小事' }
       : undefined,
     doneAt: typeof raw.doneAt === 'number' ? raw.doneAt : undefined,
     seenAt: typeof raw.seenAt === 'number' ? raw.seenAt : undefined,
@@ -192,12 +225,22 @@ function mergePersonas(rows: unknown[]): Persona[] {
       | Partial<Persona>
       | undefined;
     if (!found) return base;
+    const savedBackground = typeof found.background === 'string' ? found.background : base.background;
+    const background = base.id === 'weini'
+      ? savedBackground.replace('专业暂未定', '金融学专业')
+      : base.id === 'yanggao'
+        ? savedBackground.replace(/^临南学院大一/u, '临南学院风景园林学大一')
+        : savedBackground;
     return {
       ...base,
       ...found,
+      background,
+      major: typeof found.major === 'string' && found.major.trim() ? found.major : base.major,
       memory: cleanStoredMemory(found.memory),
       weekLog: cleanWeekLog(found.weekLog),
       mind: cleanMind(found.mind),
+      // 旧默认是截断；现在统一为摘要压缩，避免上下文到顶后只剩硬截断。
+      memoryMode: 'summary',
       weights: found.weights ?? base.weights,
       intimacy: typeof found.intimacy === 'number' ? found.intimacy : base.intimacy,
     } as Persona;
@@ -238,14 +281,60 @@ const cleanMind = (mind: unknown): Persona['mind'] => {
   if (!mind || typeof mind !== 'object') return undefined;
   const row = mind as Partial<NonNullable<Persona['mind']>>;
   if (['thought', 'focus'].some((key) => typeof row[key as 'thought' | 'focus'] !== 'string') ||
-    findCrisis(`${row.thought ?? ''} ${row.focus ?? ''} ${row.movedBy?.what ?? ''}`)) return undefined;
-  return row as Persona['mind'];
+    findCrisis(`${row.thought ?? ''} ${row.focus ?? ''} ${row.movedBy?.what ?? ''} ${row.movedBy?.by ?? ''}`)) return undefined;
+  const movedBy = row.movedBy && typeof row.movedBy.what === 'string' && typeof row.movedBy.by === 'string' &&
+    Number.isFinite(row.movedBy.at)
+    ? { by: sanitizeMemoryText(row.movedBy.by).slice(0, 40), what: sanitizeMemoryText(row.movedBy.what).slice(0, 60), at: row.movedBy.at }
+    : undefined;
+  return {
+    ...row,
+    thought: sanitizeMemoryText(row.thought as string).slice(0, 120),
+    focus: sanitizeMemoryText(row.focus as string).slice(0, 80),
+    movedBy,
+  } as Persona['mind'];
+};
+
+/** Imported stories may supply history, but never privileged role definitions.
+ * The code-shipped persona is the only source of system-prompt identity/rules.
+ * This also excludes untrusted custom-* characters from a foreign archive.
+ */
+export function mergeImportedPersonaHistory(rows: unknown): Persona[] {
+  const incoming = Array.isArray(rows) ? rows : [];
+  return defaultPersonas().map((base) => {
+    const item = incoming.find((row) => row && typeof row === 'object' &&
+      (row as { id?: unknown }).id === base.id) as Partial<Persona> | undefined;
+    if (!item) return base;
+    return {
+      ...base,
+      memory: cleanStoredMemory(item.memory),
+      weekLog: cleanWeekLog(item.weekLog),
+      mind: cleanMind(item.mind),
+      intimacy: bound(item.intimacy, 0, 100, base.intimacy),
+      lastDistillAt: typeof item.lastDistillAt === 'number' && Number.isFinite(item.lastDistillAt)
+        ? Math.max(0, item.lastDistillAt) : base.lastDistillAt,
+    };
+  });
+}
+
+const markPersonaSchema = () => {
+  try {
+    localStorage.setItem(PERSONA_SCHEMA_KEY, String(PERSONA_SCHEMA_VERSION));
+  } catch {
+    // 隐私模式：本次会话仍用迁移后的内存数据。
+  }
 };
 
 export function loadPersonas(): Persona[] {
   const saved = read(KEYS.personas);
-  if (!Array.isArray(saved) || !saved.length) return defaultPersonas();
-  return mergePersonas(saved);
+  if (!Array.isArray(saved) || !saved.length) {
+    markPersonaSchema();
+    return defaultPersonas();
+  }
+  // 只替换仍等于 v1 内置文案的字段；手改过的文本和记忆原样保留。
+  const migrated = migratePersonaText(saved as { id?: string }[], defaultPersonas());
+  if (migrated.changed) write(KEYS.personas, migrated.rows);
+  markPersonaSchema();
+  return mergePersonas(migrated.rows);
 }
 
 export const savePersonas = (personas: Persona[]) => write(KEYS.personas, personas.map((p) => ({
@@ -253,24 +342,49 @@ export const savePersonas = (personas: Persona[]) => write(KEYS.personas, person
 })));
 
 export function loadWorld(now = Date.now()): World {
-  const saved = read(KEYS.world) as Partial<World> | null;
-  if (!saved || typeof saved !== 'object') return emptyWorld(now);
+  return cleanWorld(read(KEYS.world), now);
+}
+
+function cleanWorld(raw: unknown, now = Date.now()): World {
+  if (!raw || typeof raw !== 'object') return emptyWorld(now);
+  const saved = raw as Partial<World>;
+  const today = dayKey(now);
+  // 跨天后计数归零，避免界面显示昨天的调用数。
+  const sameDay = saved.dayKey === today;
   return {
-    lastTickAt: typeof saved.lastTickAt === 'number' ? saved.lastTickAt : now,
-    dayKey: typeof saved.dayKey === 'string' ? saved.dayKey : dayKey(now),
-    callsToday: typeof saved.callsToday === 'number' ? saved.callsToday : 0,
-    lastBragAt: typeof saved.lastBragAt === 'number' ? saved.lastBragAt : undefined,
-    logs: Array.isArray(saved.logs) ? saved.logs.slice(0, 20) : [],
+    lastTickAt: Number.isFinite(saved.lastTickAt) ? Math.min(saved.lastTickAt as number, now) : now,
+    dayKey: today,
+    callsToday: sameDay && Number.isFinite(saved.callsToday) ? Math.max(0, saved.callsToday as number) : 0,
+    lastBragAt: Number.isFinite(saved.lastBragAt) ? saved.lastBragAt : undefined,
+    logs: Array.isArray(saved.logs)
+      ? saved.logs.filter((row): row is string => typeof row === 'string' && !findCrisis(row)).slice(0, 20)
+      : [],
   };
 }
 
 export const saveWorld = (world: World) =>
   write(KEYS.world, { ...world, logs: world.logs.slice(0, 20) });
 
+const bound = (value: unknown, low: number, high: number, fallback: number) =>
+  Number.isFinite(value) ? Math.min(high, Math.max(low, Math.round(value as number))) : fallback;
+
+function cleanSettings(raw: unknown): WorldSettings {
+  if (!raw || typeof raw !== 'object') return { ...defaultSettings };
+  const saved = raw as Partial<WorldSettings>;
+  const d = defaultSettings;
+  return {
+    paused: Boolean(saved.paused),
+    maxArrivals: bound(saved.maxArrivals, 1, 4, d.maxArrivals),
+    aiCardLimit: bound(saved.aiCardLimit, 0, 8, d.aiCardLimit),
+    dailyCalls: bound(saved.dailyCalls, 0, 2000, d.dailyCalls),
+    maxCallsPerTick: bound(saved.maxCallsPerTick, 0, 10, d.maxCallsPerTick),
+    speed: bound(saved.speed, 1, 30, d.speed),
+    baselineExtra: typeof saved.baselineExtra === 'string' ? saved.baselineExtra.slice(0, 2000) : d.baselineExtra,
+  };
+}
+
 export function loadSettings(): WorldSettings {
-  const saved = read(KEYS.settings) as Partial<WorldSettings> | null;
-  if (!saved || typeof saved !== 'object') return { ...defaultSettings };
-  return { ...defaultSettings, ...saved, paused: Boolean(saved.paused) };
+  return cleanSettings(read(KEYS.settings));
 }
 
 export const saveSettings = (settings: WorldSettings) => write(KEYS.settings, settings);
@@ -310,6 +424,90 @@ export function loadIdentity(): Identity {
 
 export const saveIdentity = (identity: Identity) => write(KEYS.identity, identity);
 
+/* ------------------------------------------------------------------ *
+ * 群聊
+ * ------------------------------------------------------------------ */
+
+export const defaultRoomSettings: RoomSettings = {
+  liveliness: 0.5,
+  timeFlow: false,
+  dailyMessages: 400,
+};
+
+export function loadRoomSettings(): RoomSettings {
+  const saved = read(KEYS.roomSettings) as Partial<RoomSettings> | null;
+  if (!saved || typeof saved !== 'object') return { ...defaultRoomSettings };
+  return {
+    liveliness:
+      typeof saved.liveliness === 'number' && Number.isFinite(saved.liveliness)
+        ? Math.max(0, Math.min(1, saved.liveliness))
+        : defaultRoomSettings.liveliness,
+    timeFlow: saved.timeFlow === true,
+    dailyMessages:
+      typeof saved.dailyMessages === 'number' && saved.dailyMessages > 0
+        ? Math.round(saved.dailyMessages)
+        : defaultRoomSettings.dailyMessages,
+  };
+}
+
+export const saveRoomSettings = (settings: RoomSettings) => write(KEYS.roomSettings, settings);
+
+const normalizeRoom = (raw: Partial<Room> | null): Room | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  if (!Array.isArray(raw.messages) || !Array.isArray(raw.cast) || !raw.cast.length) return null;
+  const now = Date.now();
+  return {
+    id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
+    title: typeof raw.title === 'string' ? raw.title : '群聊',
+    createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : now,
+    messages: (raw.messages as Message[]).filter((m) => m && typeof m.text === 'string'),
+    scheduled: Array.isArray(raw.scheduled) ? raw.scheduled : [],
+    steps: Array.isArray(raw.steps) ? raw.steps : [],
+    cast: raw.cast as Persona[],
+    gone: Array.isArray(raw.gone) ? raw.gone : [],
+    lastSeenAt: typeof raw.lastSeenAt === 'number' ? raw.lastSeenAt : now,
+    lastMessageAt: typeof raw.lastMessageAt === 'number' ? raw.lastMessageAt : now,
+    usage:
+      raw.usage && typeof raw.usage === 'object'
+        ? { day: String(raw.usage.day ?? dayKey(now)), messages: Number(raw.usage.messages) || 0 }
+        : { day: dayKey(now), messages: 0 },
+    archivedAt: typeof raw.archivedAt === 'number' ? raw.archivedAt : undefined,
+  };
+};
+
+export function loadRoom(): Room | null {
+  return normalizeRoom(read(KEYS.room) as Partial<Room> | null);
+}
+
+export const saveRoom = (room: Room) => write(KEYS.room, room);
+
+export function loadArchives(): Room[] {
+  const raw = read(KEYS.archives);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => normalizeRoom(row as Partial<Room>))
+    .filter((row): row is Room => Boolean(row))
+    .slice(0, 8);
+}
+
+export const saveArchives = (rooms: Room[]) => write(KEYS.archives, rooms.slice(0, 8));
+
+export const loadGoals = (): Goal[] => parseGoals(read(KEYS.goals)) ?? [];
+export const saveGoals = (goals: Goal[]): void => {
+  const safe = parseGoals(goals);
+  if (safe) write(KEYS.goals, safe);
+};
+export const loadSchedule = (): ScheduleItem[] => parseSchedule(read(KEYS.schedule)) ?? [];
+export const saveSchedule = (items: ScheduleItem[]): void => {
+  const safe = parseSchedule(items);
+  if (safe) write(KEYS.schedule, safe);
+};
+export const loadSummaries = (): DailySummary[] => parseSummaries(read(KEYS.summaries)) ?? [];
+export const saveSummaries = (items: DailySummary[]): void => {
+  const safe = parseSummaries(items);
+  if (safe) write(KEYS.summaries, safe);
+};
+
 export interface Bundle {
   version: 3;
   exportedAt: number;
@@ -319,6 +517,9 @@ export interface Bundle {
   settings: WorldSettings;
   identity: Identity;
   todos?: Todo[];
+  goals?: Goal[];
+  schedule?: ScheduleItem[];
+  summaries?: DailySummary[];
 }
 
 export function exportBundle(state: Omit<Bundle, 'version' | 'exportedAt'>): string {
@@ -326,27 +527,61 @@ export function exportBundle(state: Omit<Bundle, 'version' | 'exportedAt'>): str
   return JSON.stringify(bundle, null, 2);
 }
 
+const cleanIdentity = (raw: unknown): Identity | null => {
+  const row = raw as Partial<Identity> | null;
+  if (!row || typeof row !== 'object' || typeof row.id !== 'string' || typeof row.name !== 'string' ||
+    !row.id || row.id.length > 128 || !row.name.trim() || findCrisis(row.name)) return null;
+  return {
+    id: row.id,
+    name: row.name.slice(0, 40),
+    avatarKey: typeof row.avatarKey === 'string' && row.avatarKey.length <= 40 ? row.avatarKey : 'petal',
+    bio: typeof row.bio === 'string' && !findCrisis(row.bio) ? row.bio.slice(0, 200) : '',
+  };
+};
+
 export function importBundle(raw: string): Bundle | null {
   try {
     const data = JSON.parse(raw) as Partial<Bundle>;
     if (!data || data.version !== 3 || !Array.isArray(data.cards) || hasCrisisInArchive(data)) return null;
+    // 显式 null 与非法对象都整体拒绝，不能被“旧存档缺键”兼容规则吞掉。
+    const goals = parseGoals(data.goals === undefined ? [] : data.goals);
+    const schedule = parseSchedule(data.schedule === undefined ? [] : data.schedule);
+    const summaries = parseSummaries(data.summaries === undefined ? [] : data.summaries);
+    if (!goals || !schedule || !summaries) return null;
+    // 日程里的目标/步骤引用必须存在，防止伪造关联。
+    const goalById = new Map(goals.map((goal) => [goal.id, goal]));
+    const valid = schedule.every((item) => {
+      if (item.goalId && !goalById.has(item.goalId)) return false;
+      if (item.stepId) {
+        const owner = item.goalId ? goalById.get(item.goalId) : goals.find((goal) => goal.steps.some((step) => step.id === item.stepId));
+        if (!owner || !owner.steps.some((step) => step.id === item.stepId)) return false;
+      }
+      return true;
+    });
+    if (!valid) return null;
     return {
       version: 3,
       exportedAt: typeof data.exportedAt === 'number' ? data.exportedAt : Date.now(),
       cards: retention(
         (data.cards as Partial<Card>[]).map(normalizeCard).filter((c): c is Card => Boolean(c)),
       ),
-      personas:
-        Array.isArray(data.personas) && data.personas.length
-          ? mergePersonas(data.personas)
-          : defaultPersonas(),
-      world: data.world && typeof data.world === 'object' ? (data.world as World) : emptyWorld(),
-      settings: data.settings
-        ? { ...defaultSettings, ...(data.settings as Partial<WorldSettings>) }
-        : { ...defaultSettings },
-      identity: (data.identity as Identity) ?? loadIdentity(),
+      personas: mergeImportedPersonaHistory(data.personas),
+      // 调用计数属于本设备的当日预算，导入存档不能把它清零或改写。
+      world: { ...cleanWorld(data.world), dayKey: loadWorld().dayKey, callsToday: loadWorld().callsToday },
+      settings: {
+        ...cleanSettings(data.settings),
+        // Imported JSON is data, never a source of higher-priority system rules
+        // or permission to resume paid background calls on this device.
+        baselineExtra: loadSettings().baselineExtra,
+        paused: loadSettings().paused,
+        dailyCalls: loadSettings().dailyCalls,
+      },
+      identity: cleanIdentity(data.identity) ?? loadIdentity(),
       todos: Array.isArray(data.todos) ? data.todos.filter((t) =>
         t && typeof t.text === 'string' && !findCrisis(t.text)).slice(0, 60) : [],
+      goals,
+      schedule,
+      summaries,
     };
   } catch {
     return null;
@@ -354,7 +589,7 @@ export function importBundle(raw: string): Bundle | null {
 }
 
 export function clearAll() {
-  [...Object.values(KEYS), ...LEGACY_POST_KEYS, ...LEGACY_CARD_KEYS, ...UI_KEYS].forEach((key) => {
+  [...Object.values(KEYS), ...LEGACY_POST_KEYS, ...LEGACY_CARD_KEYS, ...UI_KEYS, ...ROOM_KEYS].forEach((key) => {
     try {
       localStorage.removeItem(key);
     } catch {

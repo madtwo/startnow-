@@ -1,0 +1,989 @@
+[
+  {
+    "id": "report-01",
+    "text": "课程报告的正文第一段还没写，我不知道从哪个小标题开始。",
+    "expectedTheme": "report",
+    "forbiddenThemes": [
+      "internship"
+    ],
+    "mustMentionAny": [
+      "标题",
+      "小节",
+      "文档",
+      "这段",
+      "报告",
+      "写"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "report-02",
+    "text": "实验报告开头卡住了，先写摘要还是先写观察？",
+    "expectedTheme": "report",
+    "forbiddenThemes": [
+      "internship"
+    ],
+    "mustMentionAny": [
+      "标题",
+      "小节",
+      "文档",
+      "这段",
+      "报告",
+      "写"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "report-03",
+    "text": "报告最后的页码格式乱了，越改越糟。",
+    "expectedTheme": "report",
+    "forbiddenThemes": [
+      "internship"
+    ],
+    "mustMentionAny": [
+      "标题",
+      "小节",
+      "文档",
+      "这段",
+      "报告",
+      "写"
+    ],
+    "allowClarification": true
+  },
+  {
+    "id": "presentation-01",
+    "text": "明天课堂汇报，我一上台就紧张到手抖。",
+    "expectedTheme": "presentation",
+    "forbiddenThemes": [
+      "internship",
+      "exam"
+    ],
+    "mustMentionAny": [
+      "汇报",
+      "上台",
+      "讲",
+      "发言"
+    ],
+    "allowClarification": true
+  },
+  {
+    "id": "presentation-02",
+    "text": "小组都准备好了，我自己讲PPT还是怕卡壳。",
+    "expectedTheme": "presentation",
+    "forbiddenThemes": [
+      "internship",
+      "exam"
+    ],
+    "mustMentionAny": [
+      "汇报",
+      "上台",
+      "讲",
+      "发言"
+    ],
+    "allowClarification": true
+  },
+  {
+    "id": "presentation-03",
+    "text": "老师点我上台发言，我脑子会突然一片空白。",
+    "expectedTheme": "presentation",
+    "forbiddenThemes": [
+      "internship",
+      "exam"
+    ],
+    "mustMentionAny": [
+      "汇报",
+      "上台",
+      "讲",
+      "发言"
+    ],
+    "allowClarification": true
+  },
+  {
+    "id": "dorm-noise-01",
+    "text": "室友凌晨打游戏外放，我连续两晚没法睡。",
+    "expectedTheme": "dorm-noise",
+    "forbiddenThemes": [
+      "exam",
+      "group-work"
+    ],
+    "mustMentionAny": [
+      "澄清",
+      "核实",
+      "不愿意",
+      "事实",
+      "话题",
+      "开头"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "dorm-noise-02",
+    "text": "隔壁床半夜敲键盘，我想跟他沟通又怕吵架。",
+    "expectedTheme": "dorm-noise",
+    "forbiddenThemes": [
+      "exam",
+      "group-work"
+    ],
+    "mustMentionAny": [
+      "澄清",
+      "核实",
+      "不愿意",
+      "事实",
+      "话题",
+      "开头"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "dorm-noise-03",
+    "text": "宿舍室友半夜说话太响，我不知道怎么提这件事。",
+    "expectedTheme": "dorm-noise",
+    "forbiddenThemes": [
+      "exam",
+      "group-work"
+    ],
+    "mustMentionAny": [
+      "澄清",
+      "核实",
+      "不愿意",
+      "事实",
+      "话题",
+      "开头"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "sleep-01",
+    "text": "我连续三天睡不着，躺床上一直刷手机。",
+    "expectedTheme": "sleep",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "屏幕",
+      "闹钟",
+      "床",
+      "灯",
+      "明天",
+      "页面",
+      "时间"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "sleep-02",
+    "text": "睡前一刷短视频就到凌晨两点，明早还要起床。",
+    "expectedTheme": "sleep",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "屏幕",
+      "闹钟",
+      "床",
+      "灯",
+      "明天",
+      "页面",
+      "时间"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "sleep-03",
+    "text": "晚上入睡难，脑子里全是没做完的事情。",
+    "expectedTheme": "sleep",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "屏幕",
+      "闹钟",
+      "床",
+      "灯",
+      "明天",
+      "页面",
+      "时间"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "sleep-04",
+    "text": "最近失眠，翻来覆去想明天的安排。",
+    "expectedTheme": "sleep",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "屏幕",
+      "闹钟",
+      "床",
+      "灯",
+      "明天",
+      "页面",
+      "时间"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "group-work-01",
+    "text": "课程组队没人愿意当组长，分工一直没定。",
+    "expectedTheme": "group-work",
+    "forbiddenThemes": [
+      "presentation",
+      "internship"
+    ],
+    "mustMentionAny": [
+      "澄清",
+      "事实",
+      "话题",
+      "分工",
+      "不愿意"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "group-work-02",
+    "text": "小组作业到周末还没人开工，我不知道怎么催。",
+    "expectedTheme": "group-work",
+    "forbiddenThemes": [
+      "presentation",
+      "internship"
+    ],
+    "mustMentionAny": [
+      "澄清",
+      "事实",
+      "话题",
+      "分工",
+      "不愿意"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "group-work-03",
+    "text": "同组队友不回消息，合作报告一直卡住。",
+    "expectedTheme": "group-work",
+    "forbiddenThemes": [
+      "presentation",
+      "internship"
+    ],
+    "mustMentionAny": [
+      "澄清",
+      "事实",
+      "话题",
+      "分工",
+      "不愿意"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "group-work-04",
+    "text": "分组项目组员都说很忙，怎么先确定分工？",
+    "expectedTheme": "group-work",
+    "forbiddenThemes": [
+      "presentation",
+      "internship"
+    ],
+    "mustMentionAny": [
+      "澄清",
+      "事实",
+      "话题",
+      "分工",
+      "不愿意"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "expense-01",
+    "text": "这个月生活费不够，饭钱和交通费算不清。",
+    "expectedTheme": "expense",
+    "forbiddenThemes": [
+      "internship"
+    ],
+    "mustMentionAny": [
+      "账",
+      "预算",
+      "事实",
+      "问题",
+      "钱"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "expense-02",
+    "text": "兼职排班太乱，我不确定钱够不够交材料费。",
+    "expectedTheme": "expense",
+    "forbiddenThemes": [
+      "internship"
+    ],
+    "mustMentionAny": [
+      "账",
+      "预算",
+      "事实",
+      "问题",
+      "钱"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "expense-03",
+    "text": "最近总是超预算，但不记得钱花去了哪里。",
+    "expectedTheme": "expense",
+    "forbiddenThemes": [
+      "internship"
+    ],
+    "mustMentionAny": [
+      "账",
+      "预算",
+      "事实",
+      "问题",
+      "钱"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "expense-04",
+    "text": "舍友要平摊费用，我连这周收支都没理出来。",
+    "expectedTheme": "expense",
+    "forbiddenThemes": [
+      "internship"
+    ],
+    "mustMentionAny": [
+      "账",
+      "预算",
+      "事实",
+      "问题",
+      "钱"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "reference-01",
+    "text": "论文引用还没整理，文献列表看着一堆很乱。",
+    "expectedTheme": "reference",
+    "forbiddenThemes": [
+      "experiment"
+    ],
+    "mustMentionAny": [
+      "文献",
+      "资料",
+      "观点",
+      "待补"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "reference-02",
+    "text": "参考文献有二十篇，今晚只想先核实一篇。",
+    "expectedTheme": "reference",
+    "forbiddenThemes": [
+      "experiment"
+    ],
+    "mustMentionAny": [
+      "文献",
+      "资料",
+      "观点",
+      "待补"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "reference-03",
+    "text": "报告里引用的资料没整理，我担心漏掉来源。",
+    "expectedTheme": "reference",
+    "forbiddenThemes": [
+      "experiment"
+    ],
+    "mustMentionAny": [
+      "文献",
+      "资料",
+      "观点",
+      "待补"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "reference-04",
+    "text": "论文文献笔记太散，不知道先看哪一篇。",
+    "expectedTheme": "reference",
+    "forbiddenThemes": [
+      "experiment"
+    ],
+    "mustMentionAny": [
+      "文献",
+      "资料",
+      "观点",
+      "待补"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "paper-start-01",
+    "text": "论文一个字没写，打开空白文档就慌。",
+    "expectedTheme": "paper-start",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "标题",
+      "文档",
+      "这段",
+      "段",
+      "正文",
+      "小节",
+      "观点",
+      "待补"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "paper-start-02",
+    "text": "开题论文的开头怎么都写不出来。",
+    "expectedTheme": "paper-start",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "标题",
+      "文档",
+      "这段",
+      "段",
+      "正文",
+      "小节",
+      "观点",
+      "待补"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "paper-start-03",
+    "text": "第一段草稿写了删删了写，今天想先起个标题。",
+    "expectedTheme": "paper-start",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "标题",
+      "文档",
+      "这段",
+      "段",
+      "正文",
+      "小节",
+      "观点",
+      "待补"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "paper-start-04",
+    "text": "写作业的小论文卡在第一句，不敢开始。",
+    "expectedTheme": "paper-start",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "标题",
+      "文档",
+      "这段",
+      "段",
+      "正文",
+      "小节",
+      "观点",
+      "待补"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "experiment-01",
+    "text": "实验数据有个异常值，想先检查是不是单位错了。",
+    "expectedTheme": "experiment",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "实验",
+      "样本",
+      "数据",
+      "坐标",
+      "单位",
+      "文件",
+      "流程",
+      "记录"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "experiment-02",
+    "text": "仪器测量结果对不上，我不知道先核哪组样本。",
+    "expectedTheme": "experiment",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "实验",
+      "样本",
+      "数据",
+      "坐标",
+      "单位",
+      "文件",
+      "流程",
+      "记录"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "experiment-03",
+    "text": "跑数据的图坐标乱了，先看一列结果。",
+    "expectedTheme": "experiment",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "实验",
+      "样本",
+      "数据",
+      "坐标",
+      "单位",
+      "文件",
+      "流程",
+      "记录"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "experiment-04",
+    "text": "实验记录不完整，想先补一次温度条件。",
+    "expectedTheme": "experiment",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "实验",
+      "样本",
+      "数据",
+      "坐标",
+      "单位",
+      "文件",
+      "流程",
+      "记录"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "exam-01",
+    "text": "后天高数考试，我连第一章都没复习完。",
+    "expectedTheme": "exam",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "复习",
+      "考点",
+      "题",
+      "笔记",
+      "课件",
+      "教材",
+      "考试",
+      "关键词"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "exam-02",
+    "text": "病理背书背了就忘，不知道先看哪个考点。",
+    "expectedTheme": "exam",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "复习",
+      "考点",
+      "题",
+      "笔记",
+      "课件",
+      "教材",
+      "考试",
+      "关键词"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "exam-03",
+    "text": "期末复习题太多，今天就想先看一道错题。",
+    "expectedTheme": "exam",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "复习",
+      "考点",
+      "题",
+      "笔记",
+      "课件",
+      "教材",
+      "考试",
+      "关键词"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "exam-04",
+    "text": "老师发的考试范围我还没整理到笔记里。",
+    "expectedTheme": "exam",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "复习",
+      "考点",
+      "题",
+      "笔记",
+      "课件",
+      "教材",
+      "考试",
+      "关键词"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "internship-01",
+    "text": "岗位表好几页，我连第一个实习岗位都没筛。",
+    "expectedTheme": "internship",
+    "forbiddenThemes": [
+      "presentation"
+    ],
+    "mustMentionAny": [
+      "简历",
+      "岗位",
+      "工作",
+      "经历",
+      "作品"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "internship-02",
+    "text": "简历文件打开了，可是不知道从哪段经历改起。",
+    "expectedTheme": "internship",
+    "forbiddenThemes": [
+      "presentation"
+    ],
+    "mustMentionAny": [
+      "简历",
+      "岗位",
+      "工作",
+      "经历",
+      "作品"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "internship-03",
+    "text": "实习招聘要求很多，我只想先看一个岗位。",
+    "expectedTheme": "internship",
+    "forbiddenThemes": [
+      "presentation"
+    ],
+    "mustMentionAny": [
+      "简历",
+      "岗位",
+      "工作",
+      "经历",
+      "作品"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "internship-04",
+    "text": "下周要面试，我想先看岗位的日常职责。",
+    "expectedTheme": "internship",
+    "forbiddenThemes": [
+      "presentation"
+    ],
+    "mustMentionAny": [
+      "简历",
+      "岗位",
+      "工作",
+      "经历",
+      "作品"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "future-01",
+    "text": "考研和考公之间一直犹豫，不知道查哪一个条件。",
+    "expectedTheme": "future",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "方向",
+      "申请",
+      "时间",
+      "条件",
+      "计划",
+      "问题",
+      "担心",
+      "这周"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "future-02",
+    "text": "准备出国申请，但申请节点和要求全混了。",
+    "expectedTheme": "future",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "方向",
+      "申请",
+      "时间",
+      "条件",
+      "计划",
+      "问题",
+      "担心",
+      "这周"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "future-03",
+    "text": "未来方向不确定，我想把两个选择先列出来。",
+    "expectedTheme": "future",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "方向",
+      "申请",
+      "时间",
+      "条件",
+      "计划",
+      "问题",
+      "担心",
+      "这周"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "future-04",
+    "text": "转专业的时间要求还没查，我越想越焦虑。",
+    "expectedTheme": "future",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "方向",
+      "申请",
+      "时间",
+      "条件",
+      "计划",
+      "问题",
+      "担心",
+      "这周"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "family-call-01",
+    "text": "我妈打电话又催我考公，我想回却怕吵起来。",
+    "expectedTheme": "family-call",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "家人",
+      "家里",
+      "沟通",
+      "问题",
+      "争执",
+      "话",
+      "主题",
+      "感受",
+      "难受",
+      "感受",
+      "话",
+      "一个"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "family-call-02",
+    "text": "给爸爸回电话之前我想先整理一句话。",
+    "expectedTheme": "family-call",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "家人",
+      "家里",
+      "沟通",
+      "问题",
+      "争执",
+      "话",
+      "主题",
+      "感受",
+      "难受",
+      "感受",
+      "话",
+      "一个"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "family-call-03",
+    "text": "爸妈问我最近是不是很差，我不知道怎么沟通。",
+    "expectedTheme": "family-call",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "家人",
+      "家里",
+      "沟通",
+      "问题",
+      "争执",
+      "话",
+      "主题",
+      "感受",
+      "难受",
+      "感受",
+      "话",
+      "一个"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "family-call-04",
+    "text": "家里人催我回家，我想先说明自己的安排。",
+    "expectedTheme": "family-call",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "家人",
+      "家里",
+      "沟通",
+      "问题",
+      "争执",
+      "话",
+      "主题",
+      "感受",
+      "难受",
+      "感受",
+      "话",
+      "一个"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "romance-message-01",
+    "text": "喜欢的人已读不回，我想发消息又怕打扰。",
+    "expectedTheme": "romance-message",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "话",
+      "消息",
+      "猜测",
+      "互动",
+      "关系",
+      "在意",
+      "问题"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "romance-message-02",
+    "text": "跟前任分手后总想再问一句话，但一直没发。",
+    "expectedTheme": "romance-message",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "话",
+      "消息",
+      "猜测",
+      "互动",
+      "关系",
+      "在意",
+      "问题"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "romance-message-03",
+    "text": "暧昧对象忽冷忽热，我不知道要不要再聊。",
+    "expectedTheme": "romance-message",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "话",
+      "消息",
+      "猜测",
+      "互动",
+      "关系",
+      "在意",
+      "问题"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "romance-message-04",
+    "text": "和喜欢的同学见面很尴尬，想先写一句消息草稿。",
+    "expectedTheme": "romance-message",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "话",
+      "消息",
+      "猜测",
+      "互动",
+      "关系",
+      "在意",
+      "问题"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "club-hesitation-01",
+    "text": "社团邀请我周末参加活动，我其实不想去却已经答应。",
+    "expectedTheme": "club-hesitation",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "不愿意",
+      "澄清",
+      "话题",
+      "事实"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "club-hesitation-02",
+    "text": "活动负责人的消息来了，我想拒绝又怕得罪人。",
+    "expectedTheme": "club-hesitation",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "不愿意",
+      "澄清",
+      "话题",
+      "事实"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "club-hesitation-03",
+    "text": "社团开会让我负责一块工作，我不愿意但不敢说。",
+    "expectedTheme": "club-hesitation",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "不愿意",
+      "澄清",
+      "话题",
+      "事实"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "club-hesitation-04",
+    "text": "我为要不要退出社团纠结，先想清楚不想做的点。",
+    "expectedTheme": "club-hesitation",
+    "forbiddenThemes": [],
+    "mustMentionAny": [
+      "不愿意",
+      "澄清",
+      "话题",
+      "事实"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "early-class-01",
+    "text": "明早早八我总怕睡过头，闹钟都还没设。",
+    "expectedTheme": "early-class",
+    "forbiddenThemes": [
+      "exam"
+    ],
+    "mustMentionAny": [
+      "闹钟",
+      "明早",
+      "床边"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "early-class-02",
+    "text": "第一节课太早，我老起不来，想先准备明早的东西。",
+    "expectedTheme": "early-class",
+    "forbiddenThemes": [
+      "exam"
+    ],
+    "mustMentionAny": [
+      "闹钟",
+      "明早",
+      "床边"
+    ],
+    "allowClarification": false
+  },
+  {
+    "id": "early-class-03",
+    "text": "明早要赶早课，怕迟到不知道该准备什么。",
+    "expectedTheme": "early-class",
+    "forbiddenThemes": [
+      "exam"
+    ],
+    "mustMentionAny": [
+      "闹钟",
+      "明早",
+      "床边"
+    ],
+    "allowClarification": false
+  }
+]

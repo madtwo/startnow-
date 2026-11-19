@@ -68,7 +68,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
       authorId: 'shenmo',
       authorName: '沈默',
       title: '先报个到',
-      text: '临床大三，课多，晚上常在图书馆。\n这里像楼道——不用认识谁，也能说一句今天卡在哪。我来看看，别人是不是也有说不出口的小事。',
+      text: '定京医科大学 · 临床医学 · 大三 · ISFJ\n课多，晚上常在图书馆。这里像楼道——不用认识谁，也能说一句今天卡在哪。想先看看大家怎么开口。',
       weight: 1,
       intro: true,
       createdAt: now - 22 * MIN,
@@ -79,7 +79,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
           id: crypto.randomUUID(),
           authorId: 'weini',
           authorKind: 'persona',
-          text: '嗯，我也刚来。\n先看看别人怎么发。',
+          text: '嗨，沈默。我是魏霓，刚来。',
           at: now - 18 * MIN,
         },
       ],
@@ -88,7 +88,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
       authorId: 'weini',
       authorName: '魏霓',
       title: '先打个招呼',
-      text: '大二，平时话少。\n这里可以先写一句、不用解释前因后果，才敢进来。想先看看大家怎么说话。',
+      text: '水华木大学 · 金融学 · 大四 · INFJ\n话不多，习惯先听。这里可以先写一句、不用解释前因后果，我才敢进来。想先看看大家怎么说话。',
       weight: 1,
       intro: true,
       createdAt: now - 16 * MIN,
@@ -99,7 +99,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
           id: crypto.randomUUID(),
           authorId: 'yanggao',
           authorKind: 'persona',
-          text: '欢迎欢迎！我也刚来。\n随便说就行吧。',
+          text: '欢迎欢迎！魏霓你好，我也是刚来的。',
           at: now - 12 * MIN,
         },
       ],
@@ -108,7 +108,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
       authorId: 'miaoze',
       authorName: '苗泽',
       title: '先看看规则',
-      text: '材料大三，习惯先把规则弄清楚。\n这里不是许愿池，也不是打卡群；像一群人各自卡着，顺手拉一把。我来学学怎么开口。',
+      text: '钱塘大学 · 材料科学与工程 · 大三 · INTP\n习惯先把规则弄清楚。这里不是许愿池，也不是打卡群；像一群人各自卡着，顺手拉一把。',
       weight: 1,
       intro: true,
       createdAt: now - 10 * MIN,
@@ -119,7 +119,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
           id: crypto.randomUUID(),
           authorId: 'shenmo',
           authorKind: 'persona',
-          text: '应该是吧。\n我也在摸索。',
+          text: '你好，苗泽。先打个招呼。',
           at: now - 6 * MIN,
         },
       ],
@@ -128,7 +128,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
       authorId: 'yanggao',
       authorName: '杨槔',
       title: '我先来',
-      text: '大一，爱吃饭爱打球。\n刚来，先混个脸熟。这里要是能边吐槽边有人接一句，就挺好。',
+      text: '临南学院 · 风景园林学 · 大一 · ESFP\n刚来，先混个脸熟。爱吃饭爱打球。这里要是能边吐槽边有人接一句，就挺好。',
       weight: 1,
       intro: true,
       createdAt: now - 5 * MIN,
@@ -139,7 +139,7 @@ export function buildSeedCards(now = Date.now()): Card[] {
           id: crypto.randomUUID(),
           authorId: 'miaoze',
           authorKind: 'persona',
-          text: '那先眼熟一下。\n我也刚来。',
+          text: '欢迎，杨槔。先眼熟一下。',
           at: now - 2 * MIN,
         },
       ],
@@ -148,10 +148,13 @@ export function buildSeedCards(now = Date.now()): Card[] {
 }
 
 // 开场介绍在首页停留一段时间，之后才让新的“烦恼卡”陆续出现。
+// 最新一张介绍卡的时间比首次打开早 5 分钟，窗口按首次打开算满 30 分钟。
 export const INTRO_WINDOW = 30 * MIN;
+const NEWEST_INTRO_OFFSET = 5 * MIN;
 export function introPhaseActive(cards: Card[], now = Date.now()): boolean {
   return cards.some(
-    (c) => c.intro === true && c.authorKind === 'persona' && now - c.createdAt < INTRO_WINDOW,
+    (c) => c.intro === true && c.authorKind === 'persona' &&
+      now - c.createdAt < INTRO_WINDOW + NEWEST_INTRO_OFFSET,
   );
 }
 

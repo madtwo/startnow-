@@ -6,10 +6,13 @@ const DAY = 86_400_000;
 /** 仅为数据最小化：处理常见联系方式，不宣称可识别全部隐私信息。 */
 export function sanitizeMemoryText(text: string): string {
   return text
+    // 只折叠全角字母数字与 @，保留中文标点原样。
+    .replace(/[０-９Ａ-Ｚａ-ｚ＠]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/[\u200B-\u200F\u2060\uFEFF]/g, '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[邮箱已隐藏]')
     .replace(/https?:\/\/[^\s<>\"'，。；]+/gi, '[链接已隐藏]')
-    .replace(/(?<!\d)\d{17}[\dXx](?!\d)/g, '[证件号码已隐藏]')
-    .replace(/(?<!\d)(?:\+?86[-\s]?)?1[3-9]\d{9}(?!\d)/g, '[手机号已隐藏]')
+    .replace(/(?<!\d)(?:\d{17}[\dXx]|\d{15})(?![\dXx])/g, '[证件号码已隐藏]')
+    .replace(/(?<!\d)(?:\+?86[-\s]?)?1[3-9]\d(?:[-\s]?\d){8}(?!\d)/g, '[手机号已隐藏]')
     .replace(/(?<!\d)\+?1[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?!\d)/g, '[电话号码已隐藏]')
     .replace(/(?:微信(?:号|id)?|wxid|vx|qq(?:号)?|telegram|discord|whatsapp|小红书号|抖音号)[\s:=：]*(?:是|为)?[\s:=：]*[@a-z0-9._-]{5,40}/gi, '[站外账号已隐藏]');
 }
@@ -131,6 +134,8 @@ export function recordReplyMemory(
   postId: string,
   now: number,
 ): MemoryEntry[] {
+  // 截断前先查危机，避免关键词正好被截在 34 字之外。
+  if (findCrisis(text)) return pruneMemory(persona.memory, now);
   const clean = sanitizeMemoryText(text).replace(/\s+/g, ' ').trim();
   const what = clean.length > 34 ? `${clean.slice(0, 34)}…` : clean;
   return addMemory(

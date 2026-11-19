@@ -4,6 +4,8 @@ import { AVATAR_KEYS, AVATAR_LABELS, AvatarMark } from '../lib/avatars';
 import { BASELINE } from '../lib/baseline';
 import { ensureMind, MOOD_LABEL } from '../lib/mind';
 import { useDialogFocus } from '../lib/useDialogFocus';
+import { loadCards } from '../lib/store';
+import { summarizeCompletions } from '../lib/completionStats';
 import Avatar from './Avatar';
 
 const COLORS = ['#5f7f66', '#b06a45', '#97784a', '#80667a', '#4f6b8a', '#8a5a4a', '#6b7a4f', '#9a6b7a'];
@@ -20,6 +22,12 @@ interface Props {
   onPersonas: (personas: Persona[]) => void;
   onTick: () => void;
   onAdvance: (hours: number) => void;
+  /** Author-only: isolated fictional brag jobs. Does not alter normal world time. */
+  pendingBrags?: { sourceCardId: string; personaId: string; personaName: string; dueAt: number }[];
+  onAdvanceBragMinutes?: (minutes: number) => void;
+  onFireNextBrag?: () => void;
+  onCancelBrags?: (personaId: string) => void;
+  onSimulateNewWorry?: (personaId: string) => void;
   onSummon: (personaId: string) => void;
   onPostAs: (personaId: string) => void;
   onExport: () => void;
@@ -52,7 +60,7 @@ const newPersona = (index: number): Persona => ({
   followUp: 'sometimes',
   intimacy: 10,
   replyDesire: 60,
-  memoryMode: 'trim',
+  memoryMode: 'summary',
   memory: [],
   lastDistillAt: 0,
   weekLog: [],
@@ -66,6 +74,7 @@ export default function AdminPanel(props: Props) {
   const persona = personas.find((p) => p.id === selected) ?? personas[0];
   const mind = persona ? ensureMind(persona) : null;
   const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
+  const completedToday = summarizeCompletions(loadCards());
 
   const patch = (part: Partial<Persona>) => {
     if (!persona) return;
@@ -419,6 +428,23 @@ export default function AdminPanel(props: Props) {
                 onChange={(e) => props.onChangeSettings({ ...settings, paused: e.target.checked })}
               />
             </label>
+            <section className="adm-memory" aria-label="最近24小时完成回应质量" data-testid="completion-author-metrics">
+              <p className="field-label">最近 24 小时 · 完成回应（本机已保存的数据）</p>
+              <p className="adm-hint">
+                完成事件 {completedToday.events} · 有主回复 {completedToday.replied} ·
+                模型采用 {completedToday.model} / {completedToday.replied} ·
+                模拟兜底 {completedToday.simulated} · 待回复 {completedToday.missing} ·
+                重复回复 {completedToday.duplicate}
+              </p>
+              {Object.keys(completedToday.reasons).length > 0 && (
+                <p className="adm-hint">
+                  兜底原因：{Object.entries(completedToday.reasons)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([reason, count]) => `${reason} ${count}`).join(' · ')}
+                </p>
+              )}
+              {!completedToday.events && <p className="adm-hint">近 24 小时暂无玩家完成事件。</p>}
+            </section>
             <div className="adm-grid">
               <label className="field">
                 <span className="field-label">每张卡最多来几个人</span>
@@ -433,16 +459,22 @@ export default function AdminPanel(props: Props) {
                 />
               </label>
               <label className="field">
-                <span className="field-label">同时开着的 AI 卡上限</span>
+                <span className="field-label">每 24 小时自动发卡上限（0 关闭）</span>
                 <input
                   type="number"
                   min={0}
-                  max={4}
+                  max={8}
                   value={settings.aiCardLimit}
                   onChange={(e) =>
                     props.onChangeSettings({ ...settings, aiCardLimit: Number(e.target.value) || 0 })
                   }
                 />
+                <span className="adm-hint">
+                  当前设为每 24 小时最多 {settings.aiCardLimit} 张普通烦恼卡
+                  {settings.aiCardLimit > 0 && settings.aiCardLimit < 8
+                    ? '。旧存档的低频设置会保留；调高会分散发布，但间隔仍取决于场景，不保证固定每几小时一张。'
+                    : '（不包含炫耀卡）。'}
+                </span>
               </label>
               <label className="field">
                 <span className="field-label">每天调用上限</span>
@@ -494,6 +526,48 @@ export default function AdminPanel(props: Props) {
                 </button>
               ))}
             </div>
+            <section className="adm-memory" aria-label="独立炫耀调试" data-testid="brag-author-controls">
+              <p className="field-label">炫耀任务 · 作者调试（不修改正式 2–20 分钟排期规则）</p>
+              <p className="adm-hint">只快进未发布炫耀的截止时间，不推进普通卡片时间。此处用于虚构剧情演示。</p>
+              <div className="adm-actions">
+                {[3, 10, 30].map((minutes) => (
+                  <button key={minutes} type="button" className="btn btn-ghost"
+                    disabled={!props.onAdvanceBragMinutes || !props.pendingBrags?.length}
+                    onClick={() => props.onAdvanceBragMinutes?.(minutes)}>
+                    +{minutes} 分钟（仅炫耀）
+                  </button>
+                ))}
+                <button type="button" className="btn btn-primary"
+                  disabled={!props.onFireNextBrag || !props.pendingBrags?.length}
+                  onClick={props.onFireNextBrag}>
+                  立刻触发下一条炫耀
+                </button>
+              </div>
+              <p className="field-label">待发：{props.pendingBrags?.length ?? 0} 条</p>
+              {!props.pendingBrags?.length && <p className="adm-hint">还没有待发炫耀。先在角色自己的烦恼卡接受一条安全建议。</p>}
+              {(props.pendingBrags ?? []).slice().sort((a, b) => a.dueAt - b.dueAt).map((job) => (
+                <div key={job.sourceCardId} className="mem-row">
+                  <span className="mem-text">
+                    <b>{job.personaName}</b> · 来源 {job.sourceCardId} · 预计 {new Date(job.dueAt).toLocaleString('zh-CN')}
+                  </span>
+                </div>
+              ))}
+              {persona && <div className="adm-actions">
+                <button type="button" className="btn btn-ghost"
+                  disabled={!props.onCancelBrags || !props.pendingBrags?.some((job) => job.personaId === persona.id)}
+                  onClick={() => props.onCancelBrags?.(persona.id)}>
+                  取消{persona.name}待发
+                </button>
+                <button type="button" className="btn btn-ghost"
+                  disabled={!props.onSimulateNewWorry}
+                  onClick={() => props.onSimulateNewWorry?.(persona.id)}>
+                  模拟{persona.name}发新烦恼
+                </button>
+              </div>}
+              <p className="field-label">近期炫耀日志</p>
+              {world.logs.filter((line) => /brag (?:scheduled|fired|cancelled)/.test(line)).slice(0, 6)
+                .map((line, index) => <p className="adm-hint" key={`${index}-${line}`}>{line}</p>)}
+            </section>
             <div className="adm-actions">
               {personas.map((p) => (
                 <button

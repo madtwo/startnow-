@@ -2946,93 +2946,6 @@ button {
   }
 }
 
-/* ---------- 手把手引导 ---------- */
-
-.tour {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  pointer-events: none;
-}
-
-.tour-dim {
-  position: absolute;
-  inset: 0;
-  background: rgba(20, 20, 19, 0.55);
-  pointer-events: auto;
-}
-
-.tour-spot {
-  position: absolute;
-  border-radius: 10px;
-  box-shadow: 0 0 0 9999px rgba(20, 20, 19, 0.55);
-  outline: 2px solid rgba(250, 249, 245, 0.85);
-  pointer-events: none;
-  transition: all 0.25s ease;
-}
-
-.tour-tip {
-  position: absolute;
-  width: min(340px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
-  padding: 16px 18px 14px;
-  border-radius: 12px;
-  background: #1a1917;
-  color: #faf9f5;
-  box-shadow: 0 24px 60px rgba(20, 20, 19, 0.45);
-  pointer-events: auto;
-}
-
-.tour-step {
-  margin: 0;
-  color: #8f8d85;
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-}
-
-.tour-tip h3 {
-  margin: 6px 0 8px;
-  font-family: var(--serif);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.tour-body {
-  margin: 0;
-  color: #dedbd2;
-  font-size: 12.5px;
-  line-height: 1.85;
-}
-
-.tour-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.tour-skip {
-  margin-right: auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: #b0aea5;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.tour-prev {
-  padding: 6px 12px;
-  border: 1px solid rgba(250, 249, 245, 0.22);
-  border-radius: 999px;
-  background: none;
-  color: #faf9f5;
-  font-size: 12px;
-  cursor: pointer;
-}
-
 /* ---------- 论坛列表 ---------- */
 
 .board {
@@ -4276,6 +4189,18 @@ button {
   margin-top: 16px;
 }
 
+.step-smaller-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.step-smaller-options .step-ai-note {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .step-hero.is-waiting {
   background: linear-gradient(160deg, #f7f3e9, #faf5e8 70%);
 }
@@ -4603,3 +4528,74 @@ body.card-forum-keyboard-open .tabbar { display: none; }
   }
   .page-composer-row input { font-size: 16px; }
 }
+
+
+/* 同伴回复生成中的占位 */
+.typing-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 4px 2px;
+  color: #7d798d;
+  font-size: 13px;
+}
+.typing-name { color: #4d4a5c; font-weight: 500; }
+.typing-text { opacity: .8; }
+.typing-text::after { content: '…'; animation: typing-blink 1.2s ease-in-out infinite; }
+@keyframes typing-blink { 0%, 100% { opacity: .2; } 50% { opacity: .9; } }
+.meeting-goal-entry { padding: 18px; margin-bottom: 14px; }
+.meeting-goal-entry p { color: var(--muted, #777); }
+.meeting-goal-list { display: grid; gap: 8px; margin-top: 14px; }
+.meeting-goal-link { display: flex; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid #dfddd7; border-radius: 10px; background: transparent; text-align: left; cursor: pointer; }
+.meeting-goal-link b { overflow-wrap: anywhere; }
+.meeting-goal-link span { flex-shrink: 0; font-size: 12px; color: #706e66; }
+.meeting-sheet { width: min(650px, calc(100vw - 24px)); max-height: min(90dvh, 780px); overflow-y: auto; padding: 20px; }
+.meeting-switch { display: inline-flex; gap: 6px; flex-wrap: wrap; border: 1px solid #e3dfd5; border-radius: 12px; padding: 4px; }
+.meeting-switch button { border: none; background: transparent; color: inherit; border-radius: 9px; padding: 7px 12px; cursor: pointer; }
+.meeting-switch button.on { background: #e9e4dc; font-weight: 700; }
+.meeting-assumptions { background: #f6f0e6; padding: 10px 12px; margin: 12px 0; border-radius: 9px; overflow-wrap: anywhere; }
+.meeting-assumptions p { font-size: 13px; margin: 4px 0; }
+.meeting-step { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; border-bottom: 1px solid #e9e5df; }
+.meeting-step input[type=checkbox] { flex: 0 0 auto; width: 19px; height: 19px; margin-top: 6px; }
+.meeting-step-fields { flex: 1; min-width: 0; }
+.meeting-step-fields > input { width: 100%; box-sizing: border-box; }
+.meeting-step-meta { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 7px; font-size: 12px; }
+.meeting-step-meta input[type=number] { max-width: 60px; }
+.meeting-step-meta input[type=date] { max-width: 154px; }
+.meeting-sheet input, .meeting-sheet textarea, .meeting-schedule input, .meeting-goal-detail textarea { max-width: 100%; box-sizing: border-box; }
+.meeting-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.meeting-error { margin-top: 10px; font-size: 13px; color: #a6332d; white-space: pre-wrap; overflow-wrap: anywhere; }
+.meeting-label { color: #716e66; font-size: 13px; margin: 10px 0; }
+.meeting-calendar { max-width: 540px; padding: 14px; }
+.meeting-calendar-head { display: flex; align-items: center; justify-content: space-between; padding: 8px; }
+.meeting-calendar-head button { min-height: 32px; min-width: 36px; background: transparent; border: 1px solid #d8d3cb; border-radius: 8px; }
+.meeting-days { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 3px; }
+.meeting-days > b { text-align: center; font-size: 12px; padding: 8px 0; }
+.meeting-days > button { display: grid; place-content: center; justify-items: center; min-width: 0; min-height: 42px; border-radius: 9px; border: 1px solid transparent; background: none; color: inherit; }
+.meeting-days > button.selected { border-color: #c66b4a; background: #fff4ea; }
+.meeting-days > button.faded { opacity: .45; }
+.meeting-dot { display: block; height: 5px; width: 5px; background: #cc6b4a; border-radius: 50%; }
+.meeting-agenda { display: grid; gap: 8px; margin: 12px 0; }
+.meeting-agenda-row { display: flex; gap: 12px; align-items: flex-start; border: 1px solid #e5dfd9; border-radius: 10px; padding: 12px; }
+.meeting-agenda-row input[type=checkbox] { height: 20px; width: 20px; flex-shrink: 0; }
+.meeting-agenda-row div { min-width: 0; overflow-wrap: anywhere; }
+.meeting-agenda-row small { display: block; font-size: 12px; color: #706e66; }
+.meeting-agenda-row.overdue { border-color: #d66d68; }
+.meeting-agenda-row.overdue small { color: #b9433d; }
+.meeting-manual { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.meeting-manual input:first-child { flex: 1 1 210px; }
+.meeting-link { display: inline-block; border: none; padding: 4px 0; margin-right: 12px; background: transparent; color: #98503b; text-decoration: underline; text-align: left; cursor: pointer; }
+.meeting-goal-detail-text, .meeting-summary { white-space: pre-wrap; overflow-wrap: anywhere; }
+.meeting-profile-goals button.meeting-link { display: block; }
+@media(max-width: 420px) {
+  .meeting-sheet { padding: 12px; }
+  .meeting-days { gap: 1px; }
+  .meeting-days > button { min-height: 39px; padding: 2px; }
+  .meeting-goal-link { flex-wrap: wrap; }
+  .meeting-step-meta { flex-direction: column; }
+  .meeting-actions .btn { flex: 1 1 auto; white-space: normal; }
+}
+
+.meeting-goal-list-row { display: flex; align-items: center; gap: 7px; min-width: 0; flex-wrap: wrap; }
+.meeting-goal-list-row .meeting-goal-link { flex: 1 1 220px; min-width: 0; }
+.meeting-list-date { margin: 15px 0 7px; font-size: 14px; color: #6d5c50; }

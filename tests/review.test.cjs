@@ -646,6 +646,8 @@ test('第三轮：closeCard 立即取消任务；关闭后召唤和回复均无�
 
 test('第三轮：动作不可在 accepted/closed/done 状态下修改或重启', async () => {
   const base=jobCard({});
+  // 完成状态机只属于玩家自己的卡；AI 卡的完成被单独锁住（见下一条断言）。
+  base.authorId='me'; base.authorName='我'; base.authorKind='player';
   base.pending=[];
   base.status='advised';
   base.advice={text:'先打开文档',actionId:'draft-3',fromPersonaId:'shenmo',at:now,accepted:false};
@@ -656,6 +658,11 @@ test('第三轮：动作不可在 accepted/closed/done 状态下修改或重启'
   assert.equal(shrinkAdvice(approved,now+300),approved);
   assert.equal(completeCard(approved,now+400).status,'done');
   assert.equal(completeCard(base,now+500),base);
+  const aiOwned=jobCard({}); aiOwned.pending=[]; aiOwned.status='advised';
+  aiOwned.advice={text:'先打开文档',actionId:'draft-3',fromPersonaId:'shenmo',at:now,accepted:true};
+  aiOwned.note={id:'n1',actionId:'draft-3',text:'先打开文档',done:false};
+  const aiNoted={...aiOwned,status:'noted'};
+  assert.equal(completeCard(aiNoted,now+600),aiNoted);
   const handled=closeCard(base,now);
   assert.equal(acceptAdvice(handled,now+100),handled);
   assert.equal(shrinkAdvice(handled,now+100),handled);
@@ -1062,8 +1069,8 @@ test('开场四张卡先自我介绍，介绍期内不生成新的烦恼卡', ()
   const intros=seeded.filter((c)=>c.intro);
   assert.equal(intros.length,4);
   for (const c of intros) {
-    assert.match(c.text,/(大一|大二|大三)/,c.text);
-    assert.match(c.text,/(这里|我来|想先|刚来)/,c.text);
+    assert.match(c.text,/(大一|大二|大三|大四)/,c.text);
+    assert.match(c.text,/(学校|这里|想先|刚来|习惯先)/,c.text);
     assert.doesNotMatch(c.text,/自杀|抑郁|焦虑|睡不着|想死/,c.text);
   }
   const guide=seeded.find((c)=>c.kind==='guide');
@@ -1135,13 +1142,31 @@ test('评论线程用角色名字而不是内部 ID', () => {
   assert.doesNotMatch(prompt,/weini：|yanggao：/);
 });
 
-test('主模型失败自动切备用模型', async () => {
+test('主模型 429 不再立即切备用模型，并带回 Retry-After', async () => {
+  const before=global.fetch;
+  const models=[];
+  global.fetch=async(_url,init)=>{
+    models.push(JSON.parse(String(init.body)).model);
+    return new Response(JSON.stringify({error:{message:'rate limited'}}),{status:429,headers:{'content-type':'application/json','retry-after':'30'}});
+  };
+  try {
+    await assert.rejects(streamChat({
+      config:{...live,model:'primary-model',fallbackModel:'backup-model'},
+      messages:[{role:'user',content:'hi'}],
+      signal:new AbortController().signal,
+      onDelta:()=>{},
+    }),(err)=>err.kind==='rate'&&err.retryAfterMs===30_000);
+    assert.deepEqual(models,['primary-model']);
+  } finally {global.fetch=before;}
+});
+
+test('主模型 5xx 失败自动切备用模型', async () => {
   const before=global.fetch;
   const models=[];
   global.fetch=async(_url,init)=>{
     models.push(JSON.parse(String(init.body)).model);
     if (models.length===1) {
-      return new Response(JSON.stringify({error:{message:'rate limited'}}),{status:429,headers:{'content-type':'application/json'}});
+      return new Response(JSON.stringify({error:{message:'upstream boom'}}),{status:500,headers:{'content-type':'application/json'}});
     }
     return modelResult('备用模型的回复');
   };

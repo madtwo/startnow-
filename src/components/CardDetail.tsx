@@ -9,6 +9,7 @@ import {
 import type { Card, Comment, Identity, Persona } from '../types';
 import Avatar from './Avatar';
 import { isHelpSeekingAction } from '../lib/support';
+import { canRequestSmallerComment } from '../lib/freeTextShrink';
 import { latestCommentId, orderThreadComments } from '../lib/threading';
 import { isCommentInView, keyboardLift, scrollDeltaForComment } from '../lib/threadViewport';
 
@@ -21,11 +22,13 @@ interface Props {
   onAdvice: (personaId?: string) => void;
   onAdoptAdvice: (commentId: string) => void;
   onShrink: () => void;
+  onRequestSmaller: () => void;
   onAccept: () => void;
   onDone: () => void;
   onCloseCard: () => void;
   onBack: () => void;
   onLike: () => void;
+  onCheer?: () => void;
   initialPeer?: string;
 }
 
@@ -51,11 +54,13 @@ export default function CardDetail({
   onAdvice,
   onAdoptAdvice,
   onShrink,
+  onRequestSmaller,
   onAccept,
   onDone,
   onCloseCard,
   onBack,
   onLike,
+  onCheer,
   initialPeer,
 }: Props) {
   const defaultTarget = card.authorKind === 'persona' ? card.authorId : '';
@@ -71,13 +76,38 @@ export default function CardDetail({
   const initialJumpDone = useRef(false);
   const normalViewportHeight = useRef(0);
   const [showLatest, setShowLatest] = useState(false);
+  const [smallerChoices, setSmallerChoices] = useState(false);
+  useEffect(() => setSmallerChoices(false), [card.id, card.advice?.sourceCommentId]);
   const ordered = useMemo(() => orderThreadComments(card.comments), [card.comments]);
   const latestId = latestCommentId(card.comments);
+  // 有回复正在排队/生成时，先在楼层里显示“正在输入…”，生成完成后被真实回复替换。
+  const typingRows = useMemo(() => {
+    const t = Date.now();
+    const seen = new Set<string>();
+    // 到场计划（plan）和排队回复（pending）都算“正在输入”。
+    const upcoming = [
+      ...(card.plan ?? []).map((row) => ({ personaId: row.personaId, at: row.at })),
+      ...(card.pending ?? []).map((row) => ({ personaId: row.personaId, at: row.at })),
+    ];
+    return upcoming
+      .filter((row) => row.at <= t + 90_000)
+      .filter((row) => {
+        if (seen.has(row.personaId)) return false;
+        seen.add(row.personaId);
+        return true;
+      })
+      .map((row) => {
+        const persona = personas.find((x) => x.id === row.personaId);
+        return { id: row.personaId, name: persona?.name ?? '同伴', persona };
+      });
+  }, [card.plan, card.pending, personas]);
   const author = personas.find((p) => p.id === card.authorId);
   const mine = card.authorId === 'me';
   const giver = card.advice ? personas.find((p) => p.id === card.advice?.fromPersonaId) : undefined;
+  const canShrinkAdopted = canRequestSmallerComment(card);
   const closed = card.status === 'done' || card.status === 'handled';
   const isGuide = card.kind === 'guide';
+  const fictionalGoal = card.authorKind === 'persona' && card.origin === 'simulated' && !!card.goalId;
   const target = personas.find((p) => p.id === targetId);
   const targetIsOp = Boolean(targetId) && targetId === card.authorId;
   const replyLabel = targetId
@@ -331,6 +361,8 @@ export default function CardDetail({
               {card.authorName}
               {!mine && !isGuide && <span className="thread-badge">AI</span>}
               {card.intro && <span className="thread-badge">自我介绍</span>}
+              {card.kind === 'goal' && <span className="thread-badge">目标</span>}
+              {fictionalGoal && <span className="thread-badge">AI 虚构剧情</span>}
               {card.origin && (
                 <span className="thread-badge">{card.origin === 'model' ? '模型生成' : card.origin === 'simulated' ? '模拟情节' : '演示内容'}</span>
               )}
@@ -341,7 +373,7 @@ export default function CardDetail({
         </div>
       </header>
 
-      {card.kind === 'brag' && <span className="brag-badge">做到了</span>}
+      {card.kind === 'brag' && <span className="brag-badge">{fictionalGoal ? 'AI 模拟结果' : '做到了'}</span>}
       {card.title && <h1 className="detail-title">{card.title}</h1>}
       <p className="page-text">{card.text}</p>
       {card.image && <img className="card-image" src={card.image} alt="卡片配图" />}
@@ -357,7 +389,7 @@ export default function CardDetail({
                   : '你的下一步'}
             </span>
             <span className="advice-hint">
-              {card.advice.actionId ? '做不到就再小一级' : '原话采用 · 暂无自动缩小'}
+              {card.advice.actionId ? '做不到就再小一级' : '原话采用 · 可请求更小一步'}
             </span>
           </div>
           <p className="advice-label">{card.advice.text}</p>
@@ -386,7 +418,9 @@ export default function CardDetail({
           )}
           {mine && !card.advice.accepted && (
             <div className="advice-actions">
-              <button className="btn btn-ghost" onClick={onShrink} disabled={!card.advice.actionId}>
+              <button className="btn btn-ghost" disabled={busy || (!card.advice.actionId && !canShrinkAdopted)}
+                onClick={() => canShrinkAdopted
+                  ? setSmallerChoices(true) : onShrink()}>
                 做不到
               </button>
               <button className="btn btn-primary" onClick={onAccept}>
@@ -395,14 +429,38 @@ export default function CardDetail({
             </div>
           )}
           {mine && !card.advice.accepted && !card.advice.actionId && (
-            <p className="page-composer-note">
-              这条是回复原文，没有可自动缩小的动作链。若太难，可以继续回复她，请她说一个更小的步骤。
-            </p>
+            <div className="page-composer-note">
+              <p>这是回复原文，不是自动动作链；新建议只会作为评论出现，不会替换原话。</p>
+              {busy && canShrinkAdopted && (
+                <p role="status">正在给出一个更小的动作，原建议会保留。</p>
+              )}
+              {smallerChoices && canShrinkAdopted && (
+                <div className="advice-actions" role="group" aria-label="再小一步选项">
+                  <button type="button" className="btn btn-ghost" disabled={busy}
+                    onClick={() => { onRequestSmaller(); setSmallerChoices(false); }}>
+                    {busy ? '正在想更小一步…' : `让${giver?.name ?? '这位角色'}再给一个小一步`}
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={() => setSmallerChoices(false)}>
+                    先留着这条
+                  </button>
+                </div>
+              )}
+              {(() => {
+                const suggested = card.comments.find((row) =>
+                  row.parentAdviceSource === card.advice?.sourceCommentId && row.shrinkDepth);
+                return suggested && (
+                  <button type="button" className="advice-source-link"
+                    onClick={() => scrollToComment(suggested.id)}>
+                    较小的一步已在评论中 · 查看后决定是否采用
+                  </button>
+                );
+              })()}
+            </div>
           )}
         </div>
       )}
 
-      {!isGuide && card.note && card.status === 'noted' && (
+      {mine && !isGuide && card.note && card.status === 'noted' && (
         <div className="sticky-note">
           <span className="sticky-tag">便签 · 下一步</span>
           <p>{card.note.text}</p>
@@ -414,6 +472,10 @@ export default function CardDetail({
 
       {!isGuide && (
         <div className="page-like-row">
+          {(card.kind==='goal'||card.kind==='progress')&&<button type="button"
+            className={`like ${card.cheeredByMe?'on':''}`} onClick={onCheer}>
+            {card.cheeredByMe?'已打气':'打气'} {card.cheerCount??0}
+          </button>}
           <button className={`like ${card.likedByMe ? 'on' : ''}`} onClick={onLike}>
             ♥ {card.likes ?? 0}
           </button>
@@ -436,6 +498,18 @@ export default function CardDetail({
           <p className="view-empty">还没有人说话。等一会儿，或者在下面先回楼主一句。</p>
         )}
         {ordered.map(renderComment)}
+        {typingRows.map((row) => (
+          <div key={`typing-${row.id}`} className="typing-row" aria-live="polite">
+            <Avatar
+              avatarKey={row.persona?.avatarKey ?? 'lamp'}
+              name={row.name}
+              color={row.persona?.color ?? '#8b87a0'}
+              size="xs"
+            />
+            <span className="typing-name">{row.name}</span>
+            <span className="typing-text">正在输入…</span>
+          </div>
+        ))}
       </div>
 
       {latestId && showLatest && (

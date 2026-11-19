@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StartNow 长流程测试台（仅开发环境）</title>
+    <style>
+      body { font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; padding: 16px; background: #111; color: #ddd; }
+      h1 { font-size: 15px; margin: 0 0 8px; }
+      #meta { color: #8a8; white-space: pre-wrap; }
+      #log { white-space: pre-wrap; margin-top: 12px; }
+      .err { color: #f77; }
+      .ok { color: #7d7; }
+      .warn { color: #fc6; }
+    </style>
+  </head>
+  <body>
+    <h1>StartNow 长流程测试台（仅开发环境，不进生产构建）</h1>
+    <div id="meta">加载中…</div>
+    <div id="log"></div>
+    <script type="module" src="/src/soak/harness.ts"></script>
+  </body>
+</html>

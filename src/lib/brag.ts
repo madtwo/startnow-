@@ -7,6 +7,12 @@ const MIN = 60_000;
 const DAY = 86_400_000;
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
 
+/** 纯安慰/陪伴类语句不能当成可执行的下一步，也就不能作为炫耀卡的来源。 */
+const COMFORT_ONLY = /摸摸|抱抱|拍拍|陪你|陪朋友|陪你聊|休息一下|放松一下|别想太多|会好的|加油吧?|早点睡/;
+const ACTION_HINT = /打开|写|列|发|问|走|站|整理|收|喝|看|查|预约|设|定|准备|挑|改|做|投|读|背|练|画|跑|洗|换/;
+export const isVagueComfortAdvice = (text: string) =>
+  COMFORT_ONLY.test(text) && !ACTION_HINT.test(text);
+
 /** The model never performs a real-world action. These are explicitly labelled fictional character updates. */
 export function unsafeBragContent(text: string): boolean {
   return !text.trim() || Boolean(findCrisis(text) || auditCriticalContent(text) || auditSocial(text) || auditTone(text));
@@ -48,11 +54,11 @@ export function estimateBragDelayMs(
   return Math.round(clamp(delay, 2, 20) * MIN);
 }
 
-/** A newer non-brag persona post supersedes a still-pending update for the old worry. */
+/** A newer (or same-instant) non-brag persona post supersedes a still-pending update for the old worry. */
 export function isNewerPersonaWorry(cards: readonly Card[], source: Card): boolean {
   return cards.some((other) => other.id !== source.id && other.authorKind === 'persona' &&
     other.authorId === source.authorId && other.kind !== 'brag' && other.kind !== 'guide' &&
-    other.createdAt > source.createdAt);
+    other.createdAt >= source.createdAt);
 }
 
 export function canPublishBrag(source: Card, cards: readonly Card[]): boolean {
@@ -60,7 +66,7 @@ export function canPublishBrag(source: Card, cards: readonly Card[]): boolean {
   return source.authorKind === 'persona' && source.kind !== 'brag' &&
     source.status === 'advised' && !source.noMemory &&
     Boolean(advice?.accepted && advice.fromPersonaId === 'me' &&
-      !unsafeBragContent(advice.text) &&
+      !unsafeBragContent(advice.text) && !isVagueComfortAdvice(advice.text) &&
       !findCrisis(source.text) &&
       !source.comments.some((comment) => comment.authorKind === 'player' && findCrisis(comment.text))) &&
     !isNewerPersonaWorry(cards, source) &&
@@ -94,7 +100,7 @@ export function cancelBragsForNewWorry(
   return {
     cards: cards.map((source) => {
       if (!source.pendingBrag || source.id === worry.id || source.authorId !== worry.authorId ||
-          source.createdAt >= worry.createdAt) return source;
+          source.createdAt > worry.createdAt) return source;
       cancelled.push(source.id);
       return { ...source, status: 'handled', handledAt: now, pendingBrag: undefined,
         plan: [], pending: [], helperAt: undefined };

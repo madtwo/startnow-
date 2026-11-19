@@ -36,7 +36,15 @@ export function hasCrisisInArchive(data: unknown): boolean {
   const cards = Array.isArray(archive.cards) ? archive.cards : [];
   const personas = Array.isArray(archive.personas) ? archive.personas : [];
   const todos = Array.isArray(archive.todos) ? archive.todos : [];
-  return cards.some((item) => hasPlayerCrisis(item)) ||
+  return cards.some((item) => hasPlayerCrisis(item) || (item && typeof item === 'object' && containsCrisis([
+      // 玩家给的建议、炫耀卡引用的建议和炫耀卡正文都可能在导入时被改写。
+      (item as Card).advice?.text,
+      (item as Card).sourceAdviceText,
+      (item as Card).pendingBrag && typeof (item as Card).pendingBrag === 'object'
+        ? JSON.stringify((item as Card).pendingBrag) : undefined,
+      (item as Card).kind === 'brag' ? (item as Card).text : undefined,
+      (item as Card).authorName,
+    ]))) ||
     todos.some((item) => item && typeof item === 'object' &&
       containsCrisis([(item as { text?: string }).text])) ||
     personas.some((item) => item && typeof item === 'object' && (
@@ -45,6 +53,6 @@ export function hasCrisisInArchive(data: unknown): boolean {
           (entry as { about?: string }).about, (entry as { what?: string }).what]))) ||
       (Array.isArray(item.weekLog) && item.weekLog.some((entry: unknown) =>
         entry && typeof entry === 'object' && containsCrisis([(entry as { text?: string }).text]))) ||
-      (item.mind && containsCrisis([item.mind.thought, item.mind.focus, item.mind.movedBy?.what]))
+      (item.mind && containsCrisis([item.mind.thought, item.mind.focus, item.mind.movedBy?.what, item.mind.movedBy?.by]))
     ));
 }

@@ -3,6 +3,7 @@ import type { LlmConfig, ProviderId } from '../types';
 import { getPreset, isMock, isReady, PRESETS } from '../config/providers';
 import { describeError, fetchOpenCodeModels, testConnection, type ModelOption } from '../lib/llm';
 import { useDialogFocus } from '../lib/useDialogFocus';
+import { readDecomposeUsage } from '../lib/decomposeUsage';
 
 interface Props {
   config: LlmConfig;
@@ -49,6 +50,7 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
       model: next.model,
       apiKey: keepKey ? draft.apiKey : '',
       fallbackModel: next.fallbackModel ?? '',
+      visionModel: '',
     });
     setResult(null);
     setError('');
@@ -93,6 +95,7 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
       model: draft.model.trim(),
       apiKey: draft.apiKey.trim(),
       fallbackModel: (draft.fallbackModel ?? '').trim(),
+      visionModel: draft.visionModel?.trim() || '',
     });
   };
 
@@ -242,6 +245,21 @@ export default function SettingsDialog({ config, notice, onSave, onClose }: Prop
               <span className="field-hint">只保存在本机浏览器，不会上传。公共电脑上请勿保存。</span>
             </label>
 
+            <label className="field">
+              <span className="field-label">视觉模型（可选）</span>
+              <input
+                value={draft.visionModel ?? ''}
+                onChange={(e) => setDraft({ ...draft, visionModel: e.target.value })}
+                placeholder="支持图片输入的模型 ID，留空则禁用上传"
+                spellCheck={false}
+              />
+              <span className="field-hint">
+                与当前模型使用同一接口与 API Key；只有你主动上传图片才发送。请确认该模型确实支持图片输入。
+              </span>
+            </label>
+            <p className="field-hint">
+              今日拆解 API 请求 {readDecomposeUsage(localStorage).decompose} 次，识图请求 {readDecomposeUsage(localStorage).vision} 次（本机计数，含自动重试，不等于账单）。
+            </p>
             <label className="field">
               <span className="field-label">备用模型（可选）</span>
               <input

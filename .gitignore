@@ -1,5 +1,25 @@
 node_modules/
 dist/
 tests/results/
+.shots/
+.DS_Store
 .env
 .env.*
+.soak-data/
+startnow-realapi-longrun-*/data/
+dist-h5/
+
+# local deliverables / evidence / patch kits (not source)
+startnow-*.zip
+startnow-*/
+feedback-*/
+backup-*/
+.incoming/
+.patchkits/
+patch-round-receipts/
+data/
+evidence/
+exports/
+expert-review/
+demo/
+.tmp-persona-v1.json

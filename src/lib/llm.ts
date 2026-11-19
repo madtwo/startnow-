@@ -14,23 +14,32 @@ export type LlmErrorKind =
   | 'rate'
   | 'network'
   | 'timeout'
-  | 'server';
+  | 'server'
+  | 'truncated';
 
 export class LlmError extends Error {
   kind: LlmErrorKind;
+  retryAfterMs?: number;
 
-  constructor(kind: LlmErrorKind, message: string) {
+  constructor(kind: LlmErrorKind, message: string, retryAfterMs?: number) {
     super(message);
     this.name = 'LlmError';
     this.kind = kind;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
 /** 避免把浏览器 Bearer Key 通过明文 HTTP 或跨站 // URL 发给未知接口。 */
 export function validateLlmEndpointBase(baseUrl: string): void {
   const value = baseUrl.trim();
-  if (value.startsWith('/') && !value.startsWith('//') && !value.includes('\\') &&
-      !/[?#]/.test(value)) return; // 同源代理路径，禁止协议相对 URL。
+  // URL 解析会删除制表/换行，`/\t/evil.com` 会变成协议相对地址，所以先拒绝空白和控制字符。
+  if (/[\u0000-\u0020\u007f]/.test(value)) {
+    throw new LlmError('config', '模型 Base URL 不能包含空格或控制字符。');
+  }
+  if (value.startsWith('/')) {
+    if (/^\/(?!\/)[A-Za-z0-9._~\-/]*$/.test(value) && !/(^|\/)\.\.?(\/|$)/.test(value)) return;
+    throw new LlmError('config', '同源代理路径只能包含字母、数字和 / . _ - ~，且不能含 .. 段。');
+  }
   let url: URL;
   try {
     url = new URL(value);
@@ -48,19 +57,49 @@ export function validateLlmEndpointBase(baseUrl: string): void {
 const endpoint = (baseUrl: string) =>
   `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`;
 
+/** 上游错误原文会进日志和导出存档：抹掉任何像凭据的片段。 */
+export const scrubSecrets = (text: string, apiKey = ''): string => {
+  let out = String(text);
+  const key = apiKey.trim();
+  if (key.length >= 6) out = out.split(key).join('[已隐藏]');
+  return out
+    .replace(/\b(Bearer|Basic)\s+[^\s"',;]+/gi, '$1 [已隐藏]')
+    .replace(/\b(?:sk|pk|rk|ak)[-_][A-Za-z0-9_-]{8,}/g, '[已隐藏]')
+    .replace(/\b(api[-_]?key|authorization|x-api-key|token)(["']?\s*[:=]\s*["']?)[^\s"',;}]+/gi, '$1$2[已隐藏]')
+    .replace(/[A-Za-z0-9_-]{32,}/g, '[已隐藏]');
+};
+
+/** RFC 9110 Retry-After accepts integer seconds or HTTP dates. Cap at ten minutes. */
+export function parseRetryAfterMs(value: string | null | undefined, now = Date.now()): number | null {
+  if (!value) return null;
+  const text = value.trim();
+  if (/^\d+$/.test(text)) return Math.min(600_000, Number(text) * 1000);
+  // Do not let Date.parse coerce arbitrary strings such as "-5" into dates.
+  if (!/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT$/i.test(text)) return null;
+  const date = Date.parse(text);
+  return Number.isFinite(date) ? Math.min(600_000, Math.max(0, date - now)) : null;
+}
+
+let opencodeRateLimitUntil = 0;
+export const modelRateLimitRemainingMs = (now = Date.now()) => Math.max(0, opencodeRateLimitUntil - now);
+
 const parseServerError = (
   status: number,
   body: string,
   baseUrl = '',
   proxyReached = false,
+  apiKey = '',
+  retryAfter: string | null = null,
 ): LlmError => {
   let detail = '';
   try {
     const json = JSON.parse(body);
-    detail = json?.error?.message ?? json?.message ?? '';
+    const raw = json?.error?.message ?? json?.message ?? '';
+    detail = typeof raw === 'string' ? raw : JSON.stringify(raw);
   } catch {
-    detail = body.slice(0, 160);
+    detail = body;
   }
+  detail = scrubSecrets(detail, apiKey).slice(0, 160);
   if (status === 401 || status === 403) {
     return new LlmError('auth', `密钥无效或没有权限（${status}）。${detail}`);
   }
@@ -87,7 +126,9 @@ const parseServerError = (
     );
   }
   if (status === 429) {
-    return new LlmError('rate', `请求太频繁或额度用完了（429）。稍后再试，或换个模型。${detail}`);
+    const retryMs = parseRetryAfterMs(retryAfter);
+    if (retryMs !== null) opencodeRateLimitUntil = Math.max(opencodeRateLimitUntil, Date.now() + retryMs);
+    return new LlmError('rate', `请求太频繁（429）。${retryMs !== null ? `建议等待约 ${Math.ceil(retryMs / 1000)} 秒。` : '稍后再试。'}${detail}`, retryMs ?? undefined);
   }
   return new LlmError('server', `服务端返回 ${status}。${detail}`);
 };
@@ -121,6 +162,29 @@ const networkError = () =>
   );
 
 const newSessionId = () => `ses_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
+const SESSION_KEY = 'startnow.opencode.router-session.v1';
+let inMemorySessionSeed = '';
+const sessionSeed = () => {
+  if (inMemorySessionSeed) return inMemorySessionSeed;
+  const generated = newSessionId();
+  try {
+    const existing = sessionStorage.getItem(SESSION_KEY);
+    inMemorySessionSeed = existing && /^ses_[a-z0-9_-]{12,96}$/i.test(existing) ? existing : generated;
+    if (!existing || existing !== inMemorySessionSeed) sessionStorage.setItem(SESSION_KEY, inMemorySessionSeed);
+  } catch {
+    inMemorySessionSeed = generated;
+  }
+  return inMemorySessionSeed;
+};
+
+/** Stable within a browser tab and one logical role/card thread, never an API credential. */
+export const scopedOpenCodeSessionId = (scope: string): string => {
+  let hash = 2166136261;
+  for (const character of scope) {
+    hash = Math.imul(hash ^ character.codePointAt(0)!, 16777619);
+  }
+  return `${sessionSeed()}_${(hash >>> 0).toString(16)}`;
+};
 
 // 居民都是随手发帖，默认只给最低思考度；模型不认这个参数时记住并回退
 const effortUnsupported = new Set<string>();
@@ -179,10 +243,24 @@ const chatHeaders = (config: LlmConfig, sessionId?: string) => {
   };
   // Go 套餐要求每个会话带稳定 session id，用于路由和缓存
   if (isOpenCodeBase(config.baseUrl)) {
-    headers['x-opencode-session'] = sessionId ?? newSessionId();
+    headers['x-opencode-session'] = sessionId ?? scopedOpenCodeSessionId('standalone');
   }
   return headers;
 };
+
+/** No prompts or API keys are included. One entry is emitted per provider attempt. */
+export interface ChatTelemetry {
+  model: string;
+  requestedMaxTokens: number;
+  finishReason?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  reasoningTokens?: number;
+  visibleChars: number;
+  durationMs: number;
+  outcome: 'ok' | 'empty' | 'truncated' | 'error';
+  reasoningBudgetExhausted: boolean;
+}
 
 type StreamChatOptions = {
   config: LlmConfig;
@@ -192,9 +270,12 @@ type StreamChatOptions = {
   onDelta: (text: string) => void;
   maxTokens?: number;
   lowEffort?: boolean;
+  onTelemetry?: (entry: ChatTelemetry) => void;
+  /** Internal per-attempt usage/finish snapshot; not user text. */
+  onStreamMetadata?: (part: Partial<ChatTelemetry>) => void;
 };
 
-async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
+async function rawStreamChatOnce(opts: StreamChatOptions): Promise<string> {
   const { config, messages, signal, sessionId, onDelta } = opts;
   const maxTokens = opts.maxTokens ?? 600;
   const lowEffort = opts.lowEffort ?? true;
@@ -220,6 +301,8 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
       body,
       config.baseUrl,
       res.headers.get('x-startnow-proxy') === '1',
+      config.apiKey,
+      res.headers.get('retry-after'),
     );
   }
 
@@ -227,8 +310,18 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
   if (contentType.includes('application/json')) {
     const data = await res.json().catch(() => null);
     const text = extractText(data?.choices?.[0]?.message?.content);
+    const usage = data?.usage;
+    opts.onStreamMetadata?.({
+      finishReason: data?.choices?.[0]?.finish_reason ?? undefined,
+      promptTokens: usage?.prompt_tokens,
+      completionTokens: usage?.completion_tokens,
+      reasoningTokens: usage?.completion_tokens_details?.reasoning_tokens,
+    });
+    if (data?.choices?.[0]?.finish_reason === 'length') {
+      throw new LlmError('truncated', '模型达到输出 Token 上限，已丢弃可能不完整的回复。');
+    }
     if (!text.trim()) {
-      throw new LlmError('server', '模型没有返回任何文字，换个模型试试。');
+      throw new LlmError('server', '模型没有返回任何文字，请检查推理 Token 与输出上限。');
     }
     onDelta(text);
     return text;
@@ -244,8 +337,12 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
   let dataLines: string[] = [];
   let eventSize = 0;
 
+  let finished = false;
+  let finishReason: string | undefined;
+  let completionTokens: number | undefined;
+  let reasoningTokens: number | undefined;
   const parsePayload = (payload: string): unknown => {
-    if (payload === '[DONE]') return null;
+    if (payload === '[DONE]') { finished = true; return null; }
     try {
       return JSON.parse(payload);
     } catch {
@@ -254,8 +351,20 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
   };
   const applyPayload = (json: any) => {
     if (!json) return;
+    if (typeof json?.choices?.[0]?.finish_reason === 'string') {
+      finishReason = json.choices[0].finish_reason;
+      opts.onStreamMetadata?.({ finishReason });
+    }
+    if (json?.usage) {
+      completionTokens = json.usage.completion_tokens;
+      reasoningTokens = json.usage.completion_tokens_details?.reasoning_tokens;
+      opts.onStreamMetadata?.({
+        promptTokens: json.usage.prompt_tokens,
+        completionTokens, reasoningTokens,
+      });
+    }
     if (json?.error) {
-      throw new LlmError('server', `模型返回错误：${String(json.error?.message ?? 'stream error').slice(0, 160)}`);
+      throw new LlmError('server', `模型返回错误：${scrubSecrets(String(json.error?.message ?? 'stream error'), config.apiKey).slice(0, 160)}`);
     }
     const delta = extractText(json?.choices?.[0]?.delta?.content ?? json?.choices?.[0]?.message?.content);
     if (delta) {
@@ -294,7 +403,7 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
   };
 
   try {
-    while (true) {
+    while (!finished) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
@@ -306,9 +415,11 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
       }
       if (buffer.length > MAX_SSE_EVENT) throw new LlmError('server', '模型单行流式数据过长。');
     }
-    buffer += decoder.decode();
-    if (buffer) parseLine(buffer); // 支持末尾没有换行的最后一帧
-    flushEvent();
+    if (!finished) {
+      buffer += decoder.decode();
+      if (buffer) parseLine(buffer); // 支持末尾没有换行的最后一帧
+      flushEvent();
+    }
   } catch (err) {
     if (err instanceof LlmError) throw err;
     const classified = requestError(err, signal);
@@ -318,11 +429,67 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
     }
     throw classified;
   } finally {
-    reader.releaseLock();
+    await reader.cancel().catch(() => {});
+    try { reader.releaseLock(); } catch { /* 已释放 */ }
   }
 
-  if (!full.trim()) throw new LlmError('server', '模型没有返回任何文字，换个模型试试。');
+  if (finishReason === 'length') {
+    throw new LlmError('truncated', '模型达到输出 Token 上限，已丢弃可能不完整的回复。');
+  }
+  if (finishReason === 'content_filter') {
+    throw new LlmError('server', '模型输出被上游内容过滤，未采用此结果。');
+  }
+  if (!full.trim()) {
+    const exhausted = completionTokens !== undefined && reasoningTokens !== undefined &&
+      completionTokens > 0 && reasoningTokens >= completionTokens;
+    throw new LlmError('server', exhausted
+      ? '模型没有返回任何文字：完成 Token 全部用于推理。'
+      : '模型没有返回任何文字，请检查流结束原因。');
+  }
+  // Compatibility mode: services without a terminal marker must at least end
+  // at a complete sentence, not leave the user with an unfinished instruction.
+  if (!finished && !finishReason && /(?:先把|请把|再把|可以先把|准备|正在|然后|因为|但是|如果|以及|并且|或者|一个|一份|一条|一段|先|将|让|给|把|要|地|得|的|，|、|：|:)$/.test(full.trim())) {
+    throw new LlmError('server', '模型流没有结束标记，而且停在未说完的连接词或动作上；已丢弃可能被截断的回复。');
+  }
   return full;
+}
+
+async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
+  const started = performance.now();
+  const meta: ChatTelemetry = {
+    model: opts.config.model.trim(),
+    requestedMaxTokens: opts.maxTokens ?? 600,
+    visibleChars: 0,
+    durationMs: 0,
+    outcome: 'error',
+    reasoningBudgetExhausted: false,
+  };
+  try {
+    const text = await rawStreamChatOnce({
+      ...opts,
+      onDelta: (chunk) => {
+        meta.visibleChars += chunk.length;
+        opts.onDelta(chunk);
+      },
+      onStreamMetadata: (part) => {
+        Object.assign(meta, part);
+        opts.onStreamMetadata?.(part);
+      },
+    });
+    meta.visibleChars = text.length;
+    meta.outcome = 'ok';
+    return text;
+  } catch (err) {
+    meta.outcome = err instanceof LlmError && err.kind === 'truncated' ? 'truncated'
+      : err instanceof LlmError && /没有返回任何文字/.test(err.message) ? 'empty' : 'error';
+    throw err;
+  } finally {
+    meta.durationMs = Math.round(performance.now() - started);
+    meta.reasoningBudgetExhausted = (meta.outcome === 'empty' || meta.outcome === 'truncated') &&
+      meta.visibleChars === 0 && (meta.completionTokens ?? 0) > 0 &&
+      (meta.reasoningTokens ?? -1) >= (meta.completionTokens ?? 0);
+    try { opts.onTelemetry?.(meta); } catch { /* telemetry must never affect a user response */ }
+  }
 }
 
 /**
@@ -344,7 +511,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<string> {
     });
   } catch (err) {
     if (emitted || opts.signal.aborted) throw err;
-    if (!(err instanceof LlmError) || err.kind === 'auth' || err.kind === 'config') throw err;
+    if (!(err instanceof LlmError) || err.kind === 'auth' || err.kind === 'config' || err.kind === 'quota' || err.kind === 'rate') throw err;
     return streamChatOnce({
       ...opts,
       config: { ...opts.config, model: fallback },
@@ -386,6 +553,8 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
       body,
       config.baseUrl,
       res.headers.get('x-startnow-proxy') === '1',
+      config.apiKey,
+      res.headers.get('retry-after'),
     );
   }
 

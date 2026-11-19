@@ -239,7 +239,8 @@ test('本轮变动仅卡片论坛，不改 room 入口的关键源码',()=>{
   assert.ok(!app.includes('personaBrag('),'不再使用无关联的五小时随机炫耀');
   assert.ok(app.includes('onAdvanceBragMinutes'));
   assert.ok(app.includes('sourceCardId'));
-  assert.ok(app.includes("window.location.href = '/room.html'"),'保留原有独立群聊入口');
+  assert.ok(app.includes("setView('room')"),'群聊入口并入主站视图');
+  assert.ok(!app.includes("window.location.href = '/room.html'"),'不再跳出到独立群聊页');
 });
 
 test('bragOnly 作者调试只结算炫耀，不生成烦恼、到场、helper 或回复',async()=>{
@@ -284,7 +285,7 @@ test('模型成功返回具体动作+结果时标 model；系统规则和低信�
 });
 
 test('TSX 新增入口和卡片展示至少通过 TypeScript 语法编译',()=>{
-  for (const name of ['App.tsx','components/AdminPanel.tsx']) {
+  for (const name of ['App.tsx','components/AdminPanel.tsx','components/Onboarding.tsx','components/RoomView.tsx']) {
     const full=path.join(__dirname,'..','src',name);
     const result=ts.transpileModule(fs.readFileSync(full,'utf8'),{
       fileName:full,reportDiagnostics:true,
