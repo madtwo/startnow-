@@ -864,9 +864,9 @@ function errorNotice(name: string, willRetry: boolean): string {
 const CARE_ADVICE = /你应该|你可以|你试试|建议你|不如你|要不你|你先|你得|至少你|下次你|建议(?:你)?|试试(?:把|先)?|不如先/;
 const CARE_FALLBACK: Record<string, string> = {
   shenmo: '我这边也常分神，坐着坐着手就摸过去了。',
-  weini: '嗯……我也差不多，专心不了太久。',
-  miaoze: '我自己的专注也一般，常常没坐多久就走神。',
-  yanggao: '我也坐不住太久，一会儿就想摸点别的。',
+  weini: '嗯……我也没坐住多久，心里总惦记着手机。',
+  miaoze: '我试过把手机放远，还是会惦记；专注这事我没什么好办法。',
+  yanggao: '我也一样，书没翻两页，手已经摸到手机了。',
 };
 /** In a care/about-me turn, keep only self-focused statements; drop questions and advice. */
 function careSafeLine(text: string): string {
@@ -986,6 +986,7 @@ async function generateComment(
     (!card.comments.length && card.authorKind === 'player' &&
       ['greeting', 'noise', 'laugh'].includes(inferSocialIntent(card.text)))
   );
+  const careFocus = !card.intro && commentFocusesOnPersona(card, persona, sourceCommentId);
 
   if (isMock(ctx.config)) {
     const isShort = shortContact;
@@ -1002,6 +1003,10 @@ async function generateComment(
         persona,
         '',
         `${COMMENT_RULES}${
+          careFocus
+            ? ' 对方是在关心你，不是求助：只写一句关于你自己的陈述，不能出现问号，不要给建议，不要追问对方。'
+            : ''
+        }${
           persona.intimacy < 22 && card.comments.length === 0
             ? ' 你和这个人还不熟：句子短一点，别急着给建议，可以说「我也说不好」。'
             : ''
@@ -1025,7 +1030,7 @@ async function generateComment(
     );
     let line = cleanLine(text);
     if (!line) throw new Error('模型返回空文本');
-    if (!card.intro && commentFocusesOnPersona(card, persona, sourceCommentId)) {
+    if (careFocus) {
       const safe = careSafeLine(line);
       if (!safe) {
         ctx.logs.push(`${persona.name} 关心场景只剩问句/建议，改用克制的自述`);

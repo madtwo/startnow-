@@ -59,6 +59,14 @@ test('care turn keeps the first self-disclosure but removes the follow-up questi
   assert.match(output.logs.join(' '), /关心场景剔除问句/);
 });
 
+test('a clean self-report in a care turn is kept as model output', async () => {
+  const selfReport = '累倒不累，就是手比脑子快，解锁完才反应过来自己在干嘛。';
+  const { output } = await generate(() => json(selfReport));
+  const reply = output.cards[0].comments.filter((row) => row.authorId === 'shenmo').at(-1);
+  assert.equal(reply.text, selfReport);
+  assert.equal(reply.origin, 'model');
+});
+
 test('advice-only model output in a care turn falls back to a calm self-report', async () => {
   const { output } = await generate(() => json('你可以试试把手机交给室友，肯定能管住。'));
   const reply = output.cards[0].comments.filter((row) => row.authorId === 'shenmo').at(-1);
