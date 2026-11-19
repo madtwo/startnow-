@@ -37,6 +37,25 @@ localStorage
   React 视图：下一步 / 论坛 / 发一张 / 卡片详情 / 便签 / 我的 / 后台
 ```
 
+群聊是**第二个视图**（`view === 'room'`），和上面这套并列但数据分开：
+
+```
+localStorage
+  ├─ room          当前房间：消息 / 排期 / 下一步 / 群友 / 额度
+  ├─ roomsettings  热闹度、时间不停止、每日条数
+  └─ archives      旧群聊（可放回当下）
+        │
+        ▼
+  RoomView 每 4 秒 tickRoom()（只在页面可见时跑）
+        │
+        ├─ 按天刷新处境、衰减熟悉度
+        ├─ AI 自己那件小事到点 → 群里通报
+        ├─ 落一条到期排期（每 tick 最多一条）
+        └─ 没人说话 → 按打分选一个醒着的人开口
+```
+
+两套视图共享 API 配置和匿名身份，其余互不影响。细节见下面「群聊（第二个视图）」。
+
 ---
 
 ## 运行与构建
@@ -66,6 +85,10 @@ src/
   config/providers.ts     服务商预设、isReady/isMock/configLabel
   lib/
     cards.ts              卡片状态机、到场、回帖、下一步、完成、时间追赶
+    castGen.ts            群聊人设现拼：姓名/学校/专业/年级/性格 + 处境推算
+    tone.ts               群聊情绪判定（heavy / stuck / neutral）
+    forumPersonaMind.ts   四位论坛同伴的「怎么听、怎么看、怎么接」行为视角
+    room.ts               群聊调度：排期、熟悉度、两段式回复、旧群聊交换
     actions.ts            困扰主题判定、三档动作链、按主题选下一步
     dialogue.ts           社交意图（寒暄/语气词/玩笑/挑衅/求助）、关系标签、短回复
     mind.ts               独立心智：心情、念头、惦记、被谁影响、提示词
@@ -93,6 +116,11 @@ src/
     SettingsDialog.tsx    API 设置
     CrisisCard.tsx        危机求助卡
     Avatar.tsx
+    RoomView.tsx          群聊容器：状态、tick、补算、面板
+    ChatRoom.tsx          群聊气泡流、引用、@、角落入口
+    RoomPanel.tsx         群聊设置：热闹度、每日条数、时间不停止、换人
+    StepPanel.tsx         群聊里的「下一步」面板
+    ArchivePanel.tsx      旧群聊：放回当下 / 舍弃
 ```
 
 ---
@@ -270,6 +298,69 @@ mock 模式下，`mockComment` 有 35% 概率接上一条其他同伴的话；�
 
 ---
 
+## 群聊（第二个视图）
+
+群聊和「试试 / 论坛 / 我的」平级，`view === 'room'` 时懒加载 `RoomView`。它和卡片是**两套数据、共享 API 与身份**：卡片读 `shudong.cards.*`，群聊读 `shudong.room.*`，互不覆盖。
+
+### 数据
+
+- `Room`：`messages` / `scheduled` / `steps` / `cast` / `gone` / `usage`；当前房间只有一个，换人或放回时会进存档。
+- `Message`：冗余存 `authorName / color / avatarKey`——换一批群友之后，历史消息仍然有名字和头像。
+- `ScheduledMessage.intent`：`reply | peer | ambient | react | comfort | advise`；`advise` 额外带 `adviceId`（这条建议绑的动作）和 `adviceVariant`（换句式用）。
+- `Persona` 在群聊侧多三层：`relations`（对 'me' 和彼此，从 0 开始）、`situation`（此刻处境，按天刷新）、`chattiness` + `awake`（话量与作息）。
+
+### 人设是现拼的（castGen.ts）
+
+`pickCast()` 不再从固定池里抽，而是调 `generateCast()`：
+
+- 姓名（姓池 × 男女名池）、学校（地名 × 类型 × 大学/学院，全部虚构）、专业（8 个专业表）、年级、性格（4 原型 × 3 套说法）当场组合；四个人的专业和年级都不重复。
+- 处境 = `专业 × 年级 × 当下时间`：学期节奏（开学/期中/期末/暑假/寒假）× 时段（早八/上午/午休/晚自习/半夜）× 专业专属活动。
+- `pathKindFor()` 决定有没有到岔路口：找实习（3–7 月，大二起）、保研/秋招（9–10 月，大三起）、考研（11–12 月，大三起）。没到季节就不提这些事。
+- 处境**按天刷新**：`refreshSituations()` 在 tick 时比对 `situation.day`，所以昨天的心事今天会变。
+- 台词池与默认心智按 `archetype` 取，不按人名取——换人不需要重写内容。
+
+### 熟悉度从 0 开始
+
+- `relations` 初始为空，`intimacy` 由 `relations.me` 投影；对同伴也各自记一份。
+- 上涨：被回复 +1、对方说了重的事 +2、被同伴接话 +0.6、旁听 +0.15。
+- 三天没聊开始衰减（最多 −6）——符合「他们会忘事」这条设定。
+- 记忆只有两个来源：自身背景（静态，进 prompt）+ 聊天里发生的事；没有预设的共同经历。
+
+### 一次 tick（room.ts）
+
+`RoomView` 每 4 秒调一次 `tickRoom`，只在页面可见时跑：
+
+1. `prepareCast`：按天刷新处境、衰减关系。
+2. 当日额度用完就直接返回（不报错，只是不动）。
+3. AI 自己那件小事到点 → 群里通报「我做了」。
+4. 取一条到期的排期消息，**每 tick 最多落一条**，保证像人在打字。
+5. 没人说话且超过间隔 → 按打分选一个人主动开口；只有醒着的人才可能开口。
+
+### 情绪句：先陪伴，再给建议
+
+- `tone.ts` 本地判定 `heavy | stuck | neutral`；自伤类内容先被 `findCrisis` 拦走，不进这条链路。
+- `neutral` 走普通回复；`heavy` 排 2 条陪伴 + 2 条建议，`stuck` 排 1 + 2。
+- 建议**不靠模型自觉**：先用 `pickActions` 选 3 个不同动作，两个 AI 各锁一个 `actionId`，再各用一套不同句式；「不一样」由动作 ID 保证。
+- **不设单次条数上限**，只受每日额度和群友人数（4 人）约束。
+- 陪伴与建议**不接龙**：一段安慰后面再跟两句闲扯，会把正事盖过去。
+
+### 玩家关心 AI 时
+
+`roomPrompt` 的 `focus`：当玩家这句是在关心或询问说话者本人（而不是求助）时，`reply / comfort / advise` 三种模式都要求「先回应关于你自己的事」，再继续原本的任务。判定在 `playerIsFocusingOnPersona()`，明确要建议的话不触发。
+
+### 旧群聊
+
+- 「放回当下」是**交换**：目标房间回到当下，当前房间进存档，谁都不丢；恢复时把排期推到未来，避免一恢复就补算一堆。
+- 舍弃必须显式按下，不自动发生；存档上限 8，满了提示先舍弃一个，不再静默截断。
+
+### 不要做
+
+- 不要把 `buildPersonaPrompt` 改成群聊专用：卡片和群聊共用它，改了会污染卡片版；群聊的处境与关系在 `systemForRoom` 里另拼。
+- 不要让 `comfort` / `advise` 触发 AI 互相接龙。
+- 不要让 `ambient` 带建议：没人跟你说话时，只是随口说一句自己的事。
+
+---
+
 ## 不变量（改动前先核对）
 
 1. 不诊断、不治疗、不替代专业帮助。
@@ -328,6 +419,9 @@ shudong.world.v1
 shudong.settings.v1
 shudong.identity.v2
 shudong.config.v1
+shudong.room.v1            群聊当前房间（消息/排期/下一步/群友/额度）
+shudong.roomsettings.v1    群聊旋钮：热闹度、时间不停止、每日条数
+shudong.archives.v1        旧群聊（最多 8 个，可放回当下）
 startnow.onboarded
 startnow.mode
 startnow.homeTab
@@ -364,7 +458,10 @@ npm run build
 - 图片上传只有入口，未做存储与审核。
 - 危机识别是关键词级，不能承担临床判断。
 - 真实模型未做完整语气回归；mock 只用于展示交互。
-- 没有自动化测试；改动后以 `npm run build` + 手工链路为准。
+- 群聊**没有真正的后台运行**：页面关掉就不跑，「时间不停止」只是回来时按离开时长补算（最多 4 条）。Service Worker 存活时间不够，也没有后端推送。
+- 群聊消息截断在 400 条（localStorage 5MB 的现实约束），旧群聊存档保留最后 150 条。
+- 群聊的处境按天刷新，不是每分钟；同一天里同一个人的生活是稳定的。
+- 自动化测试覆盖卡片与群聊的纯逻辑（`npm run test:all`），但仍以 `npm run build` + 手工链路为最终验收。
 
 ---
 
