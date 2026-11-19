@@ -464,6 +464,26 @@ export function generatePersona(
     (arch.awake[0] + randInt(-1, 1) + 24) % 24,
     (arch.awake[1] + randInt(-1, 1) + 24) % 24,
   ];
+  // 插嘴概率：原型决定基准，再按话量抖动；快的人几秒就接，慢的人要等半分钟
+  const reactivity = clamp(
+    arch.chattiness * 0.7 + 0.15 + (Math.random() - 0.5) * 0.16,
+    0.2,
+    0.9,
+  );
+  const paceBase: Record<Archetype, [number, number]> = {
+    quiet: [9, 26],
+    shy: [8, 24],
+    rational: [4, 14],
+    warm: [3, 11],
+  };
+  const pace: [number, number] = [
+    paceBase[archetype][0] + randInt(-1, 2),
+    paceBase[archetype][1] + randInt(-2, 3),
+  ];
+  const peak: [number, number] = [
+    (awake[0] + randInt(0, 2)) % 24,
+    (awake[0] + 4 + randInt(0, 2)) % 24,
+  ];
   const worryShort = situation.worry.split('，').slice(-1)[0];
 
   return {
@@ -497,6 +517,9 @@ export function generatePersona(
     relationsAt: now,
     situation,
     chattiness,
+    reactivity,
+    pace,
+    peak,
     awake,
   };
 }

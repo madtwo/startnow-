@@ -347,7 +347,7 @@ const systemForRoom = (persona: Persona, cast: Persona[]): string =>
 const findMessage = (room: Room, id?: string): Message | undefined =>
   id ? room.messages.find((m) => m.id === id) : undefined;
 
-type Mode = 'welcome' | 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise';
+type Mode = 'welcome' | 'room' | 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise';
 
 interface LineExtra {
   /** advise 模式：这条建议绑定的动作 */
@@ -383,6 +383,7 @@ const fallbackLine = (persona: Persona, mode: Mode, extra: LineExtra): string =>
   }
   if (mode === 'comfort') return mockLine(persona, 'comfort');
   if (mode === 'welcome') return `你好，我是${persona.name}，${persona.major}${persona.cohort}。`;
+  if (mode === 'room') return mockLine(persona, 'reply');
   return mockLine(persona, mode);
 };
 
@@ -457,29 +458,99 @@ const updateMind = (room: Room, personaId: string, patch: (p: Persona) => Person
   cast: room.cast.map((p) => (p.id === personaId ? patch(p) : p)),
 });
 
-const schedulePeer = (
+/* ------------------------------------------------------------------ *
+ * 谁会被一条消息吸引：每个人自己掷骰，而不是「玩家说话就必有人回」
+ * ------------------------------------------------------------------ */
+
+interface ReactionOptions {
+  /** 这条是 AI 说的：最多引一个人接，避免 AI 之间无限对聊 */
+  aiTrigger?: boolean;
+  /** 兜底规则：玩家的话太久没人接，强制安排一个人回 */
+  forced?: boolean;
+}
+
+/** 这个人对这条消息的插嘴概率。 */
+const reactionChance = (
   room: Room,
-  after: Message,
   persona: Persona,
-  depth: number,
+  trigger: Message,
   now: number,
-  profile: LivelinessProfile,
-): ScheduledMessage | null => {
-  if (depth >= profile.chainMax) return null;
-  if (Math.random() >= profile.peerChance) return null;
-  const others = room.cast.filter((p) => p.id !== persona.id);
+  liveliness: number,
+): number => {
+  const hour = new Date(now).getHours();
+  const awake = awakeFactor(persona, hour);
+  const base = persona.reactivity ?? 0.45;
+  if (awake < 0.4) return base * 0.15; // 睡着的人基本不接
+  if (trigger.mentions?.includes(persona.id)) return 1; // 被点名，一定回
+  const topic = inferTrouble(trigger.text, 'self');
+  const relevance = (persona.weights[topic] ?? 0) / 100;
+  const peak = persona.peak ? inWindow(hour, persona.peak) : false;
+  const asked = /[?？]|吗|呢|怎么|为什么|要不要|有没有/.test(trigger.text) ? 0.15 : 0;
+  const last = [...room.messages].reverse().find((m) => m.authorId === persona.id);
+  const gap = last ? (now - last.at) / 1000 : 999;
+  const cooldown = gap < 20 ? -0.35 : gap < 45 ? -0.15 : 0;
+  const lively = (clamp01(liveliness) - 0.5) * 0.3;
+  return clamp01(base + relevance + awake * 0.1 + (peak ? 0.15 : 0) + asked + cooldown + lively);
+};
+
+const delayFor = (persona: Persona, now: number): number => {
+  const [lo, hi] = persona.pace ?? [6, 18];
+  return now + rand(lo, hi) * 1000;
+};
+
+/**
+ * 一条新消息进来：每个 AI 各自决定要不要接。
+ * 负面情绪优先走「安慰 + 建议」，同一条只触发一次。
+ */
+function considerReactions(
+  room: Room,
+  trigger: Message,
+  now: number,
+  liveliness: number,
+  opts: ReactionOptions = {},
+): Room {
+  if (trigger.kind !== 'chat') return room;
+  const tone = emotionalSignal(trigger.text);
+  if (tone !== 'neutral' && !trigger.careHandled) {
+    const guarded: Room = {
+      ...room,
+      messages: room.messages.map((m) => (m.id === trigger.id ? { ...m, careHandled: true } : m)),
+    };
+    return scheduleComfortThenAdvice(guarded, trigger, trigger.text, tone, now);
+  }
+
   const queued = new Set(room.scheduled.map((s) => s.personaId));
-  const candidates = others.filter((p) => !queued.has(p.id));
-  if (!candidates.length) return null;
-  const next = pick(candidates);
-  return {
-    id: uid(),
-    personaId: next.id,
-    at: now + rand(3_000, 9_000),
-    intent: 'peer',
-    replyTo: after.id,
-    depth: depth + 1,
-  };
+  const limit = opts.forced ? 1 : opts.aiTrigger ? 1 : 2;
+  const candidates = room.cast
+    .filter((p) => p.id !== trigger.authorId && !queued.has(p.id))
+    .map((p) => ({ p, chance: reactionChance(room, p, trigger, now, liveliness) }))
+    .sort((a, b) => b.chance - a.chance);
+
+  const scheduled: ScheduledMessage[] = [];
+  for (const { p, chance } of candidates) {
+    if (scheduled.length >= limit) break;
+    if (!opts.forced && Math.random() >= chance) continue;
+    const direct = opts.forced || Boolean(trigger.mentions?.includes(p.id));
+    scheduled.push({
+      id: uid(),
+      personaId: p.id,
+      at: delayFor(p, now),
+      intent: 'reply',
+      // 点名的才定向回；否则就是对着群里说
+      replyTo: direct ? trigger.id : undefined,
+      depth: opts.aiTrigger ? 1 : 0,
+    });
+  }
+  if (!scheduled.length) return room;
+  return { ...room, scheduled: [...room.scheduled, ...scheduled] };
+}
+
+/** 玩家最近一句还没有人接的那条消息。 */
+const unansweredPlayerMessage = (room: Room): Message | null => {
+  const player = [...room.messages].reverse().find((m) => m.authorKind === 'player' && m.kind === 'chat');
+  if (!player) return null;
+  const answered = room.messages.some((m) => m.replyTo === player.id);
+  return answered ? null : player;
 };
 
 const pushMessage = (room: Room, message: Message, now: number): Room => ({
@@ -557,18 +628,17 @@ const pickSpeaker = (room: Room, topic: string, now: number, exclude: string[] =
   return scored[0]?.p ?? null;
 };
 
-/** 让一个 AI 真的说完一句话，并处理心智、记忆、关系、追话。 */
+/** 让一个 AI 真的说完一句话，并处理心智、记忆、关系，以及这条会不会引来别人。 */
 const speak = async (
   room: Room,
   ctx: Ctx,
   persona: Persona,
-  intent: 'welcome' | 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise',
+  intent: 'welcome' | 'room' | 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise',
   replyTo: string | undefined,
   now: number,
-  profile: LivelinessProfile,
-  depth = 0,
+  liveliness: number,
   extra: LineExtra = {},
-  allowChain = true,
+  allowReactions = true,
 ): Promise<Room> => {
   const text = await generateLine(ctx, room, persona, intent, replyTo, now, extra);
   // 说不出来就不发：一张假台词会把整段对话带偏
@@ -582,24 +652,25 @@ const speak = async (
       ? { ...p, mind: mindAfterPeer(p, last.authorName, last.text, now) }
       : { ...p, mind: mindAfterReply(p, last?.authorName ?? '群里的人', now) },
   );
+  // 安慰 / 建议比普通闲聊更拉近关系
+  const caring = intent === 'comfort' || intent === 'advise';
   if (last?.authorKind === 'player') {
-    // 认真回你一句，比只是在旁边看着，认得更快
-    next = updateMind(next, persona.id, (p) =>
-      ({
-        ...bump(p, 'me', isHeavyShare(last.text) ? 2 : 1, now),
-        memory: recordReplyMemory(p, last.authorName, last.text, next.id, now),
-      }),
-    );
+    next = updateMind(next, persona.id, (p) => ({
+      ...bump(p, 'me', caring || isHeavyShare(last.text) ? 2 : 1, now),
+      memory: recordReplyMemory(p, last.authorName, last.text, next.id, now),
+    }));
   } else if (last?.authorKind === 'persona') {
-    next = updateMind(next, persona.id, (p) => bump(p, last.authorId, 0.6, now));
+    next = updateMind(next, persona.id, (p) => bump(p, last.authorId, caring ? 1.5 : 0.6, now));
+    if (caring) {
+      // 被安慰的那个人也记住了这份好
+      next = updateMind(next, last.authorId, (p) => bump(p, persona.id, 1.5, now));
+    }
   }
   // 别人说话你听着，也算一点点认识
   if (text.replace(/\s+/g, '').length > 6) next = heardAbout(next, persona.id, now);
-  // 陪伴和建议不接龙：一段安慰之后再来两句闲扯，会把正事盖过去。
-  // 刚回完玩家也不接龙：场子留给他，别在他面前自己聊起来。
-  if (allowChain && last?.authorKind !== 'player') {
-    const peer = schedulePeer(next, message, persona, depth, now, profile);
-    if (peer) next = { ...next, scheduled: [...next.scheduled, peer] };
+  // 陪伴、建议、欢迎、收尾不再引别人接话：这几类被接一句会很怪
+  if (allowReactions && !caring && intent !== 'welcome' && intent !== 'react') {
+    next = considerReactions(next, message, now, liveliness, { aiTrigger: true });
   }
   return next;
 };
@@ -609,7 +680,7 @@ const deliver = async (
   ctx: Ctx,
   item: ScheduledMessage,
   now: number,
-  profile: LivelinessProfile,
+  liveliness: number,
 ): Promise<Room> => {
   const persona = room.cast.find((p) => p.id === item.personaId);
   let next = { ...room, scheduled: room.scheduled.filter((s) => s.id !== item.id) };
@@ -625,7 +696,7 @@ const deliver = async (
 
   // 群里刚进来人：先打个招呼，说清自己是谁
   if (item.intent === 'welcome') {
-    return speak(next, ctx, persona, 'welcome', undefined, now, profile, 0, {}, false);
+    return speak(next, ctx, persona, 'welcome', undefined, now, liveliness, {}, false);
   }
 
   // 先陪伴、后建议：这两类不接龙，免得一段安慰变成闲聊
@@ -638,8 +709,7 @@ const deliver = async (
       item.intent,
       item.replyTo,
       now,
-      profile,
-      0,
+      liveliness,
       item.intent === 'advise'
         ? {
             adviceLabel: label,
@@ -653,8 +723,10 @@ const deliver = async (
     return next;
   }
 
-  const mode: Mode = item.intent === 'peer' ? 'peer' : item.intent === 'reply' ? 'reply' : 'ambient';
-  next = await speak(next, ctx, persona, mode, item.replyTo, now, profile, item.depth ?? 0);
+  // 定向回某一条 vs 对着群里说一句
+  const mode: Mode =
+    item.intent === 'peer' ? 'peer' : item.intent === 'reply' ? (item.replyTo ? 'reply' : 'room') : 'ambient';
+  next = await speak(next, ctx, persona, mode, item.replyTo, now, liveliness);
   return next;
 };
 
@@ -744,12 +816,22 @@ export async function tickRoom(input: TickInput): Promise<TickOutput> {
   room = await tickPersonaSteps(room, ctx, now);
   room = maybePersonaStep(room, now, input.settings.liveliness);
 
+  // 兜底：你说完话以后，群里已经过了 10 条还没人回你，下一个就安排人回你。
+  // 一个集体总得照顾每个人，不能让人一直站在那儿。
+  const pending = unansweredPlayerMessage(room);
+  if (pending) {
+    const since = room.messages.filter((m) => m.kind === 'chat' && m.at > pending.at).length;
+    if (since >= 10) {
+      room = considerReactions(room, pending, now, input.settings.liveliness, { forced: true });
+    }
+  }
+
   const due = room.scheduled.filter((s) => s.at <= now).sort((a, b) => a.at - b.at);
   if (due.length) {
     const item = due[0];
     const person = room.cast.find((p) => p.id === item.personaId);
     if (person) {
-      room = await deliver(room, ctx, item, now, profile);
+      room = await deliver(room, ctx, item, now, input.settings.liveliness);
     } else {
       room = { ...room, scheduled: room.scheduled.filter((s) => s.id !== item.id) };
     }
@@ -757,7 +839,7 @@ export async function tickRoom(input: TickInput): Promise<TickOutput> {
     const speaker = pickSpeaker(room, room.messages.filter((m) => m.kind === 'chat').slice(-1)[0]?.text ?? '', now);
     // 主动开口的人得是真的醒着；没醒的人只在你说话时可能应一声
     if (speaker && awakeFactor(speaker, new Date(now).getHours()) >= 0.6 && cooldownOk(room, speaker.id, now, profile.cooldown)) {
-      room = await speak(room, ctx, speaker, 'ambient', undefined, now, profile);
+      room = await speak(room, ctx, speaker, 'ambient', undefined, now, input.settings.liveliness);
     }
   }
 
@@ -867,52 +949,9 @@ export function postPlayerMessage(
     lastSeenAt: now,
   };
 
-  // 情绪/迷茫的句子走另一条路：先陪伴，再给建议
-  const tone = emotionalSignal(clean);
-  if (tone !== 'neutral') {
-    return scheduleComfortThenAdvice(next, message, clean, tone, now);
-  }
-
-  const profile = livelinessProfile(liveliness);
-  const queued = new Set(next.scheduled.map((s) => s.personaId));
-  const scheduled: ScheduledMessage[] = [];
-
-  // 被 @ 的人一定回，但什么时候回还是随机的
-  for (const person of next.cast.filter((p) => mentions.includes(p.id))) {
-    if (queued.has(person.id)) continue;
-    queued.add(person.id);
-    scheduled.push({
-      id: uid(),
-      personaId: person.id,
-      at: now + rand(2_500, 9_000),
-      intent: 'reply',
-      replyTo: message.id,
-      depth: 0,
-    });
-  }
-
-  const target =
-    1 + (Math.random() < profile.extraReply[0] ? 1 : 0) + (Math.random() < profile.extraReply[1] ? 1 : 0);
-  let extra = Math.max(0, target - scheduled.length);
-  // 已经点名叫人了，其他人插话的概率减半
-  if (mentions.length && Math.random() >= 0.5) extra = 0;
-  extra = Math.min(extra, Math.max(0, 3 - scheduled.length));
-
-  for (let i = 0; i < extra; i++) {
-    const speaker = pickSpeaker(next, clean, now, [...queued]);
-    if (!speaker) break;
-    queued.add(speaker.id);
-    scheduled.push({
-      id: uid(),
-      personaId: speaker.id,
-      at: now + rand(3_000, 14_000) + i * 2_500,
-      intent: 'reply',
-      replyTo: message.id,
-      depth: 0,
-    });
-  }
-
-  return { ...next, scheduled: [...next.scheduled, ...scheduled] };
+  // 交给统一反应机制：谁接、几个人接，由每个人自己的阈值决定。
+  // 负面情绪在 considerReactions 里走「先安慰、再建议」的专用通道。
+  return considerReactions(next, message, now, liveliness);
 }
 
 /** 玩家自己加一条下一步。 */

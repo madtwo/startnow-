@@ -14,6 +14,7 @@ const { roomPrompt } = lib('prompts');
 const NOW = new Date('2026-11-19T15:30:00+08:00').getTime();
 const ME = { id: 'me', name: '我', avatarKey: 'petal', bio: '' };
 const SETTINGS = { liveliness: 0.5, timeFlow: false, dailyMessages: 400 };
+const MOCK = { providerId: 'mock', baseUrl: '', model: 'demo', apiKey: '' };
 
 const freshRoom = () => {
   const base = room.newRoom(generateCast(4, NOW), NOW);
@@ -104,9 +105,58 @@ test('情绪句：先陪伴、再至少两条不同的建议', () => {
   assert.ok(advise.every((s) => !comforters.has(s.personaId)), '陪伴的人和给建议的人不要重叠');
 });
 
-test('普通聊天不触发两段式', () => {
+test('普通聊天：只会有人以「对群里说」的方式接，最多两条', () => {
   const sent = room.postPlayerMessage(freshRoom(), '今天食堂的鸡腿不错', ME, [], undefined, NOW, 0.5);
   assert.ok(sent.scheduled.every((s) => s.intent === 'reply'));
+  assert.ok(sent.scheduled.length <= 2);
+  // 没被 @ 的话，不应该定向挂在玩家那句下面
+  assert.ok(sent.scheduled.every((s) => s.replyTo === undefined));
+});
+
+test('每个人的反应阈值、语速、爱说话的时段都不一样', () => {
+  const cast = generateCast(4, NOW);
+  for (const p of cast) {
+    assert.ok((p.reactivity ?? 0) > 0 && (p.reactivity ?? 0) <= 1, `${p.name} 缺反应阈值`);
+    assert.equal((p.pace ?? []).length, 2);
+    assert.equal((p.peak ?? []).length, 2);
+  }
+  assert.equal(new Set(cast.map((p) => (p.reactivity ?? 0).toFixed(3))).size, 4, '阈值不该一样');
+  assert.equal(new Set(cast.map((p) => (p.pace ?? []).join('-'))).size > 1, true, '语速不该一样');
+});
+
+test('兜底：你说完话过了 10 条还没人接，下一个就强制回你', async () => {
+  const base = freshRoom();
+  const sent = room.postPlayerMessage(base, '有人吗', ME, [], undefined, NOW, 0.5);
+  const mine = sent.messages[sent.messages.length - 1];
+  // 群里在聊别的，10 条都没接你
+  const chatter = Array.from({ length: 10 }, (_, i) => ({
+    id: `f${i}`,
+    authorId: base.cast[0].id,
+    authorKind: 'persona',
+    authorName: base.cast[0].name,
+    text: `随便说一句 ${i}`,
+    at: NOW + 1000 + i * 1000,
+    kind: 'chat',
+  }));
+  const busy = { ...sent, messages: [...sent.messages, ...chatter], scheduled: [] };
+  const out = await room.tickRoom({ room: busy, settings: SETTINGS, config: MOCK, now: NOW + 20_000 });
+  assert.ok(
+    out.room.scheduled.some((s) => s.replyTo === mine.id) ||
+      out.room.messages.some((m) => m.replyTo === mine.id),
+    '过了 10 条应该有人被安排来回你',
+  );
+});
+
+test('安慰会把关系拉近（不只是普通的 +1）', async () => {
+  let current = room.postPlayerMessage(freshRoom(), '我好累，撑不住了', ME, [], undefined, NOW, 0.5);
+  let cursor = NOW;
+  for (let i = 0; i < 12 && current.scheduled.length > 0; i++) {
+    cursor += 10_000;
+    const out = await room.tickRoom({ room: current, settings: SETTINGS, config: MOCK, now: cursor });
+    current = out.room;
+  }
+  const closest = Math.max(...current.cast.map((p) => p.relations?.me ?? 0));
+  assert.ok(closest >= 2, `安慰过你的人应该更熟，实际最高 ${closest}`);
 });
 
 test('新房间只排一条「欢迎新人」，不是四个人先自己聊起来', () => {

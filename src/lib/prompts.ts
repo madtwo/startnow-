@@ -324,6 +324,7 @@ function playerIsFocusingOnPersona(text: string, selfName: string): boolean {
 
 export type RoomMode =
   | 'welcome'
+  | 'room'
   | 'reply'
   | 'peer'
   | 'ambient'
@@ -357,7 +358,9 @@ export const roomPrompt = (
   const task =
     opts.mode === 'welcome'
       ? '群里刚进来一个人，他还没说话。你先打个招呼：一句话说清你是谁（名字、专业、年级），不要问太多，也不要开始说自己的心事。'
-      : opts.mode === 'reply'
+      : opts.mode === 'room'
+        ? '读完最近这几句。你可以接任何人的话（想点名就用名字开头），也可以说一句自己此刻的事；不要总结大家说了什么，也不一定非要回应最后一句。'
+        : opts.mode === 'reply'
         ? `你正要正面回 ${opts.replyName ?? '对方'} 刚才那句。先把他这句话接住（他打招呼就先回招呼，他问什么就先答什么），再考虑要不要往下说；不要绕开他继续聊你和别人的事。`
         : opts.mode === 'peer'
         ? `你正要接 ${opts.replyName ?? '群里另一个人'} 的话。可以同意、可以不同意、也可以扯到自己身上。`

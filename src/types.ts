@@ -112,6 +112,12 @@ export interface Persona {
   situation?: PersonaSituation;
   /** 整体话多话少，由性格和忙闲算出来 */
   chattiness?: number;
+  /** 有人说话时，他插嘴的基准概率（0..1）：每个人不一样 */
+  reactivity?: number;
+  /** 反应延迟区间（秒）：有人秒回，有人半天才看见 */
+  pace?: [number, number];
+  /** 一天里最爱说话的时段，可跨零点 */
+  peak?: [number, number];
   /** 大概几点醒着 [开始, 结束)，可跨零点 */
   awake?: [number, number];
 }
@@ -373,6 +379,8 @@ export interface Message {
   replyTo?: string;
   /** @ 到的人 */
   mentions?: string[];
+  /** 这条负面情绪已经走过「安慰 + 建议」，不要重复触发 */
+  careHandled?: boolean;
 }
 
 export type StepOrigin = 'ai' | 'self' | 'persona';
