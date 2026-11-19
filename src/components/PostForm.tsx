@@ -103,9 +103,9 @@ export default function PostForm({
           <select value={captureMode} aria-label="材料识别方式"
             onChange={e=>onCaptureModeChange(e.target.value==='vision-template'?'vision-template':e.target.value==='single'?'single':'two-step')}
             style={{maxWidth:'100%'}}>
-            <option value="two-step">默认：先识别，再由 AI 给下一步（两次调用）</option>
+            <option value="two-step">默认：先识别，再给下一步（两次调用）</option>
             <option value="vision-template">实验：只识别一次，由本地模板给第一步</option>
-            <option value="single">实验：AI 一次生成识别和步骤（实测较慢）</option>
+            <option value="single">实验：一次生成识别和步骤（实测较慢）</option>
           </select>
         </label>}
         {image && <p className="compose-tip">目前默认使用两步模式。模板实验模式仅做一次视觉请求，不再请求文字模型；15 秒内完成仍需实测验证。</p>}
@@ -164,7 +164,7 @@ export default function PostForm({
         </div>
 
         {image && <p className="compose-tip">点击「放出去」后，图片会发送给你配置的视觉模型识别；原图保存在本地卡片中，导出存档也会包含它。请先遮住姓名、学号等隐私信息；未配置视觉模型时，仍可使用普通建议。</p>}
-        <p className="compose-tip">放出去后，会有 AI 同伴来回应你。不用守着，忙完回来看看。</p>
+        <p className="compose-tip">放出去后，会有同伴来回应你。不用守着，忙完回来看看。</p>
     </section>
   );
 }

@@ -16,23 +16,23 @@ const create=(persona=people[0])=>{
  return publishPersonaGoal(goal,persona.name,now);
 };
 
-test('R3: AI goal card visibly says AI-fiction and has goal tag, correct origin and id',()=>{
+test('R3: AI goal card has goal metadata without per-card AI-fiction label',()=>{
  const {goal,card}=create();
  assert.equal(card.authorKind,'persona');assert.equal(card.origin,'simulated');
  assert.equal(card.kind,'goal');assert.equal(card.goalId,goal.id);
- assert.ok(card.text.startsWith('【AI 虚构剧情】'));
+ assert.ok(!card.text.includes('AI 虚构剧情'));
  assert.deepEqual(card.pending,[]);assert.deepEqual(card.arrivals,[]);
  assert.equal(card.likes,0);assert.equal(card.cheerCount,0);
 });
 
-test('R3: results use fake label and never claim physical-world proof',()=>{
+test('R3: results keep origin metadata and never claim physical-world proof',()=>{
  const {goal,card}=create();
  for(const outcome of ['done','partial','missed']){
   const g={...goal,postPlan:{outcome,dueAt:now+1000}};
   const result=resultCardForGoal(g,[card],people[0].name,now+1001);
   assert.ok(result);
   assert.equal(result.card.origin,'simulated');
-  assert.ok(result.card.text.startsWith('【AI 虚构剧情·模拟结果】'));
+  assert.ok(!result.card.text.includes('AI 虚构剧情'));
   assert.equal(result.card.kind,outcome==='done'?'brag':'worry');
   assert.ok(result.card.title.includes(outcome==='done'?'小小炫耀':'今天没做完'));
   assert.doesNotMatch(result.card.text,/我真的做到了|我已经去了|老师夸我/);
@@ -74,13 +74,13 @@ test('R3: tickCards with simulated AI goal/result never schedules peers or comme
  }
 });
 
-test('R3: forum and detail both have AI/goal/simulation labels, player chain filters authorId',()=>{
+test('R3: forum and detail keep goal tags but no per-card AI labels; player chain filters authorId',()=>{
  const row=fs.readFileSync(path.join(__dirname,'../src/components/CardRow.tsx'),'utf8');
  const detail=fs.readFileSync(path.join(__dirname,'../src/components/CardDetail.tsx'),'utf8');
  const app=fs.readFileSync(path.join(__dirname,'../src/App.tsx'),'utf8');
  const summary=fs.readFileSync(path.join(__dirname,'../src/lib/summary.ts'),'utf8');
- assert.match(row,/AI 虚构剧情/);assert.match(row,/AI 模拟结果/);assert.match(row,/目标/);
- assert.match(detail,/AI 虚构剧情/);assert.match(detail,/thread-badge">目标/);
+ assert.doesNotMatch(row,/AI 虚构剧情|AI 模拟结果|thread-badge">AI/);assert.match(row,/目标/);
+ assert.doesNotMatch(detail,/AI 虚构剧情|AI 模拟结果/);assert.match(detail,/thread-badge">目标/);assert.match(detail,/fallback-note/);
  assert.match(detail,/mine && !isGuide && card\.note/);
  assert.match(app,/\.filter\(\(c\) => c\.authorId === 'me'\)/);
  assert.match(summary,/goals\.filter\(\(goal\) => goal\.ownerId === 'me'\)/);

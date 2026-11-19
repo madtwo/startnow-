@@ -154,11 +154,11 @@ function personaGoalToast(result: PersonaGoalTickResult, before: readonly Card[]
   const ids = new Set(before.map((card) => card.id));
   const published = result.cards.filter((card) => !ids.has(card.id));
   if (result.publishedResults) {
-    const author = published.find((card) => card.kind !== 'goal')?.authorName ?? 'AI 同伴';
-    return `${author}发了今天的模拟结果 · AI 虚构剧情`;
+    const author = published.find((card) => card.kind !== 'goal')?.authorName ?? '同伴';
+    return `${author}发了今天的结果`;
   }
-  const first = published.find((card) => card.kind === 'goal')?.authorName ?? 'AI 同伴';
-  return `${first}${result.createdGoals > 1 ? `等${result.createdGoals}位` : ''}发了今天的小目标 · AI 虚构剧情`;
+  const first = published.find((card) => card.kind === 'goal')?.authorName ?? '同伴';
+  return `${first}${result.createdGoals > 1 ? `等${result.createdGoals}位` : ''}发了今天的小目标`;
 }
 
 function cardStatusLabel(card: Card) {
@@ -457,7 +457,7 @@ export default function App() {
       if (personaResult && (personaResult.createdGoals || personaResult.publishedResults)) {
         setGoals(personaResult.goals);
       }
-      if (fired) setToast(`${fired.authorName} 发来一张新卡 · AI 剧情模拟`);
+      if (fired) setToast(`${fired.authorName} 发来一张新卡`);
       setPersonas(out.personas);
       const day = dayKey(nowTs);
       setWorld((w) => ({
@@ -587,7 +587,7 @@ export default function App() {
       setToast(result.ok
         ? ('step' in result
             ? (capturedStep?.source==='template' ? '已识别可见片段，本地模板准备了一步；请先核对原图' : '已找到材料锚点和今天的一步，请核对后领取')
-            : '已提取可见材料片段，请核对后请 AI 给第一步')
+            : '已提取可见材料片段，请核对后再给第一步')
         : '没看清这张图，可以重试，或把关键文字粘贴进来。');
     } catch {
       if (!controller.signal.aborted && !externalTabChanged.current) {
@@ -1102,7 +1102,7 @@ export default function App() {
       setGoals((prev) => prev.map((g) => g.id === goal.id ? result.goal : g));
       setCards((prev) => [result.card, ...prev]);
       sendGoalCheer(result.card);
-      setToast('目标已分享到论坛；同伴会稍后来打气（AI 或模拟标注）');
+      setToast('目标已分享到论坛；同伴会稍后来打气');
     } catch (err) {
       setToast(String((err as Error).message));
     }
@@ -1398,7 +1398,7 @@ export default function App() {
             </span>
             <span className="brand-text">
               <span className="brand-name">Start Now</span>
-              <span className="brand-sub">先动一下 · 四个 AI 同学的互助小圈子</span>
+              <span className="brand-sub">先动一下 · 四个同学的互助小圈子</span>
             </span>
           </button>
           <nav className="top-nav" aria-label="主导航">
@@ -1753,14 +1753,13 @@ export default function App() {
                   )}
                 </div>
 
-                <aside className="ai-watch" aria-label="AI 同伴怎么看">
-                  <h2>AI 同伴怎么看</h2>
+                <aside className="ai-watch" aria-label="同伴怎么看">
+                  <h2>同伴怎么看</h2>
                   <div className="ai-watch-bubbles">
                     <p className="ai-bubble lav">你愿意记录下来，已经很勇敢</p>
                     <p className="ai-bubble mint">40 分钟也是有效进展</p>
                     <p className="ai-bubble peach">延后不等于失败，重新开始就好</p>
                   </div>
-                  <p className="ai-watch-note">演示模式：同伴回复由本地脚本生成</p>
                 </aside>
               </div>
             </>
@@ -1810,7 +1809,7 @@ export default function App() {
                 </li>
                 <li>
                   <b>同伴可能过来</b>
-                  <span>会有 AI 同伴带着一句回应出现，不用守着。</span>
+                  <span>会有同伴带着一句回应出现，不用守着。</span>
                 </li>
                 <li>
                   <b>有用的贴成便签</b>
@@ -1827,7 +1826,7 @@ export default function App() {
         <div className="feed">
           {detailCard.sourceCardId && (
             <div className="advice" role="note">
-              <p className="advice-head">AI 角色模拟执行 · 从你给的建议</p>
+              <p className="advice-head">模拟执行 · 从你给的建议</p>
               <p className="advice-label">{detailCard.sourceAdviceText}</p>
               <button type="button" className="advice-source-link" onClick={() => {
                 const source = cards.find((c) => c.id === detailCard.sourceCardId);
@@ -1838,7 +1837,7 @@ export default function App() {
           )}
           {detailCard.bragCardId && (
             <div className="advice" role="note">
-              <p>这一步已有后续炫耀卡 · AI 剧情模拟</p>
+              <p>这一步已有后续炫耀卡</p>
               <button type="button" className="advice-source-link" onClick={() => {
                 const followup = cards.find((c) => c.id === detailCard.bragCardId);
                 if (followup) openCard(followup);
@@ -2341,12 +2340,9 @@ export default function App() {
           <p className="foot-brand">先动一下 · StartNow</p>
           <p>不保证长期陪伴，只帮你看清当下能做的最小一步。</p>
           <p>
-            这里的同伴都是虚构的 AI 同学，和你在不同学校；只在论坛上聊。如有伤害自己的念头，请拨打{' '}
+            这里的同伴都是虚构的同学，和你在不同学校；只在论坛上聊。如有伤害自己的念头，请拨打{' '}
             <strong>{HOTLINE}</strong> 心理援助热线（{HOTLINE_SCOPE}；接听时段因地区而异）。如有即时危险，请联系当地急救或紧急服务。
           </p>
-          {isMock(config) && (
-            <p className="foot-demo">当前是演示模式：同伴回复由本地脚本生成，不是真实模型。</p>
-          )}
         </div>
       </footer>
 

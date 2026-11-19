@@ -15,7 +15,7 @@ test('UI preserves chat menu and route while adding a visible capture mode',()=>
  assert.match(app,/has\('room'\) \? 'room' : 'home'/);
  assert.match(app,/view === 'room' && \(/);
  assert.match(form,/实验：只识别一次，由本地模板给第一步/);
- assert.match(form,/默认：先识别，再由 AI 给下一步/);
+ assert.match(form,/默认：先识别，再给下一步（两次调用）/);
  assert.match(form,/姓名、学号/);
 });
 test('cross-topic reply gets persona-specific but non-coercive prompt',()=>{

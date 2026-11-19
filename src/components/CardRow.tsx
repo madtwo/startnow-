@@ -26,7 +26,6 @@ export default function CardRow({ card, personas, onClick, onLike, onCheer }: Pr
   const unseen = !card.seenAt;
   const brag = card.kind === 'brag';
   const goal = card.kind === 'goal' || card.kind === 'progress';
-  const fictionalGoal = card.authorKind === 'persona' && card.origin === 'simulated' && !!card.goalId;
 
   return (
     <article
@@ -51,9 +50,8 @@ export default function CardRow({ card, personas, onClick, onLike, onCheer }: Pr
       <div className="tc-body">
         <div className="tc-title-line">
           {card.title && <h3 className="tc-title">{card.title}</h3>}
-          {brag && <span className="tc-tag brag">{fictionalGoal ? 'AI 模拟结果' : '做到了'}</span>}
+          {brag && <span className="tc-tag brag">做到了</span>}
           {goal && <span className="tc-tag">{card.kind === 'goal' ? '目标' : '进度'}</span>}
-          {fictionalGoal && <span className="tc-tag">AI 虚构剧情</span>}
           {card.intro && <span className="tc-tag">自我介绍</span>}
           {unseen && <span className="unread-dot" title="还没点开过" />}
         </div>
@@ -68,7 +66,6 @@ export default function CardRow({ card, personas, onClick, onLike, onCheer }: Pr
             <Avatar avatarKey="petal" className="me" size="xs" />
           )}
           <span className="tc-author-name">{card.authorName}</span>
-          {!mine && <span className="tc-tag">AI</span>}
           {mine && <span className="tc-tag">你</span>}
         </span>
         <time className="tc-time">{timeLabel(card.createdAt)}</time>

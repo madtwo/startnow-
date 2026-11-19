@@ -36,11 +36,6 @@ interface Props {
   initialPeer?: string;
 }
 
-const originLabels: Record<NonNullable<Comment['origin']>, string> = {
-  model: '模型回复', demo: '演示台词', boundary: '线上边界', curated: '预置回复',
-  simulated: '模拟情节', system: '系统提示', material: '材料锚定',
-};
-
 const clock = (at: number) => {
   const date = new Date(at);
   const now = new Date();
@@ -119,7 +114,6 @@ export default function CardDetail({
   const canShrinkAdopted = canRequestSmallerComment(card);
   const closed = card.status === 'done' || card.status === 'handled';
   const isGuide = card.kind === 'guide';
-  const fictionalGoal = card.authorKind === 'persona' && card.origin === 'simulated' && !!card.goalId;
   const target = personas.find((p) => p.id === targetId);
   const targetIsOp = Boolean(targetId) && targetId === card.authorId;
   const replyLabel = targetId
@@ -319,18 +313,17 @@ export default function CardDetail({
               <Avatar avatarKey={me.avatarKey} className="me" size="xs" />
             )}
             <span className="forum-comment-name">
-              {isMe ? '你' : isHelper ? '论坛小助手' : persona?.name ?? 'AI 同伴'}
+              {isMe ? '你' : isHelper ? '论坛小助手' : persona?.name ?? '同伴'}
             </span>
-            {comment.authorKind === 'persona' && <span className="thread-badge" title="虚构 AI 同伴，非真人、非心理咨询师">AI</span>}
             <span className="forum-comment-time">{clock(comment.at)}</span>
             {repliedTo && <span className="forum-comment-reply">回复 {repliedTo}</span>}
             {comment.kind === 'advice' && <span className="advice-tag">下一步</span>}
-            {comment.origin && originLabels[comment.origin] && (
-              <span className="advice-tag">{originLabels[comment.origin]}</span>
-            )}
             {selected && <span className="forum-comment-target">正在回复</span>}
           </div>
           <p className="forum-comment-text">{comment.text}</p>
+          {comment.fallbackReason && comment.fallbackReason !== 'demo' && (
+            <p className="fallback-note">网络没接上，这条是预设回复</p>
+          )}
         </div>
         {adoptable && (
           <div className="forum-comment-actions">
@@ -371,27 +364,22 @@ export default function CardDetail({
           <div>
             <p className="page-author">
               {card.authorName}
-              {!mine && !isGuide && <span className="thread-badge">AI</span>}
               {card.intro && <span className="thread-badge">自我介绍</span>}
               {card.kind === 'goal' && <span className="thread-badge">目标</span>}
-              {fictionalGoal && <span className="thread-badge">AI 虚构剧情</span>}
-              {card.origin && (
-                <span className="thread-badge">{card.origin === 'model' ? '模型生成' : card.origin === 'simulated' ? '模拟情节' : '演示内容'}</span>
-              )}
               {mine && <span className="me-badge">你</span>}
             </p>
-            <p className="detail-role">{isGuide ? '论坛的说明' : author ? 'AI 同伴' : '你的卡'}</p>
+            <p className="detail-role">{isGuide ? '论坛的说明' : author ? '同伴' : '你的卡'}</p>
           </div>
         </div>
       </header>
 
-      {card.kind === 'brag' && <span className="brag-badge">{fictionalGoal ? 'AI 模拟结果' : '做到了'}</span>}
+      {card.kind === 'brag' && <span className="brag-badge">做到了</span>}
       {card.title && <h1 className="detail-title">{card.title}</h1>}
       <p className="page-text">{card.text}</p>
       {card.image && <img className="card-image" src={card.image} alt="卡片配图" />}
       {mine && card.image && !isGuide && (
         <section className="advice" aria-label="材料识别与截止时间确认" style={{maxWidth:'100%',overflowWrap:'anywhere'}}>
-          <div className="advice-head"><strong>AI 看到（请核对）</strong></div>
+          <div className="advice-head"><strong>识别到（请核对）</strong></div>
           {materialScanning && <div role="status">
             <p>识别中…正在提取可见文字，结果可能有误。</p>
             {onCancelMaterial && <button type="button" className="btn btn-ghost"
@@ -401,7 +389,7 @@ export default function CardDetail({
             ? '识别已取消。你仍可使用普通下一步。'
             : '没看清这张图，可以重试，或把关键文字粘贴进来。'}</p>}
           {card.material && <>
-            <p>{card.material.title || '未识别标题'} · {card.material.confidence==='high'?'模型较有把握':'模型不确定，请仔细核对'}</p>
+            <p>{card.material.title || '未识别标题'} · {card.material.confidence==='high'?'识别较有把握':'识别不确定，请仔细核对'}</p>
             <ul>{card.material.anchors.map(a=><li key={a.id}>
               <strong>{a.label}</strong>：<span>{a.quote}</span>{a.page ? `（第 ${a.page} 页）` : ''}
             </li>)}</ul>
@@ -409,7 +397,7 @@ export default function CardDetail({
             {card.material.excerpt && <details><summary>展开识别节选（可能有误）</summary>
               <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{card.material.excerpt}</p></details>}
             {card.material.deadlineText && <div>
-              <p>AI 看到：<strong>{card.material.deadlineText}</strong>。请确认，不会自动当成真实截止时间。</p>
+              <p>识别到：<strong>{card.material.deadlineText}</strong>。请确认，不会自动当成真实截止时间。</p>
               {!card.materialGoalId ? <>
                 <label className="field"><span className="field-label">由你确认实际截止时间（本地时区）</span>
                   <input type="datetime-local" value={deadlineInput} onChange={e=>setDeadlineInput(e.target.value)}
@@ -418,7 +406,7 @@ export default function CardDetail({
                 <button type="button" className="btn btn-ghost"
                   disabled={!card.advice || !confirmedDeadline(deadlineInput) || !onConfirmDeadline}
                   onClick={()=>onConfirmDeadline?.(deadlineInput)}>确认并加入目标/日程</button>
-              </> : <small>截止时间已由你确认并保存，不会由模型自动修改。</small>}
+              </> : <small>截止时间已由你确认并保存，不会自动修改。</small>}
             </div>}
           </>}
           {onReidentify && <button type="button" className="btn btn-ghost" onClick={onReidentify} disabled={materialScanning || busy ||
@@ -426,7 +414,7 @@ export default function CardDetail({
         </section>
       )}
       {card.vulnerability && <p className="page-composer-note" role="note">
-        {card.vulnerability.kind==='missed'?'今天没做到':'这次卡住了'} · AI 虚构剧情。回应完全自愿，不会因没有回复而追问。
+        {card.vulnerability.kind==='missed'?'今天没做到':'这次卡住了'}。回应完全自愿，不会因没有回复而追问。
       </p>}
 
       {!isGuide && card.advice && !closed && (
@@ -448,17 +436,6 @@ export default function CardDetail({
             <p className="page-composer-note" role="note">
               这是联系真人支持的准备步骤，不是诊断或治疗建议；如感到自己有即时危险，请联系身边的人和当地紧急服务。
             </p>
-          )}
-          {card.advice.origin && (
-            <small>
-              {card.advice.origin === 'material'
-                ? `材料锚定 · ${card.advice.materialSource==='model'?'模型生成并校验':'本地模板'}`
-                : card.advice.origin === 'adopted'
-                ? '由你采用 · 保留评论原话'
-                : card.advice.origin === 'demo'
-                  ? '演示动作'
-                  : '预置动作'}
-            </small>
           )}
           {card.advice.origin==='material' && materialAdviceAnchor && (
             <small>引用：{materialAdviceAnchor.label}</small>
@@ -547,7 +524,7 @@ export default function CardDetail({
       )}
 
       <h2 className="page-comments-title">{card.comments.length} 条回应</h2>
-      {!isGuide && <p className="page-composer-note">这里的 AI 同伴是虚构角色，不是真人，也不能替代专业帮助。</p>}
+      {!isGuide && <p className="page-composer-note">这里的同伴是虚构角色，不是真人，也不能替代专业帮助。</p>}
 
       <div className="forum-comments" ref={commentsRef}>
         {card.comments.length === 0 && (

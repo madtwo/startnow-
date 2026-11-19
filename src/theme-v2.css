@@ -1881,3 +1881,9 @@ body {
 .forum-view-chips {
   margin-top: -10px;
 }
+
+.fallback-note {
+  margin-top: 4px;
+  color: var(--v2-muted);
+  font-size: 11px;
+}

@@ -499,10 +499,12 @@ test('回执 T4：普通帖仍保持自然随机分配，不强制沈默先到',
   assert.notEqual(card.plan[0].personaId,'shenmo');
 });
 
-test('回执 T5：每个角色评论都有独立常驻的 AI 标识', () => {
+test('回执 T5：虚构披露集中在开局，不再逐条标 AI', () => {
   const ui=fs.readFileSync(path.join(__dirname,'..','src','components','CardDetail.tsx'),'utf8');
-  assert.match(ui,/comment\.authorKind\s*===\s*'persona'\s*&&\s*<span[^>]*>AI<\/span>/);
-  assert.match(ui,/虚构角色，不是真人/);
+  const onboarding=fs.readFileSync(path.join(__dirname,'..','src','components','Onboarding.tsx'),'utf8');
+  assert.doesNotMatch(ui,/comment\.authorKind\s*===\s*'persona'\s*&&\s*<span[^>]*>AI<\/span>/);
+  assert.doesNotMatch(ui,/AI 虚构剧情/);
+  assert.match(onboarding,/AI/);
 });
 
 

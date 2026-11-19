@@ -33,7 +33,7 @@ export function buildCompetitionSeedCards(seed: readonly Card[], personas: reado
     id: 'competition-prerun-result', authorId: who.id, authorName: who.name,
     authorKind: 'persona', kind: 'brag', origin: 'simulated',
     title: `${who.name} · 小小炫耀`,
-    text: '【AI 虚构剧情·模拟结果】今天终于从文献综述里选出一篇，只读了摘要，记下材料和方法。还没开始写正文。',
+    text: '今天终于从文献综述里选出一篇，只读了摘要，记下材料和方法。还没开始写正文。',
     createdAt: now - 60_000, status: 'talking', arrivals: [], plan: [], pending: [], comments: [], likes: 0,
   }] : [];
   return [...intros, ...study, ...result];

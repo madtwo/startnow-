@@ -141,7 +141,7 @@ export default function StepBoard({
     <div className="step-board">
       {!competitionMode && <section className="card section-card meeting-goal-entry">
         <div className="section-head"><h3>拆解一个目标</h3></div>
-        <p>目标大一点也没关系。自己写步骤，或先让 AI 问清楚再拆。</p>
+        <p>目标大一点也没关系。自己写步骤，或先问清楚再拆。</p>
         <button className="btn btn-primary" onClick={onDecompose}>拆解一个目标</button>
         {goals.some((g) => g.ownerId === 'me' && g.status === 'active') && (
           <div className="meeting-goal-list">
@@ -178,17 +178,6 @@ export default function StepBoard({
                 {noted ? '✦ 今天的一小步' : '✦ 有人给了你一个下一步'}
               </span>
               <p className="step-line">{noted?.note?.text ?? advised?.advice?.text}</p>
-              {focus.advice?.origin && (
-                <small>
-                  {focus.advice.origin === 'material'
-                    ? '材料锚定 · 先核对图片'
-                    : focus.advice.origin === 'adopted'
-                    ? '你从角色回复采用 · 保留原话'
-                    : focus.advice.origin === 'demo'
-                      ? '演示动作'
-                      : '预置动作'}
-                </small>
-              )}
               {isHelpSeekingAction(focus?.advice?.actionId) && (
                 <p className="step-ai-note" role="note">
                   这是联系真人支持的准备步骤，不是诊断或治疗建议。如有即时危险，请联系身边的人或当地紧急服务。
@@ -424,7 +413,7 @@ export default function StepBoard({
                 <path d="M12 4l1.8 4.7L18.5 10.5l-4.7 1.8L12 17l-1.8-4.7L5.5 10.5l4.7-1.8Z" />
               </svg>
             </span>
-            AI 同伴提醒
+            同伴提醒
           </div>
           <p className="info-main">{reminder}</p>
           <p className="info-row">

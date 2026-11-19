@@ -190,11 +190,11 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
   };
   return <div className="scrim" onMouseDown={(e)=>{if(e.target===e.currentTarget) closeSheet();}}>
     <div className="sheet meeting-sheet" role="dialog" aria-modal="true" aria-label="拆解一个目标">
-      <div className="sheet-head"><div><h2>拆解一个目标</h2><p>可以自己拆，也可以让 AI 提几个关键问题；「/grill-me」会多问几句，随时可以跳过。</p></div>
+      <div className="sheet-head"><div><h2>拆解一个目标</h2><p>可以自己拆，也可以让系统提几个关键问题；「/grill-me」会多问几句，随时可以跳过。</p></div>
         <button className="icon-btn" type="button" aria-label="关闭" onClick={closeSheet}>×</button></div>
       {phase==='entry' && <>
         <div className="meeting-switch" role="group" aria-label="拆解方式">
-          <button className={mode==='ai'?'on':''} onClick={()=>setMode('ai')}>AI 辅助</button>
+          <button className={mode==='ai'?'on':''} onClick={()=>setMode('ai')}>自动拆解</button>
           <button className={mode==='grill'?'on':''} onClick={()=>setMode('grill')}>/grill-me · 问清楚</button>
           <button className={mode==='manual'?'on':''} onClick={()=>setMode('manual')}>自由拆解</button>
         </div>

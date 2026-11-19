@@ -154,7 +154,7 @@ export function createPersonaGoalCard(goal: Goal, name: string, now = Date.now()
     id:crypto.randomUUID(), authorId:goal.ownerId, authorName:name,
     authorKind:'persona', kind:'goal', goalId:goal.id,
     title:`${name} · 今天想做的小事`,
-    text:`【AI 虚构剧情】${goal.title}
+    text:`${goal.title}
 计划：${goal.steps.map(s=>s.text).join('；')}。`,
     origin:'simulated', createdAt:now, status:'talking',
     arrivals:[],plan:[],pending:[],comments:[],likes:0,cheerCount:0,cheeredByMe:false,
@@ -184,7 +184,7 @@ export function resultCardForGoal(goal: Goal, cards: readonly Card[], name: stri
   const statusText = outcome==='done' ? '今天把计划的步骤做完了' :
     outcome==='partial' ? '今天只做完一小部分，没有全部完成' :
       '今天没做完原来的计划';
-  const text = `【AI 虚构剧情·模拟结果】${statusText}。${
+  const text = `${statusText}。${
     completedCount ? `做到：${steps.slice(0,completedCount).map(s=>s.text).join('；')}。` : ''}${
     completedCount < steps.length ? `还没做：${steps.slice(completedCount).map(s=>s.text).join('；')}。` : ''}`;
   const card:Card = {id:crypto.randomUUID(),authorId:goal.ownerId,authorName:name,

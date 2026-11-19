@@ -35,7 +35,7 @@ test('lost fictional copy is aligned to academic roles without guilt or dependen
  assert.match(content,/作品集挑到第三张/);
  assert.match(content,/开题改到第三版/);
  assert.match(content,/病理背到一半/);
- const lines=content.match(/  (?:shenmo|weini|miaoze|yanggao):'【AI 虚构剧情·方向碎念】[^']*'/g)||[];
+ const lines=content.match(/  (?:shenmo|weini|miaoze|yanggao):'(?:病理背到一半|开题改到第三版|文献综述越看|作品集挑到第三张)[^']*'/g)||[];
  assert.equal(lines.length,4);
  for(const line of lines)assert.doesNotMatch(line,/只有你|你不回我|都怪你|别离开|没有你我不行/);
 });

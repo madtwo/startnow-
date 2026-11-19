@@ -39,7 +39,7 @@ test('3-day persona simulation: per-owner <=3 and per-goal at-most-once result',
      goals[goals.length-1]=result.goal;cards.push(result.card);
      assert.equal(result.card.goalId,g.id);
      assert.equal(resultCardForGoal(result.goal,cards,p.name,g.postPlan.dueAt+10000),null);
-     assert.match(result.card.text,/AI 虚构剧情/);
+     assert.ok(!result.card.text.includes('AI 虚构剧情'));
      if(result.card.kind==='brag') assert.ok(result.goal.steps.every(s=>s.status==='done'));
      else assert.ok(result.goal.steps.some(s=>s.status!=='done'));
    }

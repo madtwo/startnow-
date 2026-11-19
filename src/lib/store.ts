@@ -25,6 +25,7 @@ import { parseGoals, parseSchedule, parseSummaries } from './goalStorage';
 import { parseMaterialExtraction, redactMaterialText } from './materialVision';
 import { validateMaterialStep } from './materialAdvice';
 import { isManipulative } from './agentVulnerability';
+import { stripAiProvenance } from './displayText';
 
 const KEYS = {
   config: 'shudong.config.v1',
@@ -216,7 +217,7 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     likes: typeof raw.likes === 'number' ? raw.likes : 0,
     helperAt: typeof raw.helperAt === 'number' ? raw.helperAt : undefined,
     likedByMe: Boolean(raw.likedByMe),
-    text: raw.text,
+    text: stripAiProvenance(raw.text),
     createdAt,
     status: raw.status ?? 'stuck',
     arrivals: Array.isArray(raw.arrivals) ? raw.arrivals.filter((id): id is string => typeof id === 'string') : [],
