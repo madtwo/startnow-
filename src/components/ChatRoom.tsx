@@ -155,9 +155,17 @@ export default function ChatRoom({
               }}
             >
               <h1>{room.title}</h1>
-              <span className="room-title-edit" aria-hidden="true">
-                改
-              </span>
+              <svg className="room-title-pencil" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16v4Z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M14.5 5.5 18.5 9.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
             </button>
           )}
           <p>

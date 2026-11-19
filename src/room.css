@@ -1251,19 +1251,17 @@
 .room-view .room-title-btn h1{
   margin:0;
 }
-.room-view .room-title-edit{
+.room-view .room-title-pencil{
   flex:none;
-  padding:1px 6px;
-  border:1px solid var(--border);
-  border-radius:999px;
-  font-size:10px;
-  line-height:1.6;
+  width:15px;
+  height:15px;
   color:var(--tertiary);
-  opacity:0;
-  transition:opacity var(--ease);
+  opacity:0.7;
+  transition:color var(--ease), opacity var(--ease);
 }
-.room-view .room-title-btn:hover .room-title-edit,
-.room-view .room-title-btn:focus-visible .room-title-edit{
+.room-view .room-title-btn:hover .room-title-pencil,
+.room-view .room-title-btn:focus-visible .room-title-pencil{
+  color:var(--accent);
   opacity:1;
 }
 .room-view .room-title-input{
