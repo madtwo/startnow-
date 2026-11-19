@@ -49,7 +49,11 @@ import {
   summonPersona,
   tickCards,
 } from './lib/cards';
-import { buildGuideCard, buildSeedCards, seedMemories } from './lib/seed';
+import { buildGuideCard, buildSeedCards, seedMemories, introPhaseActive } from './lib/seed';
+import { COMPETITION_MODE, competitionSummary } from './lib/competition';
+import { buildCompetitionSeedCards } from './lib/competitionSeed';
+import { extractMaterial } from './lib/materialVision';
+import { confirmedDeadline } from './lib/deadline';
 import { ensureMinds } from './lib/mind';
 import { defaultPersonas } from './lib/personas';
 import { makeGoal, shareGoal, toggleCheer, personaCheer, progressCard, deleteGoal } from './lib/goals';
@@ -179,7 +183,7 @@ export default function App() {
     };
     if (isFirstRun()) {
       return {
-        cards: buildSeedCards(),
+        cards: COMPETITION_MODE ? withGuide(buildCompetitionSeedCards(buildSeedCards(),defaultPersonas())) : buildSeedCards(),
         personas: ensureMinds(seedMemories(defaultPersonas())),
       };
     }
@@ -196,6 +200,9 @@ export default function App() {
   const gate = useRef(createOperationGate());
   const tickAfterCommit = useRef<'full' | 'brag' | null>(null);
   const lastPersonaGoalCheck = useRef(0);
+  const materialInFlight = useRef(new Map<string,AbortController>());
+  const deadlineConfirming = useRef(new Set<string>());
+  const lastCrisisAt = useRef<number>((()=>{try {return Number(localStorage.getItem('startnow.lastCrisisAt'))||0;}catch{return 0;}})());
   const localPersonaWritePending = useRef(false);
   const summaryEpoch = useRef(0);
   const summaryGenerating = useRef(false);
@@ -312,6 +319,9 @@ export default function App() {
       const key = event.key;
       if (key !== null && !/^shudong\.(cards|personas|world|settings|todos|identity|goals|schedule|summaries)\./.test(key)) return;
       externalTabChanged.current = true;
+      materialInFlight.current.forEach(controller=>controller.abort());
+      materialInFlight.current.clear();
+      deadlineConfirming.current.clear();
       gate.current.change();
       setOtherTabWarning(true);
     };
@@ -342,6 +352,8 @@ export default function App() {
   const guardSubmission = (...parts: (string | undefined | null)[]): boolean => {
     if (!containsCrisis(parts)) return false;
     // 不把敏感原文复制到额外的 React 状态或日志中。
+    lastCrisisAt.current=Date.now();
+    try {localStorage.setItem('startnow.lastCrisisAt',String(lastCrisisAt.current));}catch{/* metadata only */}
     setCrisis('show');
     return true;
   };
@@ -349,13 +361,14 @@ export default function App() {
   // The local-story lane works even before an API is configured or after its
   // budget is exhausted. It never runs alongside an in-flight model operation.
   const checkPersonaGoalsLocally = useCallback(() => {
-    if (document.hidden || externalTabChanged.current || gate.current.running()) return;
+    if (COMPETITION_MODE || document.hidden || externalTabChanged.current || gate.current.running()) return;
     const cur = latest.current;
     const now = Date.now();
     if (!shouldCheckPersonaGoals(lastPersonaGoalCheck.current, now, cur.settings.paused)) return;
     const result = tickPersonaGoals({
       goals: cur.goals, cards: cur.cards, personas: cur.personas,
-      now, enabled: !cur.settings.paused,
+      now, enabled: !cur.settings.paused, enableLost:true,
+      crisisAt:lastCrisisAt.current, introActive:introPhaseActive(cur.cards,now),
     });
     if (!canCommitPersonaGoals({
       revisionCurrent: !gate.current.running(),
@@ -422,7 +435,7 @@ export default function App() {
       const fired = out.cards.find((c) => c.kind === 'brag' && c.sourceCardId &&
         !baseCards.some((existing) => existing.id === c.id));
       let personaResult: PersonaGoalTickResult | undefined;
-      if (shouldCheckPersonaGoals(lastPersonaGoalCheck.current, nowTs, cur.settings.paused, bragOnly) &&
+      if (!COMPETITION_MODE && shouldCheckPersonaGoals(lastPersonaGoalCheck.current, nowTs, cur.settings.paused, bragOnly) &&
           canCommitPersonaGoals({
             revisionCurrent: gate.current.isCurrent(operation, revision),
             baseCards, currentCards: latest.current.cards,
@@ -430,7 +443,8 @@ export default function App() {
           })) {
         personaResult = tickPersonaGoals({
           goals: baseGoals, cards: out.cards, personas: out.personas,
-          now: nowTs, enabled: !cur.settings.paused,
+          now: nowTs, enabled: !cur.settings.paused, enableLost:true,
+          crisisAt:lastCrisisAt.current, introActive:introPhaseActive(out.cards,nowTs),
         });
         lastPersonaGoalCheck.current = nowTs;
       }
@@ -521,8 +535,82 @@ export default function App() {
   const patch = (id: string, fn: (card: Card) => Card) =>
     setCards((prev) => prev.map((c) => (c.id === id ? fn(c) : c)));
 
+  /** One user-upload event -> one vision extraction, never called by ticks. */
+  const scanMaterial = async (cardId:string, imageDataUrl:string) => {
+    if (!imageDataUrl || materialInFlight.current.has(cardId) ||
+        latest.current.cards.some(c=>c.id===cardId &&
+          (c.advice?.origin==='material' && c.advice.accepted || c.materialGoalId))) return;
+    const controller=new AbortController();
+    const started=Date.now();
+    materialInFlight.current.set(cardId,controller);
+    setCards(prev=>prev.map(c=>c.id===cardId && c.image===imageDataUrl
+      ? {...c,material:undefined,materialAttemptAt:started,materialError:undefined,
+          ...(c.advice?.origin==='material' && !c.advice.accepted ? {
+            advice:undefined, status:'talking' as const,
+            comments:c.comments.filter(comment=>comment.origin!=='material'),
+          } : {})}:c));
+    try {
+      const result=await extractMaterial(latest.current.config,imageDataUrl,{
+        signal:controller.signal,onModelAttempt:()=>reserveMeetingCall('vision'),
+      });
+      if (controller.signal.aborted || externalTabChanged.current) return;
+      setCards(prev=>prev.map(c=>c.id===cardId && c.image===imageDataUrl && c.materialAttemptAt===started
+        ? result.ok
+          ? {...c,material:result.extraction,materialError:undefined}
+          : {...c,material:undefined,materialError:'code' in result ? result.code : 'server'}
+        : c));
+      setToast(result.ok
+        ? '已提取可见材料片段，请先核对内容，再请 AI 给第一步'
+        : '没看清这张图，可以重试，或把关键文字粘贴进来。');
+    } catch {
+      if (!controller.signal.aborted && !externalTabChanged.current) {
+        setCards(prev=>prev.map(c=>c.id===cardId && c.image===imageDataUrl &&
+          c.materialAttemptAt===started ? {...c,material:undefined,materialError:'server'} : c));
+        setToast('没看清这张图，可以重新识别，或把关键文字粘贴进来。');
+      }
+    } finally {
+      if (materialInFlight.current.get(cardId)===controller) materialInFlight.current.delete(cardId);
+    }
+  };
+
+  // Cancelling a user-initiated scan is a local action; do not let a late result
+  // overwrite the card. The form remains usable with ordinary suggestions.
+  const cancelMaterial = (cardId: string) => {
+    const controller = materialInFlight.current.get(cardId);
+    if (!controller) return;
+    controller.abort();
+    materialInFlight.current.delete(cardId);
+    patch(cardId, card => ({...card, material:undefined, materialError:'cancelled'}));
+    setToast('已取消识别，可以重试或使用普通下一步。');
+  };
+
+  /** A due date is never inferred by a model and never added without an explicit click. */
+  const confirmCardDeadline = (card:Card, localDateTime:string) => {
+    if (!card.material?.deadlineText || !card.advice?.text || card.materialGoalId ||
+        deadlineConfirming.current.has(card.id) || card.authorId!=='me') return;
+    const now=Date.now();
+    const dueAt=confirmedDeadline(localDateTime,now);
+    if (!dueAt) {setToast('请先选择明确且在未来的本地截止日期和时间');return;}
+    deadlineConfirming.current.add(card.id);
+    try {
+      const goal=makeGoal({
+        title:(card.material.title ?? card.title ?? '从上传材料开始').slice(0,120),
+        detail:'用户核对材料并确认截止时间后建立', source:'image',
+        steps:[{text:card.advice.text.slice(0,180),dueAt,minutes:5}],dueAt,now,
+      },latest.current.goals);
+      // Commit card, goal and schedule via the same synchronous event (no model race).
+      patch(card.id,c=>c.materialGoalId?c:{...c,materialGoalId:goal.id,deadlineConfirmedAt:now});
+      setGoals(prev=>[goal,...prev]);
+      setSchedule(prev=>scheduleGoal(goal,prev,now));
+      setToast('截止时间已由你确认，已加入目标与日程');
+    } catch {
+      deadlineConfirming.current.delete(card.id);
+      setToast('这次未能建立日程；请检查截止时间或目标数上限');
+    }
+  };
+
   const send = () => {
-    const text = draft.trim();
+    const text = draft.trim() || (image ? '我拍了一张学习材料，想先找到第一步。' : '');
     if (!text || working) return;
     if (guardSubmission(text, draftTitle)) return;
     if (!ready) {
@@ -538,7 +626,8 @@ export default function App() {
     setDraftTitle('');
     setImage('');
     setView('home');
-    setToast('卡放出去了，等一会儿有人来');
+    setToast(image ? '卡已发出，正在识别图片里的可见信息' : '卡放出去了，等一会儿有人来');
+    if (card.image) void scanMaterial(card.id,card.image);
   };
 
   const like = (card: Card) =>
@@ -743,6 +832,7 @@ export default function App() {
       const out = await askForAdvice({
         cards: cur.cards, personas: cur.personas, settings: cur.settings,
         config: cur.config, cardId: card.id, personaId,
+        modelCallBudget:Math.max(0,cur.settings.dailyCalls-(cur.world.dayKey===dayKey(Date.now())?cur.world.callsToday:0)),
       });
       if (!gate.current.isCurrent(operation, revision) || latest.current.cards !== cur.cards) {
         if (out.calls) {
@@ -1000,6 +1090,7 @@ export default function App() {
     setCards((prev) => prev.map((c) => c.id === card.id ? toggleCheer(c) : c));
   };
   const makeSummary = async () => {
+    if (COMPETITION_MODE) {setToast(competitionSummary());return;}
     if (summaryGenerating.current) return;
     const now = Date.now();
     const current = summaryLatest.current;
@@ -1117,6 +1208,9 @@ export default function App() {
       alert('这份 JSON 读不了，检查一下是不是本页导出的。');
       return;
     }
+    materialInFlight.current.forEach(controller=>controller.abort());
+    materialInFlight.current.clear();
+    deadlineConfirming.current.clear();
     setCards(
       bundle.cards.some((c) => c.kind === 'guide') ? bundle.cards : [buildGuideCard(), ...bundle.cards],
     );
@@ -1139,10 +1233,14 @@ export default function App() {
   };
 
   const doClear = () => {
+    lastCrisisAt.current=0;
+    materialInFlight.current.forEach(controller=>controller.abort());
+    materialInFlight.current.clear();
+    deadlineConfirming.current.clear();
     clearAll();
     // 清除持有的 Key 和便签；不能只删除 localStorage 而继续沿用旧内存状态。
     setConfig(defaultConfig);
-    setCards(buildSeedCards());
+    setCards(COMPETITION_MODE ? [buildGuideCard(),...buildCompetitionSeedCards(buildSeedCards(),defaultPersonas())] : buildSeedCards());
     setPersonas(ensureMinds(seedMemories(defaultPersonas())));
     setWorld(emptyWorld());
     setSettings({ ...defaultSettings });
@@ -1167,7 +1265,10 @@ export default function App() {
   };
 
   const doReseed = () => {
-    setCards(buildSeedCards());
+    materialInFlight.current.forEach(controller=>controller.abort());
+    materialInFlight.current.clear();
+    deadlineConfirming.current.clear();
+    setCards(COMPETITION_MODE ? [buildGuideCard(),...buildCompetitionSeedCards(buildSeedCards(),defaultPersonas())] : buildSeedCards());
     setPersonas((prev) => ensureMinds(seedMemories(prev)));
     setWorld(emptyWorld());
     resetGuideDismissed();
@@ -1538,7 +1639,8 @@ export default function App() {
               onBragCard={openCardBrag}
               onOpenMine={() => setView('mine')}
               goals={goals}
-              onDecompose={() => setDecomposeOpen(true)}
+              onDecompose={() => {if(!COMPETITION_MODE)setDecomposeOpen(true);}}
+              competitionMode={COMPETITION_MODE}
               onOpenGoal={openGoal}
               onShareGoal={(id) => { const g = goals.find((x) => x.id === id); if (g) shareMyGoal(g); }}
             />
@@ -1641,6 +1743,12 @@ export default function App() {
               busy={working}
               ready={ready}
               personas={personas}
+              visionModel={config.visionModel ?? ''}
+              onVisionModelChange={(model) => {
+                const next = {...config, visionModel: model.slice(0, 160)};
+                setConfig(next);
+                saveConfig(next);
+              }}
               onChange={setDraft}
               onTitle={setDraftTitle}
               onImage={setImage}
@@ -1710,6 +1818,9 @@ export default function App() {
             onBack={() => setView('home')}
             onLike={() => like(detailCard)}
             onCheer={() => cheer(detailCard)}
+            onReidentify={detailCard.image ? ()=>void scanMaterial(detailCard.id,detailCard.image!) : undefined}
+            onCancelMaterial={detailCard.image ? ()=>cancelMaterial(detailCard.id) : undefined}
+            onConfirmDeadline={(local)=>confirmCardDeadline(detailCard,local)}
           />
         </div>
       )}
@@ -1809,17 +1920,17 @@ export default function App() {
               连续完成 {goalStreak(goals.filter((g) => g.ownerId === 'me'))} 天
             </p>
             <div className="meeting-profile-actions">
-              <button className="btn btn-ghost" onClick={() => setView('schedule')}>我的日程</button>
-              <button className="btn btn-ghost" disabled={summaryBusy} onClick={() => void makeSummary()}>
+              {!COMPETITION_MODE && <button className="btn btn-ghost" onClick={() => setView('schedule')}>我的日程</button>}
+              {!COMPETITION_MODE && <button className="btn btn-ghost" disabled={summaryBusy} onClick={() => void makeSummary()}>
                 {summaryBusy ? '正在生成总结…' : '生成今日总结'}
-              </button>
+              </button>}
             </div>
-            {summaries.find((row) => row.ownerId === 'me' && row.dateKey === dateKeyLocal(Date.now())) && (
+            {COMPETITION_MODE ? <p className="meeting-summary">{competitionSummary()}</p> : summaries.find((row) => row.ownerId === 'me' && row.dateKey === dateKeyLocal(Date.now())) && (
               <pre className="meeting-summary">
                 {summaries.find((row) => row.ownerId === 'me' && row.dateKey === dateKeyLocal(Date.now()))?.text}
               </pre>
             )}
-            <small>事实来自本地统计；模型只加一句衔接。日期 {dateKeyLocal(Date.now())}。</small>
+            {!COMPETITION_MODE && <small>事实来自本地统计；模型只加一句衔接。日期 {dateKeyLocal(Date.now())}。</small>}
           </section>
 
           <section className="profile-grid">
@@ -2025,7 +2136,7 @@ export default function App() {
         </div>
       </div>
 
-      {decomposeOpen && (
+      {!COMPETITION_MODE && decomposeOpen && (
         <DecomposeSheet
           config={config}
           onClose={() => setDecomposeOpen(false)}
@@ -2106,7 +2217,7 @@ export default function App() {
         </div>
       )}
 
-      {view === 'schedule' && (
+      {!COMPETITION_MODE && view === 'schedule' && (
         <ScheduleView
           items={schedule}
           goals={goals}
@@ -2117,7 +2228,7 @@ export default function App() {
         />
       )}
 
-      {view === 'goal' && activeGoal && (
+      {!COMPETITION_MODE && view === 'goal' && activeGoal && (
         <GoalDetail
           goal={activeGoal}
           onBack={() => setView('home')}
@@ -2137,7 +2248,7 @@ export default function App() {
             ['post', '发一张卡'],
             ['profile', '我的'],
           ] as [string, string][]
-        ).map(([id, label]) => {
+        ).filter(([id])=>!COMPETITION_MODE || id!=='schedule').map(([id, label]) => {
           return (
             <button
               key={id}

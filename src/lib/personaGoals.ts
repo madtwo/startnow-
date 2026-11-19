@@ -4,6 +4,7 @@ import { containsCrisis } from './submissionGuard';
 import { dateKeyLocal } from './schedule';
 import { makePersonaGoal, publishPersonaGoal, resultCardForGoal } from './goals';
 import { PERSONA_GOAL_TEMPLATES } from './personaGoalTemplates';
+import { canPublishVulnerability, createLostCard, isLostSlot, isManipulative, missedComfortLines } from './agentVulnerability';
 
 export interface PersonaGoalTickInput {
   goals: readonly Goal[];
@@ -12,6 +13,10 @@ export interface PersonaGoalTickInput {
   now: number;
   enabled: boolean;
   dailyCap?: number;
+  competition?: boolean;
+  crisisAt?: number;
+  introActive?: boolean;
+  enableLost?: boolean;
 }
 export interface PersonaGoalTickResult {
   goals: Goal[];
@@ -39,7 +44,7 @@ export function isSafePersonaGoalTemplate(input: { title: string; steps: readonl
 export function tickPersonaGoals(input: PersonaGoalTickInput): PersonaGoalTickResult {
   const goals = [...input.goals];
   const cards = [...input.cards];
-  if (!input.enabled) return { goals, cards, createdGoals: 0, publishedResults: 0 };
+  if (!input.enabled || input.competition) return { goals, cards, createdGoals: 0, publishedResults: 0 };
 
   let publishedResults = 0;
   const personaNames = new Map(input.personas.map((p) => [p.id, p.name]));
@@ -47,8 +52,19 @@ export function tickPersonaGoals(input: PersonaGoalTickInput): PersonaGoalTickRe
     const goal = goals[i];
     if (goal.source !== 'ai' || goal.ownerId === 'me' || !goal.postPlan) continue;
     try {
+      // A fictional missed/partial result obeys the same global/per-person cap as lost posts.
+      const missed = goal.postPlan.outcome !== 'done';
+      if (missed && !canPublishVulnerability({cards,personaId:goal.ownerId,kind:'missed',
+        now:input.now,paused:!input.enabled,competition:input.competition,
+        crisisAt:input.crisisAt,introActive:input.introActive})) continue;
       const outcome = resultCardForGoal(goal, cards, personaNames.get(goal.ownerId) ?? 'AI 同伴', input.now);
       if (!outcome) continue;
+      if (missed) {
+        const comfort = missedComfortLines(goals.indexOf(goal));
+        const text = `${outcome.card.text}\n${comfort}`;
+        if (isManipulative(text)) continue;
+        outcome.card = {...outcome.card,text,vulnerability:{kind:'missed',personaId:goal.ownerId,at:input.now}};
+      }
       goals[i] = outcome.goal;
       cards.unshift(outcome.card);
       publishedResults++;
@@ -84,6 +100,17 @@ export function tickPersonaGoals(input: PersonaGoalTickInput): PersonaGoalTickRe
       createdGoals++;
     } catch {
       // 本轮的一条模板不合法，只跳过这一位，不影响其他人。
+    }
+  }
+  // Add occasional low-pressure uncertainties, without turning replies into obligations.
+  if (input.enableLost && !input.introActive) {
+    for (const persona of input.personas) {
+      if (!isLostSlot(persona.id,input.now) || !canPublishVulnerability({
+        cards,personaId:persona.id,kind:'lost',now:input.now,
+        crisisAt:input.crisisAt,competition:input.competition,paused:!input.enabled,
+      })) continue;
+      const lost=createLostCard(persona,input.now);
+      if (lost) {cards.unshift(lost);publishedResults++;}
     }
   }
   return { goals, cards, createdGoals, publishedResults };

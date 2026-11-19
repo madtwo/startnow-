@@ -12,6 +12,7 @@ import { isHelpSeekingAction } from '../lib/support';
 import { canRequestSmallerComment } from '../lib/freeTextShrink';
 import { latestCommentId, orderThreadComments } from '../lib/threading';
 import { isCommentInView, keyboardLift, scrollDeltaForComment } from '../lib/threadViewport';
+import { parseMaterialDeadline, confirmedDeadline, deadlineInputValue } from '../lib/deadline';
 
 interface Props {
   card: Card;
@@ -29,12 +30,15 @@ interface Props {
   onBack: () => void;
   onLike: () => void;
   onCheer?: () => void;
+  onReidentify?: () => void;
+  onCancelMaterial?: () => void;
+  onConfirmDeadline?: (value:string) => void;
   initialPeer?: string;
 }
 
 const originLabels: Record<NonNullable<Comment['origin']>, string> = {
   model: '模型回复', demo: '演示台词', boundary: '线上边界', curated: '预置回复',
-  simulated: '模拟情节', system: '系统提示',
+  simulated: '模拟情节', system: '系统提示', material: '材料锚定',
 };
 
 const clock = (at: number) => {
@@ -61,6 +65,9 @@ export default function CardDetail({
   onBack,
   onLike,
   onCheer,
+  onReidentify,
+  onCancelMaterial,
+  onConfirmDeadline,
   initialPeer,
 }: Props) {
   const defaultTarget = card.authorKind === 'persona' ? card.authorId : '';
@@ -77,6 +84,11 @@ export default function CardDetail({
   const normalViewportHeight = useRef(0);
   const [showLatest, setShowLatest] = useState(false);
   const [smallerChoices, setSmallerChoices] = useState(false);
+  const materialDeadline = useMemo(()=>parseMaterialDeadline(card.material?.deadlineText),[card.material?.deadlineText]);
+  const [deadlineInput,setDeadlineInput] = useState('');
+  useEffect(()=>setDeadlineInput(deadlineInputValue(materialDeadline)),[card.id,card.material?.deadlineText]);
+  const materialScanning=Boolean(card.image && card.materialAttemptAt && !card.material && !card.materialError);
+  const materialAdviceAnchor=card.material?.anchors.find(a=>a.id===card.advice?.materialAnchorId);
   useEffect(() => setSmallerChoices(false), [card.id, card.advice?.sourceCommentId]);
   const ordered = useMemo(() => orderThreadComments(card.comments), [card.comments]);
   const latestId = latestCommentId(card.comments);
@@ -377,19 +389,57 @@ export default function CardDetail({
       {card.title && <h1 className="detail-title">{card.title}</h1>}
       <p className="page-text">{card.text}</p>
       {card.image && <img className="card-image" src={card.image} alt="卡片配图" />}
+      {mine && card.image && !isGuide && (
+        <section className="advice" aria-label="材料识别与截止时间确认" style={{maxWidth:'100%',overflowWrap:'anywhere'}}>
+          <div className="advice-head"><strong>AI 看到（请核对）</strong></div>
+          {materialScanning && <div role="status">
+            <p>识别中…正在提取可见文字，结果可能有误。</p>
+            {onCancelMaterial && <button type="button" className="btn btn-ghost"
+              onClick={onCancelMaterial}>取消识别</button>}
+          </div>}
+          {card.materialError && <p role="status">{card.materialError==='cancelled'
+            ? '识别已取消。你仍可使用普通下一步。'
+            : '没看清这张图，可以重试，或把关键文字粘贴进来。'}</p>}
+          {card.material && <>
+            <p>{card.material.title || '未识别标题'} · {card.material.confidence==='high'?'模型较有把握':'模型不确定，请仔细核对'}</p>
+            <ul>{card.material.anchors.map(a=><li key={a.id}>
+              <strong>{a.label}</strong>：<span>{a.quote}</span>{a.page ? `（第 ${a.page} 页）` : ''}
+            </li>)}</ul>
+            {card.material.excerpt && <details><summary>展开识别节选（可能有误）</summary>
+              <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{card.material.excerpt}</p></details>}
+            {card.material.deadlineText && <div>
+              <p>AI 看到：<strong>{card.material.deadlineText}</strong>。请确认，不会自动当成真实截止时间。</p>
+              {!card.materialGoalId ? <>
+                <label className="field"><span className="field-label">由你确认实际截止时间（本地时区）</span>
+                  <input type="datetime-local" value={deadlineInput} onChange={e=>setDeadlineInput(e.target.value)}
+                    style={{maxWidth:'100%',minWidth:0}} aria-label="确认截止日期和时间" /></label>
+                {materialDeadline.ambiguous && <small>原文日期不完整或含歧义，请自行核对后选择。</small>}
+                <button type="button" className="btn btn-ghost"
+                  disabled={!card.advice || !confirmedDeadline(deadlineInput) || !onConfirmDeadline}
+                  onClick={()=>onConfirmDeadline?.(deadlineInput)}>确认并加入目标/日程</button>
+              </> : <small>截止时间已由你确认并保存，不会由模型自动修改。</small>}
+            </div>}
+          </>}
+          {onReidentify && <button type="button" className="btn btn-ghost" onClick={onReidentify} disabled={materialScanning || busy ||
+              (card.advice?.origin==='material' && card.advice.accepted) || Boolean(card.materialGoalId)}>{card.materialAttemptAt?'重新识别':'识别图片'}</button>}
+        </section>
+      )}
+      {card.vulnerability && <p className="page-composer-note" role="note">
+        {card.vulnerability.kind==='missed'?'今天没做到':'这次卡住了'} · AI 虚构剧情。回应完全自愿，不会因没有回复而追问。
+      </p>}
 
       {!isGuide && card.advice && !closed && (
         <div className="advice">
           <div className="advice-head">
             <span className="advice-from">
               {card.advice.sourceCommentId && giver
-                ? `你从${giver.name}的回复采用`
+                ? `今天的一步 · 你采用了${giver.name}的回复`
                 : giver
-                  ? `${giver.name} 给的下一步`
-                  : '你的下一步'}
+                  ? `今天的一步 · ${giver.name}给的`
+                  : '今天的一步'}
             </span>
             <span className="advice-hint">
-              {card.advice.actionId ? '做不到就再小一级' : '原话采用 · 可请求更小一步'}
+              {card.advice.actionId || card.advice.origin==='material' ? '做不到就再小一级' : '原话采用 · 可请求更小一步'}
             </span>
           </div>
           <p className="advice-label">{card.advice.text}</p>
@@ -400,12 +450,17 @@ export default function CardDetail({
           )}
           {card.advice.origin && (
             <small>
-              {card.advice.origin === 'adopted'
+              {card.advice.origin === 'material'
+                ? `材料锚定 · ${card.advice.materialSource==='model'?'模型生成并校验':'本地模板'}`
+                : card.advice.origin === 'adopted'
                 ? '由你采用 · 保留评论原话'
                 : card.advice.origin === 'demo'
                   ? '演示动作'
                   : '预置动作'}
             </small>
+          )}
+          {card.advice.origin==='material' && materialAdviceAnchor && (
+            <small>引用：{materialAdviceAnchor.label}</small>
           )}
           {card.advice.sourceCommentId && (
             <button
@@ -418,7 +473,7 @@ export default function CardDetail({
           )}
           {mine && !card.advice.accepted && (
             <div className="advice-actions">
-              <button className="btn btn-ghost" disabled={busy || (!card.advice.actionId && !canShrinkAdopted)}
+              <button className="btn btn-ghost" disabled={busy || (!card.advice.actionId && card.advice.origin!=='material' && !canShrinkAdopted)}
                 onClick={() => canShrinkAdopted
                   ? setSmallerChoices(true) : onShrink()}>
                 做不到
@@ -541,11 +596,11 @@ export default function CardDetail({
               placeholder={
                 targetId
                   ? targetIsOp
-                    ? '回复楼主…'
+                    ? (card.vulnerability ? '陪他说一句…' : '回复楼主…')
                     : `回复 ${target?.name ?? '对方'}…`
                   : mine
                     ? '说一句…'
-                    : '回复楼主…'
+                    : (card.vulnerability ? '陪他说一句…' : '回复楼主…')
               }
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {

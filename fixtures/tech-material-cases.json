@@ -1,0 +1,414 @@
+[
+  {
+    "id": "assignment-01",
+    "kind": "assignment",
+    "text": "实验报告二：第2题需写出已知条件与误差来源，周五23:59前提交到学习通。",
+    "deadline": "周五 23:59",
+    "expectedAnchors": [
+      "第2题",
+      "已知条件",
+      "误差来源"
+    ],
+    "stepMustIncludeAny": [
+      "第2题",
+      "已知条件"
+    ],
+    "image": "assignment.png",
+    "note": ""
+  },
+  {
+    "id": "assignment-02",
+    "kind": "assignment",
+    "text": "课程设计：第3题要求画出系统框图并说明接口；下周一交。",
+    "deadline": "下周一",
+    "expectedAnchors": [
+      "第3题",
+      "系统框图",
+      "接口"
+    ],
+    "stepMustIncludeAny": [
+      "第3题",
+      "框图",
+      "接口"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "assignment-03",
+    "kind": "assignment",
+    "text": "作业：第5题用 Excel 处理表1第一列数据，周三课前提交。",
+    "deadline": "周三课前",
+    "expectedAnchors": [
+      "第5题",
+      "表1",
+      "第一列"
+    ],
+    "stepMustIncludeAny": [
+      "第5题",
+      "表1",
+      "第一列"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "assignment-04",
+    "kind": "assignment",
+    "text": "文献综述作业：读第一篇论文的摘要，写200字；本周日截止。",
+    "deadline": "本周日",
+    "expectedAnchors": [
+      "摘要",
+      "200字"
+    ],
+    "stepMustIncludeAny": [
+      "摘要",
+      "200字"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "assignment-05",
+    "kind": "assignment",
+    "text": "实验预习：第1题写出实验目的，第2题列出器材；明早8点前。",
+    "deadline": "明早8点",
+    "expectedAnchors": [
+      "第1题",
+      "实验目的",
+      "器材"
+    ],
+    "stepMustIncludeAny": [
+      "第1题",
+      "实验目的",
+      "器材"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "schedule-01",
+    "kind": "schedule",
+    "text": "周一 高数8:00 教三201；周三 实验14:00 实验楼；周五 交实验报告。",
+    "deadline": "周五",
+    "expectedAnchors": [
+      "周一",
+      "高数",
+      "周五"
+    ],
+    "stepMustIncludeAny": [
+      "周一",
+      "高数",
+      "实验报告"
+    ],
+    "image": "schedule.png",
+    "note": ""
+  },
+  {
+    "id": "schedule-02",
+    "kind": "schedule",
+    "text": "本周课表：周二英语、周四材料力学；周六小组汇报。",
+    "deadline": null,
+    "expectedAnchors": [
+      "周二",
+      "英语",
+      "材料力学",
+      "小组汇报"
+    ],
+    "stepMustIncludeAny": [
+      "周二",
+      "英语",
+      "材料力学"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "schedule-03",
+    "kind": "schedule",
+    "text": "作业清单：高数第3章习题（周四）、实验报告（周五）、英语作文（周日）。",
+    "deadline": "周五",
+    "expectedAnchors": [
+      "高数第3章",
+      "实验报告",
+      "英语作文"
+    ],
+    "stepMustIncludeAny": [
+      "高数第3章",
+      "实验报告",
+      "英语作文"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "schedule-04",
+    "kind": "schedule",
+    "text": "考试安排：11月21日 9:00 病理学 教三201。",
+    "deadline": "11月21日 9:00",
+    "expectedAnchors": [
+      "11月21日",
+      "9:00",
+      "病理学"
+    ],
+    "stepMustIncludeAny": [
+      "11月21日",
+      "病理学"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "schedule-05",
+    "kind": "schedule",
+    "text": "兼职排班：周三18:00-22:00，周六10:00-18:00。",
+    "deadline": null,
+    "expectedAnchors": [
+      "周三",
+      "18:00",
+      "周六"
+    ],
+    "stepMustIncludeAny": [
+      "周三",
+      "18:00",
+      "周六"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "paper-01",
+    "kind": "paper",
+    "text": "论文第一页：摘要第一句是“本文提出一种基于温度补偿的材料产率预测方法。”",
+    "deadline": null,
+    "expectedAnchors": [
+      "摘要第一句"
+    ],
+    "stepMustIncludeAny": [
+      "摘要",
+      "第一句"
+    ],
+    "image": "paper.png",
+    "note": ""
+  },
+  {
+    "id": "paper-02",
+    "kind": "paper",
+    "text": "方法部分第一段讲的是两阶段回归模型的构建。",
+    "deadline": null,
+    "expectedAnchors": [
+      "方法",
+      "第一段"
+    ],
+    "stepMustIncludeAny": [
+      "方法",
+      "第一段"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "paper-03",
+    "kind": "paper",
+    "text": "结论最后一段讨论了小样本条件下的误差。",
+    "deadline": null,
+    "expectedAnchors": [
+      "结论",
+      "最后一段"
+    ],
+    "stepMustIncludeAny": [
+      "结论",
+      "最后一段"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "paper-04",
+    "kind": "paper",
+    "text": "参考文献第12条是作者引用的回归模型出处。",
+    "deadline": null,
+    "expectedAnchors": [
+      "参考文献第12条"
+    ],
+    "stepMustIncludeAny": [
+      "参考文献",
+      "第12条"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "paper-05",
+    "kind": "paper",
+    "text": "图2的标题是“不同温度下的产率变化”。",
+    "deadline": null,
+    "expectedAnchors": [
+      "图2"
+    ],
+    "stepMustIncludeAny": [
+      "图2"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "datasheet-01",
+    "kind": "datasheet",
+    "text": "实验数据表里表1第一列是温度，第三行产率看起来是异常值。",
+    "deadline": null,
+    "expectedAnchors": [
+      "表1",
+      "第一列",
+      "产率"
+    ],
+    "stepMustIncludeAny": [
+      "表1",
+      "第一列",
+      "温度"
+    ],
+    "image": "datasheet.png",
+    "note": ""
+  },
+  {
+    "id": "datasheet-02",
+    "kind": "datasheet",
+    "text": "Excel 里 A 列是样品编号，B 列是产率。",
+    "deadline": null,
+    "expectedAnchors": [
+      "A列",
+      "样品编号"
+    ],
+    "stepMustIncludeAny": [
+      "A列",
+      "样品编号"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "datasheet-03",
+    "kind": "datasheet",
+    "text": "两个数据列：时间列和温度列，想先核对温度列的单位。",
+    "deadline": null,
+    "expectedAnchors": [
+      "时间列",
+      "温度列",
+      "单位"
+    ],
+    "stepMustIncludeAny": [
+      "温度列",
+      "单位"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "datasheet-04",
+    "kind": "datasheet",
+    "text": "有个 3.7 的异常值，不确定是不是单位写错了。",
+    "deadline": null,
+    "expectedAnchors": [
+      "3.7",
+      "异常值"
+    ],
+    "stepMustIncludeAny": [
+      "3.7",
+      "异常值"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "datasheet-05",
+    "kind": "datasheet",
+    "text": "表格缺少单位那一列，需要先补上。",
+    "deadline": null,
+    "expectedAnchors": [
+      "单位",
+      "列"
+    ],
+    "stepMustIncludeAny": [
+      "单位"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "error-01",
+    "kind": "error",
+    "text": "Python 报错最后一行是 KeyError: 'sample'。",
+    "deadline": null,
+    "expectedAnchors": [
+      "KeyError: 'sample'",
+      "最后一行"
+    ],
+    "stepMustIncludeAny": [
+      "KeyError",
+      "sample"
+    ],
+    "image": "error.png",
+    "note": ""
+  },
+  {
+    "id": "error-02",
+    "kind": "error",
+    "text": "MATLAB 报错提示那一行写着 Undefined function or variable。",
+    "deadline": null,
+    "expectedAnchors": [
+      "Undefined function or variable"
+    ],
+    "stepMustIncludeAny": [
+      "Undefined",
+      "function"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "error-03",
+    "kind": "error",
+    "text": "Excel 显示 #VALUE!，不知道哪一列出错。",
+    "deadline": null,
+    "expectedAnchors": [
+      "#VALUE!"
+    ],
+    "stepMustIncludeAny": [
+      "#VALUE"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "error-04",
+    "kind": "error",
+    "text": "npm 报错 ERR! missing script: dev。",
+    "deadline": null,
+    "expectedAnchors": [
+      "ERR!",
+      "missing script: dev"
+    ],
+    "stepMustIncludeAny": [
+      "ERR!",
+      "missing script"
+    ],
+    "image": null,
+    "note": ""
+  },
+  {
+    "id": "error-05",
+    "kind": "error",
+    "text": "LaTeX 报错 Undefined control sequence，停在 \frac 那一行。",
+    "deadline": null,
+    "expectedAnchors": [
+      "Undefined control sequence",
+      "\frac"
+    ],
+    "stepMustIncludeAny": [
+      "Undefined control sequence",
+      "frac"
+    ],
+    "image": null,
+    "note": ""
+  }
+]

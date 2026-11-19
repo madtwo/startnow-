@@ -27,6 +27,7 @@ interface Props {
   onDecompose: () => void;
   onOpenGoal: (goalId: string) => void;
   onShareGoal: (goalId: string) => void;
+  competitionMode?: boolean;
 }
 
 const RING_R = 52;
@@ -55,6 +56,7 @@ export default function StepBoard({
   onDecompose,
   onOpenGoal,
   onShareGoal,
+  competitionMode = false,
 }: Props) {
   const [draft, setDraft] = useState('');
   const [smallerChoices, setSmallerChoices] = useState(false);
@@ -137,7 +139,7 @@ export default function StepBoard({
 
   return (
     <div className="step-board">
-      <section className="card section-card meeting-goal-entry">
+      {!competitionMode && <section className="card section-card meeting-goal-entry">
         <div className="section-head"><h3>拆解一个目标</h3></div>
         <p>目标大一点也没关系。自己写步骤，或先让 AI 问清楚再拆。</p>
         <button className="btn btn-primary" onClick={onDecompose}>拆解一个目标</button>
@@ -162,7 +164,7 @@ export default function StepBoard({
             ))}
           </div>
         )}
-      </section>
+      </section>}
       <section
         className={`step-hero hero-card ${
           focus ? '' : active ? 'is-waiting' : lastDone ? 'is-done' : 'is-empty'
@@ -178,7 +180,9 @@ export default function StepBoard({
               <p className="step-line">{noted?.note?.text ?? advised?.advice?.text}</p>
               {focus.advice?.origin && (
                 <small>
-                  {focus.advice.origin === 'adopted'
+                  {focus.advice.origin === 'material'
+                    ? '材料锚定 · 先核对图片'
+                    : focus.advice.origin === 'adopted'
                     ? '你从角色回复采用 · 保留原话'
                     : focus.advice.origin === 'demo'
                       ? '演示动作'
@@ -196,7 +200,7 @@ export default function StepBoard({
                     ? `从${giver.name}的回复采用 · `
                     : `${giver.name} 给的 · `
                   : ''}
-                {focus.advice?.actionId ? '做不到就再小一级' : '原话采用 · 可请角色再给小一步'}
+                {focus.advice?.actionId || focus.advice?.origin==='material' ? '做不到就再小一级' : '原话采用 · 可请角色再给小一步'}
               </p>
               <div className="step-actions">
                 {noted ? (
@@ -208,7 +212,7 @@ export default function StepBoard({
                     <button
                       className="btn btn-ghost"
                       onClick={() => (canShrinkAdopted ? setSmallerChoices(true) : onShrink(advised))}
-                      disabled={busy || (!advised.advice?.actionId && !canShrinkAdopted)}
+                      disabled={busy || (!advised.advice?.actionId && advised.advice?.origin!=='material' && !canShrinkAdopted)}
                     >
                       做不到
                     </button>

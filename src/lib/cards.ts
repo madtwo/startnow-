@@ -32,6 +32,8 @@ import type { RejectedCompletionDiagnostic } from './completionDiagnostics';
 import { MAX_FREE_TEXT_SHRINK, canRequestSmallerComment, fallbackSmallerText, likelyFreeTextAction, safeSmallerText, validSmallerText } from './freeTextShrink';
 import { actionLabel, inferTrouble, pickActions, recentActionUses, selectActionLine, smallerAction } from './actions';
 import { chooseCuratedActionLine } from './curatedUsage';
+import { materialFirstStep, smallerMaterialStep } from './materialAdvice';
+import { GROWTH_REFERENCE, canReferenceGrowthFromCards, correctionForMisread, isManipulative } from './agentVulnerability';
 import type { RecentAction } from './actions';
 import {
   canPublishBrag, cancelBragsForNewWorry, fallbackBragText, isVagueComfortAdvice,
@@ -414,6 +416,13 @@ export function shrinkAdvice(card: Card, now = Date.now()): Card {
   if (card.status !== 'advised' || hasPlayerCrisisInput(card)) return card;
   const advice = card.advice;
   if (advice?.accepted) return card;
+  if (advice?.origin === 'material' && advice.materialAnchorId && card.material) {
+    const smaller = smallerMaterialStep({text:advice.text,anchorId:advice.materialAnchorId}, card.material);
+    if (!smaller) return card;
+    return {...card,advice:{...advice,text:smaller.text,materialAnchorId:smaller.anchorId,materialSource:'template',at:now},
+      comments:[...card.comments,{id:uid(),authorId:advice.fromPersonaId,authorKind:'persona',
+        text:smaller.text,at:now,origin:'material'}]};
+  }
   if (!advice?.actionId) return card;
   const smaller = isHelpSeekingAction(advice.actionId)
     ? nextSmallerHelpAction(advice.actionId)
@@ -444,6 +453,7 @@ export function acceptAdvice(card: Card, now = Date.now()): Card {
     note: {
       text: card.advice.text,
       actionId: card.advice.actionId,
+      materialAnchorId: card.advice.materialAnchorId,
       sourceCommentId: card.advice.sourceCommentId,
       fromPersonaId: card.advice.fromPersonaId,
       at: now,
@@ -495,6 +505,10 @@ interface Ctx {
   logs: string[];
   /** Per-tick history plus decisions made during this tick (not high-trust prompt data). */
   usedCurated?: RecentAction[];
+  /** Source-backed comments across this tick for once-per-week growth references. */
+  historyCards?: readonly Card[];
+  growthReferencesThisTick?: Set<string>;
+  tickNow?: number;
   /** Local QA callback: never recorded into normal logs or saved cards. */
   onRejectedCompletion?: (diagnostic: RejectedCompletionDiagnostic) => void;
 }
@@ -759,7 +773,7 @@ async function callOnce(
 }
 
 type CommentGeneration =
-  | { kind: 'reply'; text: string; origin: 'model' | 'demo' | 'boundary' | 'curated'; actionId?: string }
+  | { kind: 'reply'; text: string; origin: 'model' | 'demo' | 'boundary' | 'curated'; actionId?: string; corrected?: boolean; growthReferenced?: boolean }
   | { kind: 'unavailable'; reason: string }
   | { kind: 'crisis'; reason: string };
 
@@ -816,6 +830,7 @@ function firstHeavyReply(persona: Persona, sustained: boolean): string {
 
 function replyProblem(text: string): string | null {
   if (findCrisis(text)) return '危机表达';
+  if (isManipulative(text)) return '施压/依赖表达';
   return auditCriticalContent(text) || auditTone(text) || auditSocial(text);
 }
 
@@ -872,6 +887,11 @@ async function generateComment(
     );
     ctx.logs.push(`${persona.name} 接住依赖表达（dependency）`);
     return { kind: 'reply', text: dependencySupportReply(persona, sustained), origin: 'curated' };
+  }
+  if (incoming && phase === 'reply' && !needsHelpSeeking(incoming)) {
+    const correction = correctionForMisread(persona.id, incoming,
+      card.vulnerability?.kind === 'misread' && card.vulnerability.personaId === persona.id);
+    if (correction) return {kind:'reply',text:correction,origin:'curated',corrected:true};
   }
   if (incoming && phase === 'reply' && wantsDirectAdvice(incoming)) {
     const context = [card.text, ...card.comments.filter((c) => c.authorKind === 'player').map((c) => c.text)].join(' ');
@@ -956,6 +976,12 @@ async function generateComment(
     );
     const line = cleanLine(text);
     if (!line) throw new Error('模型返回空文本');
+    const growthReferenced=GROWTH_REFERENCE.test(line);
+    if (growthReferenced && (ctx.growthReferencesThisTick?.has(persona.id) ||
+        !canReferenceGrowthFromCards(ctx.historyCards??[],persona.id,ctx.tickNow??Date.now()))) {
+      ctx.logs.push(`${persona.name} 没有可核对的用户建议完成事件或七日内已引用过，删除无依据的成长引用`);
+      return {kind:'reply',text:curatedSafeLine(persona),origin:'curated'};
+    }
     if (shortContact && mentionsLocalVenue(line)) {
       ctx.logs.push(`${persona.name} 的短接触回复提到共享场所，改为明确标注的预置短回复`);
       return {
@@ -983,7 +1009,7 @@ async function generateComment(
         origin: social ? 'boundary' : 'curated',
       };
     }
-    return { kind: 'reply', text: line, origin: 'model' };
+    return { kind: 'reply', text: line, origin: 'model',growthReferenced };
   } catch (err) {
     const reason = describeError(err);
     ctx.logs.push(`${persona.name} 本轮模型不可用：${reason}`);
@@ -1043,7 +1069,7 @@ async function generateAiCard(
     );
     const [body, fact] = text.split('|||');
     const card = cleanLine(body ?? text, 120);
-    if (!card || replyProblem(card)) {
+    if (!card || replyProblem(card) || GROWTH_REFERENCE.test(card)) {
       ctx.logs.push(`${persona.name} 的卡被拦下了`);
       return null;
     }
@@ -1130,6 +1156,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
   const ctx: Ctx = {
     config: input.config, settings: input.settings, calls: 0, logs: [],
     usedCurated: recentActionUses(input.cards, now),
+    historyCards: input.cards, growthReferencesThisTick: new Set(),tickNow:now,
     onRejectedCompletion: input.onRejectedCompletion,
   };
   let personas: Persona[] = input.personas.map((p) => ({
@@ -1254,7 +1281,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     });
 
     if (
-      !input.bragOnly && !peerScheduled &&
+      !input.bragOnly && !peerScheduled && !card.vulnerability &&
       card.authorKind === 'persona' &&
       card.status !== 'done' && card.kind !== 'brag' &&
       card.pending.length === 0 &&
@@ -1471,10 +1498,13 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
             });
           } else {
             said = generated.text;
+            if (generated.corrected) card.vulnerability = {kind:'misread',personaId:persona.id,at:now};
+            if (generated.growthReferenced) ctx.growthReferencesThisTick?.add(persona.id);
             card.comments.push({
               id: uid(), authorId: persona.id, authorKind: 'persona',
               text: said, at: now, origin: generated.origin,
               ...(generated.actionId ? { actionId: generated.actionId } : {}),
+              ...(generated.growthReferenced ? {growthReference:true} : {}),
               replyTo: ready.sourceCommentId,
             });
           }
@@ -1601,7 +1631,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     const persona = pool[Math.floor(Math.random() * pool.length)];
     const recent = recentOwnCards(cards, persona.id);
     const boost = persona.shareBoost ? 1 : 0;
-    const weight = Math.min(3, allowedWeight(persona.intimacy) + boost) as 1 | 2 | 3;
+    const weight = Math.min(persona.intimacy < 60 ? 2 : 3, allowedWeight(persona.intimacy) + boost) as 1 | 2 | 3;
     const made = await generateAiCard(ctx, persona, recent, now, weight);
     if (made) {
       const nextCard: Card = {
@@ -1654,7 +1684,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
 }
 
 export async function askForAdvice(
-  input: TickInput & { cardId: string; personaId?: string },
+  input: TickInput & { cardId: string; personaId?: string; modelCallBudget?: number },
 ): Promise<{ cards: Card[]; personas: Persona[]; calls: number; logs: string[] }> {
   const now = input.now ?? Date.now();
   const card = input.cards.find((c) => c.id === input.cardId);
@@ -1677,6 +1707,29 @@ export async function askForAdvice(
   const context = [card.text, ...card.comments.filter((c) => c.authorKind === 'player').map((c) => c.text)].join(' ');
   // 优先匹配非诊断性求助起点，避免“应就医”与正式动作“开窗”自相矛盾。
   const seekingHelp = card.authorKind === 'player' && needsHelpSeeking(context);
+  // User-initiated image lane; tick never calls vision or invents a material extraction.
+  if (card.authorKind==='player' && card.material && !seekingHelp) {
+    let calls=0;
+    const material=await materialFirstStep({extraction:card.material,persona,config:input.config,now,
+      onModelAttempt:()=>{
+        if (calls>=2 || (input.modelCallBudget!==undefined && calls>=input.modelCallBudget))
+          throw new Error('material advice model budget exhausted');
+        calls++;
+      },
+    });
+    if (material) {
+      const next:Card={...card,status:'advised',
+        advice:{text:material.text,fromPersonaId:persona.id,at:now,accepted:false,origin:'material',
+          materialAnchorId:material.anchorId,materialSource:material.source},
+        comments:[...card.comments,{id:uid(),authorId:persona.id,authorKind:'persona',
+          text:material.text,at:now,origin:'material'}]};
+      const changed=card.noMemory ? input.personas : input.personas.map(p=>
+        p.id===persona.id?{...p,mind:mindAfterReply(p,safeName(card.authorName),now)}:p);
+      return {cards:input.cards.map(c=>c.id===card.id?next:c),personas:changed,calls,
+        logs:[`material_step=${material.source}`,`material_anchor=${material.anchorId}`]};
+    }
+    // No identifiable anchor: the existing curated action path remains available.
+  }
   const trouble = inferTrouble(card.text);
   // Include direct-advice comments, not only pinned advice, in the 24h history.
   const recentAdvice = recentActionUses(input.cards, now, card.id);

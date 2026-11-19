@@ -10,6 +10,8 @@ interface Props {
   busy: boolean;
   ready: boolean;
   personas: Persona[];
+  visionModel: string;
+  onVisionModelChange: (model: string) => void;
   onChange: (value: string) => void;
   onTitle: (value: string) => void;
   onImage: (image: string) => void;
@@ -24,6 +26,8 @@ export default function PostForm({
   busy,
   ready,
   personas,
+  visionModel,
+  onVisionModelChange,
   onChange,
   onTitle,
   onImage,
@@ -31,6 +35,7 @@ export default function PostForm({
   onOpenSettings,
 }: Props) {
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
 
   const pick = async (file?: File) => {
     if (!file) return;
@@ -75,6 +80,20 @@ export default function PostForm({
           </div>
         )}
 
+        {image && (
+          <label className="field">
+            <span className="field-label">视觉识别模型（需支持图片输入）</span>
+            <input
+              className="post-form-title"
+              value={visionModel}
+              placeholder="填写已开通视觉能力的模型名称"
+              onChange={(e) => onVisionModelChange(e.target.value)}
+              aria-label="视觉识别模型名称"
+              maxLength={160}
+            />
+          </label>
+        )}
+
         <div className="post-form-foot">
           <div className="who">
             <span className="who-avatars">
@@ -89,22 +108,36 @@ export default function PostForm({
               <span>{personas.length} 位同伴，来不来不一定</span>
             </span>
           </div>
-          <div className="post-form-actions">
+          <div className="post-form-actions" style={{flexWrap:'wrap',maxWidth:'100%'}}>
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               hidden
               onChange={(e) => {
                 void pick(e.target.files?.[0]);
                 e.target.value = '';
               }}
             />
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              hidden
+              onChange={(e) => {
+                void pick(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+            <button className="btn btn-ghost" onClick={() => cameraRef.current?.click()}>
+              拍一下卡住你的东西
+            </button>
             <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
-              加一张图
+              选材料图片
             </button>
             {ready ? (
-              <button className="btn btn-primary" disabled={!value.trim() || busy} onClick={onSubmit}>
+              <button className="btn btn-primary" disabled={(!value.trim() && !image) || busy} onClick={onSubmit}>
                 放出去
               </button>
             ) : (
@@ -115,6 +148,7 @@ export default function PostForm({
           </div>
         </div>
 
+        {image && <p className="compose-tip">点击「放出去」后，图片会发送给你配置的视觉模型识别；原图保存在本地卡片中，导出存档也会包含它。请先遮住姓名、学号等隐私信息；未配置视觉模型时，仍可使用普通建议。</p>}
         <p className="compose-tip">放出去后，会有 AI 同伴来回应你。不用守着，忙完回来看看。</p>
     </section>
   );

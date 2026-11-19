@@ -94,6 +94,8 @@ export interface Identity {
   bio: string;
 }
 
+import type { MaterialExtraction } from './lib/materialVision';
+
 export type CardStatus = 'stuck' | 'arrived' | 'talking' | 'advised' | 'noted' | 'done' | 'handled';
 
 export interface Comment {
@@ -109,9 +111,11 @@ export interface Comment {
   shrinkDepth?: number;
   parentAdviceSource?: string;
   // 不给本地生成或审查回退的台词伪装成真实模型输出。
-  origin?: 'model' | 'demo' | 'boundary' | 'curated' | 'simulated' | 'system';
+  origin?: 'model' | 'demo' | 'boundary' | 'curated' | 'simulated' | 'system' | 'material';
   /** Stable ID for local curated action copy; never set for model prose. */
   actionId?: string;
+  /** Source-backed once-per-week acknowledgment of a player's suggestion. */
+  growthReference?: boolean;
   /** Non-sensitive reason code for a simulated completion reaction, if applicable. */
   fallbackReason?: 'demo' | 'unsafe_anchor' | 'reasoning_budget' | 'empty_body' | 'truncated' | 'invalid_action' | 'timeout' | 'rate_limit' | 'network' | 'model_error';
 }
@@ -127,7 +131,9 @@ export interface Advice {
   /** Depth of accepted smaller suggestions (not a failure count). */
   shrinkDepth?: number;
   parentAdviceSource?: string;
-  origin?: 'curated' | 'demo' | 'adopted';
+  origin?: 'curated' | 'demo' | 'adopted' | 'material';
+  materialAnchorId?: string;
+  materialSource?: 'model' | 'template';
 }
 
 export interface Note {
@@ -138,6 +144,7 @@ export interface Note {
   fromPersonaId: string;
   at: number;
   dueAt: number;
+  materialAnchorId?: string;
 }
 
 export interface PlannedArrival {
@@ -189,6 +196,13 @@ export interface Card {
   text: string;
   weight?: 1 | 2 | 3;
   image?: string;
+  /** Redacted, user-visible material extraction only; the image is never logged. */
+  material?: MaterialExtraction;
+  materialAttemptAt?: number;
+  materialError?: string;
+  materialGoalId?: string;
+  deadlineConfirmedAt?: number;
+  vulnerability?: {kind: 'misread' | 'missed' | 'lost'; personaId: string; at: number; comfortRequested?: boolean; resolvedAt?: number};
   createdAt: number;
   status: CardStatus;
   arrivals: string[];

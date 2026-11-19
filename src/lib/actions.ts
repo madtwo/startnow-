@@ -57,7 +57,33 @@ const expandActions = (
   },
 ]);
 
+// COPY-DECK v3: fourteen academic actions. IDs and child steps are stable
+// because saved cards/curated deduplication may refer to them later.
+const COPY_DECK_STUDY_ACTIONS: ActionItem[] = [
+  ...expandActions(['study'], 'study', [
+    ['lit-abstract', '只读一篇文献的摘要第一句', 2, '先只读摘要第一句，不要求看懂全文。', '我会只读一句摘要，然后停下。', '打开第一篇文献的摘要'],
+    ['lit-list', '把三篇文献列成一张表', 4, '先写三个标题，别的都不填。', '我会先列三个标题，不写总结。', '写下第一篇文献的标题'],
+    ['lit-question', '圈出综述要回答的一个问题', 3, '先圈一个综述要回答的问题。', '我会先写下综述要回答的一个问题。', '写下「综述要回答什么」'],
+    ['proposal-heading', '开题报告只写一个小标题', 3, '先写一个小标题，不写正文。', '我会先写一个能看懂的小标题。', '打开开题报告文档'],
+    ['proposal-ref', '开题引用先补一条', 4, '只补一条作者和年份。', '我会只补一条引用。', '找到要引用的那句话'],
+    ['portfolio-pick', '从旧作业里选三张', 4, '只挑三张，不排版。', '我会先选三张能说清思路的。', '翻一遍旧作业'],
+    ['portfolio-page', '作品集先排一页', 4, '只放一张主图和标题。', '我会先排一页，只放主图。', '选一张主图'],
+    ['draw-frame', '制图先画外框', 4, '只画图框和外轮廓。', '我会先画外框，不画细节。', '打开制图文件'],
+    ['assign-q', '作业要求先圈第2题关键词', 2, '只圈第2题，不写答案。', '我会先把第2题的关键词圈出来。', '打开作业要求'],
+    ['calendar-deadline', '在日历写下截止时间', 2, '只写一个日期，不排整个计划。', '我会先把截止时间写进日历。', '打开日历'],
+  ], 'study-writing'),
+  ...expandActions(['study'], 'study', [
+    ['data-column', '新建表格，只粘第一列数据', 3, '先粘第一列，不处理其他列。', '我会新建一个表，只粘第一列。', '新建一个空白表格'],
+    ['data-outlier', '圈出一个异常值', 2, '只圈一个看着不对的数。', '我会先圈出一个异常值。', '找到数据表里那个数'],
+    ['data-unit', '核对一列的单位', 3, '只看单位那一列。', '我会先核对单位有没有写错。', '找到单位那一列'],
+  ], 'study-lab'),
+  ...expandActions(['future'], 'future', [
+    ['resume-one', '简历只改最近一段经历的第一行', 4, '只改第一行的动词，不动整段。', '我会只改最近一段经历的第一行。', '打开简历文件'],
+  ], 'future-job'),
+];
+
 const EXPANDED_ACTIONS: ActionItem[] = [
+  ...COPY_DECK_STUDY_ACTIONS,
   ...expandActions(['study'], 'study', [
     ['exam-scope', '圈出今天要复习的一个考点', 3, '我会先圈出一个考点，别一下想着整门课。', '先从考试范围里找一个小考点，圈起来就好。', '打开考试范围那一页'],
     ['exam-date', '把考试时间写在便签顶上', 1, '我会先把考试几点写在纸上，别的先不想。', '先把考试时间记下来，至少不用反复猜日期。', '找到考试通知'],
@@ -457,7 +483,7 @@ const RULES: [TroubleKind, RegExp][] = [
   ],
   [
     'study',
-    /(考试|小测|期末|期中|复习|背书|背不|论文|开题|报告|作业|实验|课程|上课|绩点|挂科|公式|题目|例题|高数|英语|四六级|ddl|截止|答辩|文献)/i,
+    /(考试|小测|期末|期中|复习|背书|背不|论文|开题|报告|作业|实验|课程|上课|绩点|挂科|公式|题目|例题|高数|英语|四六级|ddl|截止|答辩|文献|作品集|制图|图纸|数据表|Excel|excel|CAD|cad|综述)/i,
   ],
   ['love', /(喜欢|表白|恋爱|分手|前任|暧昧|对象|男友|女友|约会|crush|感情|结婚|回消息|等消息)/i],
   [
@@ -543,7 +569,8 @@ export type ActionTheme =
   | 'report' | 'presentation' | 'dorm-noise' | 'sleep' | 'group-work'
   | 'expense' | 'reference' | 'paper-start' | 'experiment' | 'exam'
   | 'internship' | 'future' | 'family-call' | 'romance-message'
-  | 'club-hesitation' | 'early-class';
+  | 'club-hesitation' | 'early-class'
+  | 'literature' | 'proposal' | 'datasheet' | 'portfolio' | 'drawing' | 'assignment';
 
 export interface ActionIntent {
   id: string;
@@ -563,6 +590,9 @@ const intentThemes: Record<string, ActionTheme> = {
   'future-decision': 'future', 'family-call': 'family-call', 'family-call-priority': 'family-call',
   'romance-message': 'romance-message', 'send-message': 'romance-message',
   'club-boundary': 'club-hesitation', 'early-class': 'early-class',
+  literature: 'literature', proposal: 'proposal', datasheet: 'datasheet',
+  portfolio: 'portfolio', drawing: 'drawing',
+  'assignment-second': 'assignment', 'assignment-deadline': 'assignment', 'assignment-unspecified': 'assignment',
 };
 
 const actionIntentRules: ReadonlyArray<{
@@ -578,7 +608,7 @@ const actionIntentRules: ReadonlyArray<{
     matches: text => /(汇报|演讲|上台|展示|答辩|课堂发言|PPT|ppt|讲台).{0,45}(紧张|害怕|脑子.{0,8}空白|不会讲|不知道怎么说|卡壳|开口|准备|练习|发抖)|(?:紧张|害怕|发抖|开不了口|脑子空白).{0,35}(上台|汇报|演讲|答辩|课堂发言)/iu.test(text),
     actionIds: [] }, // No safe performance-specific preset yet: ask which part is hardest.
   { id: 'report-content', topic: 'study',
-    matches: text => /(课程报告|实验报告|报告|汇报稿|结题报告).{0,35}(开头|正文|没写|写不出|第一段|草稿|摘要|结构)|(?:写不出|第一段|开头).{0,25}(报告|汇报稿)/u.test(text),
+    matches: text => !/开题/u.test(text) && (/(课程报告|实验报告|报告|汇报稿|结题报告).{0,35}(开头|正文|没写|写不出|第一段|草稿|摘要|结构)|(?:写不出|第一段|开头).{0,25}(报告|汇报稿)/u.test(text)),
     actionIds: ['write-heading-2','write-claim-2','write-title-2','draft-3'] },
   // A call/conflict with family outranks the topic being discussed; a bare
   // "they asked whether I'll take the exam" is a future decision.
@@ -600,6 +630,29 @@ const actionIntentRules: ReadonlyArray<{
   { id: 'competition-anxiety', topic: 'future',
     matches: text => /(比赛|竞赛|报名).{0,35}(拖累|水平不够|害怕|不敢|怕自己)/u.test(text),
     actionIds: [] },
+  // Academic source-specific rules precede generic writing/lab fallbacks.
+  // A number/column, drawing, or deadline is never silently invented.
+  { id: 'literature', topic: 'study',
+    matches: text => /(文献综述|综述|读文献|摘要|论文页|整理文献|文献表)/u.test(text),
+    actionIds: ['lit-abstract-2','lit-list-2','lit-question-2'] },
+  { id: 'proposal', topic: 'study',
+    matches: text => /(开题报告|开题答辩|开题汇报|开题.{0,4}(报告|答辩|汇报))/u.test(text),
+    actionIds: ['proposal-heading-2','proposal-ref-2'] },
+  { id: 'portfolio', topic: 'study',
+    matches: text => /(作品集|(?:作业|作品).{0,12}排版)/u.test(text),
+    actionIds: ['portfolio-pick-2','portfolio-page-2'] },
+  { id: 'drawing', topic: 'study',
+    matches: text => /(制图|图纸|方案图|CAD|cad)/u.test(text),
+    actionIds: ['draw-frame-2'] },
+  { id: 'assignment-second', topic: 'study',
+    matches: text => /(第\s*(?:2|二)\s*题)/u.test(text),
+    actionIds: ['assign-q-2'] },
+  { id: 'assignment-deadline', topic: 'study',
+    matches: text => /(?:(?:作业|提交).{0,18}(?:截止|时间)|截止.{0,12}(?:提交|作业|时间))/u.test(text),
+    actionIds: ['calendar-deadline-2'] },
+  { id: 'assignment-unspecified', topic: 'study',
+    matches: text => /(作业要求|作业清单)/u.test(text),
+    actionIds: [] }, // No evidence of a second question/date: clarify instead of guessing.
   { id: 'roommate-sleep', topic: 'people',
     matches: text => /(室友|宿舍|隔壁床).{0,55}(打游戏|外放|半夜|凌晨|吵|噪音|睡不着|键盘声|说话声)|(?:打游戏|外放|半夜|凌晨|噪音|键盘声).{0,40}(室友|宿舍|隔壁床)/u.test(text),
     actionIds: ['peer-clarify-2', 'peer-topic-2', 'peer-boundary-2'] },
@@ -612,6 +665,9 @@ const actionIntentRules: ReadonlyArray<{
   { id: 'budget', topic: 'family',
     matches: text => /(生活费|饭钱|兼职|排班|收支|预算|钱不够)/u.test(text),
     actionIds: ['family-budget-2','family-question-2','family-fact-2'] },
+  { id: 'datasheet', topic: 'study',
+    matches: text => /(数据表|Excel|excel|表格|第一列|表征数据|XRD|(?:数据表|表格).{0,12}单位)/iu.test(text),
+    actionIds: ['data-column-2','data-outlier-2','data-unit-2'] },
   { id: 'lab', topic: 'study',
     matches: text => /(实验|异常值|实验数据|仪器|样本|测量|拟合|跑数据)/u.test(text),
     actionIds: ['lab-unit-2','lab-plot-2','lab-sample-2','lab-condition-2','lab-version-2','lab-log-2','lab-step-2'] },
@@ -630,7 +686,7 @@ const actionIntentRules: ReadonlyArray<{
     actionIds: ['exam-scope-2','exam-keyword-2','exam-question-2','exam-error-2','exam-map-2','exam-slide-2','exam-page-2','exam-date-2'] },
   { id: 'internship-resume', topic: 'future',
     matches: text => /(简历|实习|招聘|岗位|投递|面试|求职|找工作)/u.test(text),
-    actionIds: ['resume-3','job-skill-2','job-file-2','job-title-2','job-task-2','job-question-2'] },
+    actionIds: ['resume-3','resume-one-2','job-skill-2','job-file-2','job-title-2','job-task-2','job-question-2'] },
   { id: 'family-call', topic: 'family',
     matches: text => /(妈妈|爸爸|爸妈|家人|家里人|父母|家里).{0,35}(电话|问我|争执|吵架|说挺好|催|沟通)|(?:电话).{0,20}(妈妈|家里|爸妈)/u.test(text),
     actionIds: ['family-feel-2','family-topic-2','family-phrase-2','family-pause-2','family-question-2'] },
@@ -694,6 +750,20 @@ export function pickActions(
   if (intent && !intent.actionIds.length) return [];
   const effectiveTrouble = intent?.topic ?? trouble;
   const allowed = intent ? new Set(intent.actionIds) : undefined;
+  // Local phrase-sensitive ordering, never a model inference. Keep all
+  // original intent filters and their relative priority intact.
+  const preferredIds = intent?.id==='datasheet' && /单位|XRD/.test(text)
+    ? ['data-unit-2','data-outlier-2','data-column-2']
+    : intent?.id==='datasheet' && /异常值|离群|错误数/.test(text)
+      ? ['data-outlier-2','data-unit-2','data-column-2']
+    : intent?.id==='proposal' && /引用|参考文献|文献来源/.test(text)
+      ? ['proposal-ref-2','proposal-heading-2']
+    : intent?.id==='portfolio' && /排版|一页|主图/.test(text)
+      ? ['portfolio-page-2','portfolio-pick-2']
+    : intent?.id==='literature' && /问题|框架|综述写什么/.test(text)
+      ? ['lit-question-2','lit-abstract-2','lit-list-2']
+    : intent?.actionIds ?? [];
+
   const lab = /实验数据|异常值|重跑|复测|仪器|样本|测量|拟合|代码|程序|跑数据|实验结果/.test(text);
   const writing = /论文|开题|报告|文档|写不出|写东西|一个字|稿/.test(text);
   const studyVariant: ActionItem['variant'] = lab ? 'study-lab' : writing ? 'study-writing' : 'study-exam';
@@ -729,7 +799,7 @@ export function pickActions(
     ? matching.find((row) => row.id === 'draft-3') : undefined;
   const pool = priority ? matching.filter((row) => row.id !== priority.id) : matching;
   const ordered = allowed
-    ? [...pool].sort((a, b) => (intent?.actionIds.indexOf(a.id) ?? 0) - (intent?.actionIds.indexOf(b.id) ?? 0))
+    ? [...pool].sort((a, b) => preferredIds.indexOf(a.id) - preferredIds.indexOf(b.id))
     : shuffle(pool);
   return [...(priority ? [priority] : []), ...ordered].slice(0, Math.max(0, count));
 }

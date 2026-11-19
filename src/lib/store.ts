@@ -22,6 +22,9 @@ import { findCrisis } from './safety';
 import { normalizePendingBrag, unsafeBragContent } from './brag';
 import { hasCrisisInArchive, hasPlayerCrisis, isSafeMemoryEntry } from './submissionGuard';
 import { parseGoals, parseSchedule, parseSummaries } from './goalStorage';
+import { parseMaterialExtraction } from './materialVision';
+import { validateMaterialStep } from './materialAdvice';
+import { isManipulative } from './agentVulnerability';
 
 const KEYS = {
   config: 'shudong.config.v1',
@@ -42,7 +45,7 @@ const KEYS = {
 
 const LEGACY_POST_KEYS = ['shudong.posts.v3', 'shudong.posts.v2', 'shudong.posts.v1'];
 const LEGACY_CARD_KEYS = ['shudong.cards.v5', 'shudong.cards.v4', 'shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'];
-const UI_KEYS = ['startnow.onboarded', 'startnow.mode', 'startnow.homeTab', 'startnow.calendarView', 'shudong.decomposeDraft.v1', 'shudong.decomposeUsage.v1'];
+const UI_KEYS = ['startnow.onboarded', 'startnow.mode', 'startnow.homeTab', 'startnow.calendarView', 'shudong.decomposeDraft.v1', 'shudong.decomposeUsage.v1', 'startnow.lastCrisisAt'];
 // Independent room.html stores, same origin; a user's full reset should include these.
 const ROOM_KEYS = ['shudong.room.v1', 'shudong.archives.v1', 'shudong.roomsettings.v1'];
 
@@ -141,7 +144,31 @@ const isTimedPersonaRow = (row: unknown): row is { personaId: string; at: number
   Number.isFinite((row as { at?: unknown }).at);
 
 const normalizeCard = (raw: Partial<Card>): Card | null => {
-  if (!raw || typeof raw.text !== 'string' || hasPlayerCrisis(raw)) return null;
+  if (!raw || typeof raw.text !== 'string' || hasPlayerCrisis(raw) ||
+      (raw.authorKind==='persona' && isManipulative(raw.text))) return null;
+  const validImage = typeof raw.image==='string' &&
+    /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(raw.image) && raw.image.length<=1_200_000;
+  // An imported JSON object cannot add supposed visual evidence to a text-only
+  // card or impersonate the player's image material.
+  const material = validImage && raw.authorKind==='player' && raw.material && typeof raw.material === 'object'
+    ? parseMaterialExtraction(JSON.stringify(raw.material)).extraction : undefined;
+  const vulnerability = raw.vulnerability;
+  const cleanVulnerability = raw.authorKind==='persona' && vulnerability &&
+    ['misread','missed','lost'].includes(vulnerability.kind) &&
+    vulnerability.personaId===raw.authorId && Number.isFinite(vulnerability.at)
+      ? {kind:vulnerability.kind,personaId:vulnerability.personaId,at:vulnerability.at,
+        comfortRequested:vulnerability.comfortRequested===true,
+        resolvedAt:Number.isFinite(vulnerability.resolvedAt)?vulnerability.resolvedAt:undefined}
+      : undefined;
+  // Imported action provenance is untrusted: a forged 'material' label must
+  // never bypass the same anchor/physical-action check as live generations.
+  const rawAdvice = raw.advice && typeof raw.advice === 'object' ? raw.advice : undefined;
+  const importMaterialAdviceValid = (() => {
+    if (rawAdvice?.origin !== 'material') return true;
+    if (!material || typeof rawAdvice.text !== 'string' || !rawAdvice.materialAnchorId) return false;
+    const checked = validateMaterialStep(rawAdvice.text, material);
+    return checked.ok && checked.anchorId === rawAdvice.materialAnchorId;
+  })();
   const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : Date.now();
   return {
     id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
@@ -150,7 +177,17 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     authorKind:
       raw.authorKind === 'persona' ? 'persona' : raw.authorKind === 'helper' ? 'helper' : 'player',
     title: typeof raw.title === 'string' ? raw.title : undefined,
-    image: typeof raw.image === 'string' && raw.image.startsWith('data:image/') ? raw.image : undefined,
+    image: validImage ? raw.image : undefined,
+    material,
+    materialAttemptAt: Number.isFinite(raw.materialAttemptAt) ? raw.materialAttemptAt : undefined,
+    // A page refresh cancels an in-flight browser fetch. Never show an
+    // eternally spinning recognition indicator after restoring its card.
+    materialError: typeof raw.materialError==='string' &&
+      /^(vision_unsupported|session_missing|auth|rate_limit|timeout|server|format_invalid|no_anchor|unsafe_output|invalid_image|cancelled)$/.test(raw.materialError)
+      ? raw.materialError : raw.materialAttemptAt && !material ? 'cancelled' : undefined,
+    materialGoalId: material && typeof raw.materialGoalId==='string' && raw.materialGoalId.length<=128 ? raw.materialGoalId : undefined,
+    deadlineConfirmedAt: Number.isFinite(raw.deadlineConfirmedAt)?raw.deadlineConfirmedAt:undefined,
+    vulnerability: cleanVulnerability,
     origin: raw.origin === 'model' || raw.origin === 'demo' || raw.origin === 'simulated' ? raw.origin : undefined,
     kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'guide' ? 'guide' :
       raw.kind === 'goal' ? 'goal' : raw.kind === 'progress' ? 'progress' : 'worry',
@@ -170,10 +207,12 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     comments: Array.isArray(raw.comments)
       ? raw.comments.filter((row) => row && typeof row.text === 'string' &&
           typeof row.authorId === 'string' &&
-          ['player', 'persona', 'helper'].includes(row.authorKind))
+          ['player', 'persona', 'helper'].includes(row.authorKind) &&
+          !(row.authorKind==='persona' && isManipulative(row.text)))
+        .map((row) => ({...row,growthReference:row.authorKind==='persona' && row.growthReference===true}))
       : [],
-    advice: raw.advice && typeof raw.advice === 'object'
-      ? { ...raw.advice, text: typeof raw.advice.text === 'string' ? raw.advice.text : '一个办法' }
+    advice: rawAdvice && importMaterialAdviceValid
+      ? { ...rawAdvice, text: typeof rawAdvice.text === 'string' ? rawAdvice.text : '一个办法' }
       : undefined,
     pendingBrag: normalizePendingBrag(raw.pendingBrag, raw),
     sourceCardId: typeof raw.sourceCardId === 'string' && raw.sourceCardId.length <= 128 ? raw.sourceCardId : undefined,
