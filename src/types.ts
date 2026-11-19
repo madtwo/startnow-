@@ -118,6 +118,8 @@ export interface Persona {
   pace?: [number, number];
   /** 一天里最爱说话的时段，可跨零点 */
   peak?: [number, number];
+  /** 喜欢的事：刚认识时用来找话题，认识久了才可能约着一起做 */
+  interests?: string[];
   /** 大概几点醒着 [开始, 结束)，可跨零点 */
   awake?: [number, number];
 }

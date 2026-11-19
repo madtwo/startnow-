@@ -250,6 +250,24 @@ const HOBBIES = [
   '最近在学着自己煮面',
 ];
 
+/** 真正的兴趣：刚认识时拿来找话题，熟了才可能约着一起做。 */
+const INTERESTS = [
+  '打球',
+  '跑步',
+  '看球',
+  '打游戏',
+  '看剧',
+  '做饭',
+  '拍照',
+  '听歌',
+  '爬山',
+  '养猫',
+  '拼模型',
+  '剪视频',
+  '逛展',
+  '游泳',
+];
+
 const randInt = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
 const pick = <T,>(rows: T[]): T => rows[Math.floor(Math.random() * rows.length)];
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -484,6 +502,8 @@ export function generatePersona(
     (awake[0] + randInt(0, 2)) % 24,
     (awake[0] + 4 + randInt(0, 2)) % 24,
   ];
+  const interestPool = [...INTERESTS].sort(() => Math.random() - 0.5);
+  const interests = interestPool.slice(0, 2);
   const worryShort = situation.worry.split('，').slice(-1)[0];
 
   return {
@@ -520,6 +540,7 @@ export function generatePersona(
     reactivity,
     pace,
     peak,
+    interests,
     awake,
   };
 }

@@ -23,6 +23,7 @@ import {
   cleanLine,
   PUBLIC_RULES,
   ROOM_RULES,
+  ROOM_STYLE,
   roomPrompt,
   withUntrustedHistory,
   type RoomLine,
@@ -323,22 +324,30 @@ const relationBlock = (persona: Persona, cast: Persona[]): string => {
   const toPlayer = relOf(persona, 'me');
   const strangerNote =
     toPlayer < 10
-      ? '刚认识：可以报名字、专业、年级；不要问隐私、不开玩笑式亲昵、不说「我懂你」「抱抱」「我也理解你」。'
+      ? '刚认识：可以报名字、专业、年级；不要问隐私、不开玩笑式亲昵、不说「我懂你」「抱抱」「我也理解你」。刚认识的人不会一上来就吐苦水：可以先问一句大家都喜欢什么（比如你自己喜欢的运动或游戏），别急着讲自己的烦心事。'
       : toPlayer < 25
-        ? '聊过几次：可以说课程、宿舍、最近在忙什么，但别当作老熟人。'
-        : '算熟了：可以提起之前聊过的事，语气可以随意一点。';
+        ? '聊过几次：可以说课程、宿舍、最近在忙什么，也可以讲讲自己的事和兴趣。'
+        : '算熟了：可以提起之前聊过的事，语气可以随意一点。想约着一起做点什么，也只能约线上能做的（一起看直播、开黑、云自习），不要约定线下见面。';
   return `【你和这群人熟到什么程度】（数字小的时候别装熟：不叫昵称、不说「你上次」、不假装懂对方）
 群里那个新来的人：${relationLabel(toPlayer)}——${strangerNote}
 ${rows.join('\n')}`;
 };
 
-const systemForRoom = (persona: Persona, cast: Persona[]): string =>
+const interestBlock = (persona: Persona): string => {
+  const list = persona.interests ?? [];
+  if (!list.length) return '';
+  return `【你自己喜欢的事】${list.join('、')}（刚认识时用来找话题，别一上来就约；熟了才可能约着一起做，而且只能是线上能一起做的）`;
+};
+
+export const systemForRoom = (persona: Persona, cast: Persona[]): string =>
   [
     BASELINE,
     PUBLIC_RULES,
     ROOM_RULES,
+    ROOM_STYLE,
     buildPersonaPrompt(persona),
     situationBlock(persona),
+    interestBlock(persona),
     relationBlock(persona, cast),
   ]
     .filter(Boolean)
@@ -368,6 +377,18 @@ const saidSince = (room: Room, replyTo?: string): string[] => {
     .slice(-4)
     .map((m) => `${m.authorName}：${m.text}`);
 };
+
+/** 模型爱用的书面腔、总结句、破折号，在这里统一掐掉。 */
+export const polishLine = (text: string): string =>
+  text
+    .replace(/[—–]+/g, '，')
+    .replace(/；/g, '，')
+    .replace(/^(其实|或许|也许|总的来说|另外)[，,]?\s*/, '')
+    .replace(/[，,]?\s*(希望对你有帮助|希望[你它]能帮到你|加油|一切都会好(起来)?|慢慢来)[。！!]?$/g, '')
+    .replace(/，{2,}/g, '，')
+    .replace(/^[，,。！!]+/, '')
+    .replace(/[，,、]+$/, '')
+    .trim();
 
 /** 模型不可用时的兜底：建议一定要落在被分配的那个动作上。 */
 const fallbackLine = (persona: Persona, mode: Mode, extra: LineExtra): string => {
@@ -443,7 +464,7 @@ const generateLine = async (
       maxTokens: 90,
       lowEffort: true,
     });
-    const line = cleanLine(text, 90);
+    const line = polishLine(cleanLine(text, 90));
     if (line && !findCrisis(line) && !auditTone(line)) return line;
     ctx.logs.push(`${persona.name} 那句被拦下了，换了一句`);
   } catch {

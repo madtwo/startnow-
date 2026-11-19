@@ -159,6 +159,33 @@ test('安慰会把关系拉近（不只是普通的 +1）', async () => {
   assert.ok(closest >= 2, `安慰过你的人应该更熟，实际最高 ${closest}`);
 });
 
+test('每个人有自己喜欢的事，刚认识时不吐苦水', () => {
+  const cast = generateCast(4, NOW);
+  for (const p of cast) {
+    assert.equal((p.interests ?? []).length, 2, `${p.name} 缺兴趣`);
+    assert.equal(new Set(p.interests).size, 2, `${p.name} 的兴趣重复了`);
+  }
+  const system = room.systemForRoom(cast[0], cast);
+  assert.ok(system.includes(cast[0].interests[0]), '系统提示要带上他的兴趣');
+  assert.ok(system.includes('不会一上来就吐苦水'), '刚认识阶段要禁止吐苦水');
+  assert.ok(system.includes('喜欢什么'), '刚认识时可以用来找话题');
+});
+
+test('文风清洗：破折号、分号、AI 套话会被清掉', () => {
+  assert.equal(room.polishLine('先做一点——就一点。'), '先做一点，就一点。');
+  assert.equal(room.polishLine('分开写；别堆一起。'), '分开写，别堆一起。');
+  assert.equal(room.polishLine('其实，我也卡这儿。'), '我也卡这儿。');
+  assert.equal(room.polishLine('先翻开第一页。希望对你有帮助。'), '先翻开第一页。');
+});
+
+test('提示词里有正例和反例，不是只有禁令', () => {
+  const cast = generateCast(2, NOW);
+  const system = room.systemForRoom(cast[0], cast);
+  assert.ok(system.includes('可以照这个感觉说'), '要有正例');
+  assert.ok(system.includes('不要这样说'), '要有反例');
+  assert.ok(system.includes('最多两个逗号'), '要给出句子长度约束');
+});
+
 test('新房间只排一条「欢迎新人」，不是四个人先自己聊起来', () => {
   const fresh = room.newRoom(generateCast(4, NOW), NOW);
   assert.equal(fresh.scheduled.length, 1);
