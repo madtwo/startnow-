@@ -3,8 +3,12 @@ import type { Persona } from '../types';
 import { fileToImage } from '../lib/image';
 import Avatar from './Avatar';
 
+export type PostKind = 'worry' | 'brag' | 'life' | 'goal';
+
 interface Props {
   value: string;
+  kind: PostKind;
+  onKind: (value: PostKind) => void;
   title: string;
   image: string;
   busy: boolean;
@@ -21,8 +25,19 @@ interface Props {
   onOpenSettings: () => void;
 }
 
+const POST_KINDS: { id: PostKind; label: string; textLabel: string; placeholder: string }[] = [
+  { id: 'worry', label: '诉苦', textLabel: '说说你当下的困难', placeholder: '比如：明天材料物理小测，书才背到第三章。室友在打游戏，我戴着耳机也听不进去。' },
+  { id: 'brag', label: '炫耀', textLabel: '说说你做到的那件事', placeholder: '比如：今天终于把实验报告的第一段写完了，虽然只有三百字。' },
+  { id: 'life', label: '生活趣事', textLabel: '分享一件小事', placeholder: '比如：食堂新出的鸡腿饭居然很好吃，今天心情好了一点。' },
+  { id: 'goal', label: '定下目标', textLabel: '写下你想定下的目标', placeholder: '比如：这周把文献综述的框架发出去。' },
+];
+
+const KIND_META = Object.fromEntries(POST_KINDS.map((row) => [row.id, row])) as Record<PostKind, (typeof POST_KINDS)[number]>;
+
 export default function PostForm({
   value,
+  kind,
+  onKind,
   title,
   image,
   busy,
@@ -50,26 +65,35 @@ export default function PostForm({
     }
   };
 
+  const meta = KIND_META[kind];
   return (
     <section className="post-form card compose-card">
+        <div className="meeting-switch post-kind-switch" role="group" aria-label="卡片类型">
+          {POST_KINDS.map((row) => (
+            <button key={row.id} type="button" className={kind === row.id ? 'on' : ''}
+              aria-pressed={kind === row.id} onClick={() => onKind(row.id)}>
+              {row.label}
+            </button>
+          ))}
+        </div>
         <label className="field">
           <span className="field-label">标题（可以不写）</span>
           <input
             className="post-form-title"
             value={title}
-            placeholder="比如：材料物理小测，还没背完"
+            placeholder={kind === 'goal' ? '给目标起个短标题（可以不写）' : '比如：材料物理小测，还没背完'}
             onChange={(e) => onTitle(e.target.value)}
             aria-label="标题，可以不写"
           />
         </label>
 
         <label className="field">
-          <span className="field-label">说说你当下的困难</span>
+          <span className="field-label">{meta.textLabel}</span>
           <textarea
             className="post-form-input"
             rows={6}
             value={value}
-            placeholder="比如：明天材料物理小测，书才背到第三章。室友在打游戏，我戴着耳机也听不进去。"
+            placeholder={meta.placeholder}
             onChange={(e) => onChange(e.target.value)}
             aria-label="写下你当下的困难"
           />

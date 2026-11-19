@@ -9,7 +9,7 @@ const {matchesForumView,FORUM_VIEWS}=require(path.join(__dirname,'..','src','lib
 const now=new Date(2026,10,19,12,0,0).getTime();
 const card=(over={})=>({id:'c',authorId:'me',authorName:'我',authorKind:'player',kind:'worry',text:'卡住了',createdAt:now-1000,...over});
 test('view list covers today, goals, failure, success, venting',()=>{
-  assert.deepEqual([...FORUM_VIEWS],['全部','今天','目标','失败','成功','诉苦']);
+  assert.deepEqual([...FORUM_VIEWS],['全部','今天','目标','失败','成功','诉苦','生活趣事']);
 });
 test('today only includes local-day cards',()=>{
   assert.equal(matchesForumView(card(), '今天', now), true);
@@ -30,6 +30,10 @@ test('success only brag; venting is worry excluding failure',()=>{
   assert.equal(matchesForumView(card({kind:'worry'}), '诉苦', now), true);
   assert.equal(matchesForumView(card({kind:'worry',vulnerability:{kind:'missed',personaId:'miaoze',at:now}}), '诉苦', now), false);
   assert.equal(matchesForumView(card({kind:'brag'}), '诉苦', now), false);
+});
+test('life view only includes life posts',()=>{
+  assert.equal(matchesForumView(card({kind:'life'}), '生活趣事', now), true);
+  assert.equal(matchesForumView(card({kind:'worry'}), '生活趣事', now), false);
 });
 test('all view does not filter',()=>{
   for(const kind of ['worry','goal','progress','brag']) assert.equal(matchesForumView(card({kind}), '全部', now), true);

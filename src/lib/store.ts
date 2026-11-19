@@ -208,7 +208,7 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     vulnerability: cleanVulnerability,
     goalReplyBackfillAt: Number.isFinite(raw.goalReplyBackfillAt) ? raw.goalReplyBackfillAt : undefined,
     origin: raw.origin === 'model' || raw.origin === 'demo' || raw.origin === 'simulated' ? raw.origin : undefined,
-    kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'guide' ? 'guide' :
+    kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'life' ? 'life' : raw.kind === 'guide' ? 'guide' :
       raw.kind === 'goal' ? 'goal' : raw.kind === 'progress' ? 'progress' : 'worry',
     goalId: typeof raw.goalId === 'string' && raw.goalId.length <= 128 ? raw.goalId : undefined,
     cheerCount: Number.isInteger(raw.cheerCount) && (raw.cheerCount as number) >= 0 && (raw.cheerCount as number) <= 100000 ? raw.cheerCount : 0,

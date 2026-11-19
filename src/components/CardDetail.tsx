@@ -366,6 +366,7 @@ export default function CardDetail({
               {card.authorName}
               {card.intro && <span className="thread-badge">自我介绍</span>}
               {card.kind === 'goal' && <span className="thread-badge">目标</span>}
+              {card.kind === 'life' && <span className="thread-badge">生活</span>}
               {mine && <span className="me-badge">你</span>}
             </p>
             <p className="detail-role">{isGuide ? '论坛的说明' : author ? '同伴' : '你的卡'}</p>

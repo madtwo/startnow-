@@ -52,6 +52,7 @@ export default function CardRow({ card, personas, onClick, onLike, onCheer }: Pr
           {card.title && <h3 className="tc-title">{card.title}</h3>}
           {brag && <span className="tc-tag brag">做到了</span>}
           {goal && <span className="tc-tag">{card.kind === 'goal' ? '目标' : '进度'}</span>}
+          {card.kind === 'life' && <span className="tc-tag">生活</span>}
           {card.intro && <span className="tc-tag">自我介绍</span>}
           {unseen && <span className="unread-dot" title="还没点开过" />}
         </div>

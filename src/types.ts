@@ -187,7 +187,7 @@ export interface Card {
   authorName: string;
   authorKind: 'player' | 'persona' | 'helper';
   title?: string;
-  kind?: 'worry' | 'brag' | 'guide' | 'goal' | 'progress';
+  kind?: 'worry' | 'brag' | 'life' | 'guide' | 'goal' | 'progress';
   goalId?: string;
   cheerCount?: number;
   cheeredByMe?: boolean;

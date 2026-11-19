@@ -227,6 +227,7 @@ export default function App() {
   // 身份和便签不参与后台 tick，修改它们不该让正在进行的 tick 结果作废。
   const setIdentity = rawSetIdentity;
   const [draft, setDraft] = useState('');
+  const [draftKind, setDraftKind] = useState<'worry'|'brag'|'life'|'goal'>('worry');
   const [draftTitle, setDraftTitle] = useState('');
   const [image, setImage] = useState('');
   const [working, setWorking] = useState(false);
@@ -645,11 +646,12 @@ export default function App() {
       setSettingsOpen(true);
       return;
     }
-    const card = createPlayerCard(text, identity.name, personas, settings, draftTitle);
+    const card = createPlayerCard(text, identity.name, personas, settings, draftTitle, Date.now(), draftKind);
     if (image) card.image = image;
     setPersonas((prev) => notePlayerShare(prev, text));
     setCards((prev) => [card, ...prev]);
     setDraft('');
+    setDraftKind('worry');
     setDraftTitle('');
     setImage('');
     setView('home');
@@ -1772,12 +1774,14 @@ export default function App() {
           <div className="page-head">
             <div>
               <h1 className="page-title">放一张卡</h1>
-              <p className="page-sub">放一张卡，说说你当下的困难。一两句就够，不用写清楚前因后果，可以配一张图。</p>
+              <p className="page-sub">想说什么都行：诉苦、炫耀、分享生活趣事，或定下一个目标。一两句就够，可以配一张图。</p>
             </div>
           </div>
           <div className="post-layout">
             <PostForm
               value={draft}
+              kind={draftKind}
+              onKind={setDraftKind}
               title={draftTitle}
               image={image}
               busy={working}

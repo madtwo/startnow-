@@ -174,7 +174,7 @@ export function createPlayerCard(
   settings: WorldSettings,
   title?: string,
   now = Date.now(),
-  kind: 'worry' | 'brag' = 'worry',
+  kind: 'worry' | 'brag' | 'life' | 'goal' = 'worry',
 ): Card {
   const cap = Math.max(1, settings.maxArrivals);
   const n = Math.min(cap, 1 + (Math.random() < 0.6 ? 1 : 0) + (Math.random() < 0.2 ? 1 : 0));
