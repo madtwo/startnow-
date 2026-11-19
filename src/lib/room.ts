@@ -16,7 +16,7 @@ import { ensureMind, mindAfterPeer, mindAfterReply, mindAfterStep } from './mind
 import { recordReplyMemory } from './memory';
 import { buildPersonaPrompt, pickCast } from './personas';
 import { refreshSituations } from './castGen';
-import { emotionalSignal, type Tone } from './tone';
+import { emotionalSignal, isGreeting, type Tone } from './tone';
 import { streamChat } from './llm';
 import { actionLabel, actionMinutes, inferTrouble, pickActions, smallerAction } from './actions';
 import {
@@ -202,7 +202,6 @@ export const newRoom = (cast: Persona[], now = Date.now()): Room => {
     mind: ensureMind(p, now),
   }));
   const first = pick(people);
-  const second = pick(people.filter((p) => p.id !== first.id));
   const room: Room = {
     id: uid(),
     title: pick(TITLES),
@@ -220,16 +219,8 @@ export const newRoom = (cast: Persona[], now = Date.now()): Room => {
     usage: { day: dayKey(now), messages: 0 },
   };
   const start = now + rand(2_500, 6_000);
-  room.scheduled.push({ id: uid(), personaId: first.id, at: start, intent: 'ambient', depth: 0 });
-  if (second) {
-    room.scheduled.push({
-      id: uid(),
-      personaId: second.id,
-      at: start + rand(7_000, 16_000),
-      intent: 'ambient',
-      depth: 0,
-    });
-  }
+  // 开场只让一个人招呼新人，不要让四个人先自顾自聊起来
+  room.scheduled.push({ id: uid(), personaId: first.id, at: start, intent: 'welcome', depth: 0 });
   return room;
 };
 
@@ -313,8 +304,15 @@ const relationBlock = (persona: Persona, cast: Persona[]): string => {
   const rows = cast
     .filter((p) => p.id !== persona.id)
     .map((p) => `${p.name}：${relationLabel(relOf(persona, p.id))}`);
+  const toPlayer = relOf(persona, 'me');
+  const strangerNote =
+    toPlayer < 10
+      ? '刚认识：可以报名字、专业、年级；不要问隐私、不开玩笑式亲昵、不说「我懂你」「抱抱」「我也理解你」。'
+      : toPlayer < 25
+        ? '聊过几次：可以说课程、宿舍、最近在忙什么，但别当作老熟人。'
+        : '算熟了：可以提起之前聊过的事，语气可以随意一点。';
   return `【你和这群人熟到什么程度】（数字小的时候别装熟：不叫昵称、不说「你上次」、不假装懂对方）
-群里那个新来的人：${relationLabel(relOf(persona, 'me'))}
+群里那个新来的人：${relationLabel(toPlayer)}——${strangerNote}
 ${rows.join('\n')}`;
 };
 
@@ -333,7 +331,7 @@ const systemForRoom = (persona: Persona, cast: Persona[]): string =>
 const findMessage = (room: Room, id?: string): Message | undefined =>
   id ? room.messages.find((m) => m.id === id) : undefined;
 
-type Mode = 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise';
+type Mode = 'welcome' | 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise';
 
 interface LineExtra {
   /** advise 模式：这条建议绑定的动作 */
@@ -368,6 +366,7 @@ const fallbackLine = (persona: Persona, mode: Mode, extra: LineExtra): string =>
     return templates[(extra.adviceVariant ?? 0) % templates.length];
   }
   if (mode === 'comfort') return mockLine(persona, 'comfort');
+  if (mode === 'welcome') return `你好，我是${persona.name}，${persona.major}${persona.cohort}。`;
   return mockLine(persona, mode);
 };
 
@@ -379,10 +378,19 @@ const generateLine = async (
   replyTo: string | undefined,
   now: number,
   extra: LineExtra = {},
-): Promise<string> => {
-  if (isMock(ctx.config)) return fallbackLine(persona, mode, extra);
-  ctx.calls += 1;
+): Promise<string | null> => {
   const replyMessage = findMessage(room, replyTo);
+  if (isMock(ctx.config)) {
+    // 演示模式也要能接住招呼，否则「大家好」会换来一句心事
+    if (mode === 'reply' && replyMessage && isGreeting(replyMessage.text)) {
+      return pick([
+        `你好，我是${persona.name}，${persona.major}${persona.cohort}。`,
+        `${persona.name}，${persona.major}${persona.cohort}。你好。`,
+      ]);
+    }
+    return fallbackLine(persona, mode, extra);
+  }
+  ctx.calls += 1;
   const replyName = replyMessage?.authorName;
   const topic = room.messages.filter((m) => m.kind === 'chat').slice(-1)[0]?.text;
   try {
@@ -424,7 +432,8 @@ const generateLine = async (
   } catch {
     ctx.logs.push(`${persona.name} 这次没说出来`);
   }
-  return fallbackLine(persona, mode, extra);
+  // 真实模式失败就让这张嘴闭上：发一条和上下文无关的兜底台词，比不说话更糟
+  return null;
 };
 
 const updateMind = (room: Room, personaId: string, patch: (p: Persona) => Persona): Room => ({
@@ -537,7 +546,7 @@ const speak = async (
   room: Room,
   ctx: Ctx,
   persona: Persona,
-  intent: 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise',
+  intent: 'welcome' | 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise',
   replyTo: string | undefined,
   now: number,
   profile: LivelinessProfile,
@@ -546,6 +555,8 @@ const speak = async (
   allowChain = true,
 ): Promise<Room> => {
   const text = await generateLine(ctx, room, persona, intent, replyTo, now, extra);
+  // 说不出来就不发：一张假台词会把整段对话带偏
+  if (!text) return room;
   const message = personaMessage(persona, text, now, replyTo);
   let next = pushMessage(room, message, now);
   next = spend(next, now);
@@ -568,8 +579,9 @@ const speak = async (
   }
   // 别人说话你听着，也算一点点认识
   if (text.replace(/\s+/g, '').length > 6) next = heardAbout(next, persona.id, now);
-  // 陪伴和建议不接龙：一段安慰之后再来两句闲扯，会把正事盖过去
-  if (allowChain) {
+  // 陪伴和建议不接龙：一段安慰之后再来两句闲扯，会把正事盖过去。
+  // 刚回完玩家也不接龙：场子留给他，别在他面前自己聊起来。
+  if (allowChain && last?.authorKind !== 'player') {
     const peer = schedulePeer(next, message, persona, depth, now, profile);
     if (peer) next = { ...next, scheduled: [...next.scheduled, peer] };
   }
@@ -589,9 +601,15 @@ const deliver = async (
 
   if (item.intent === 'react') {
     const text = await generateLine(ctx, next, persona, 'react', undefined, now);
+    if (!text) return next;
     next = pushMessage(next, personaMessage(persona, text, now), now);
     next = spend(next, now);
     return updateMind(next, persona.id, (p) => ({ ...p, mind: mindAfterReply(p, '你', now) }));
+  }
+
+  // 群里刚进来人：先打个招呼，说清自己是谁
+  if (item.intent === 'welcome') {
+    return speak(next, ctx, persona, 'welcome', undefined, now, profile, 0, {}, false);
   }
 
   // 先陪伴、后建议：这两类不接龙，免得一段安慰变成闲聊
@@ -827,6 +845,8 @@ export function postPlayerMessage(
   const next: Room = {
     ...room,
     messages: [...room.messages, message],
+    // 你刚说完话，先把场子留给你：清掉还排着的 AI 互聊
+    scheduled: room.scheduled.filter((s) => s.intent !== 'peer'),
     lastMessageAt: now,
     lastSeenAt: now,
   };
@@ -1045,6 +1065,7 @@ export async function catchUpRoom(input: TickInput): Promise<TickOutput> {
     const speaker = pickSpeaker(room, '', at);
     if (!speaker) continue;
     const text = await generateLine(ctx, room, speaker, 'ambient', undefined, at);
+    if (!text) continue;
     const message = personaMessage(speaker, text, at);
     room = {
       ...room,

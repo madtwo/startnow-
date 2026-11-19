@@ -44,3 +44,10 @@ export const toneLabel: Record<Tone, string> = {
   stuck: '有点迷茫',
   heavy: '情绪上来了',
 };
+
+/** 打招呼：这类消息要回招呼，而不是接一句自己的心事。 */
+export function isGreeting(text: string): boolean {
+  const t = text.normalize('NFKC').replace(/\s+/g, '');
+  if (!t || t.length > 12) return false;
+  return /^(你好|您好|大家好|嗨|哈喽|hi|hello|在吗|有人吗|早上好|晚上好|初次见面)/i.test(t);
+}

@@ -395,7 +395,14 @@ export interface NextStep {
   doneAt?: number;
 }
 
-export type ScheduleIntent = 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise';
+export type ScheduleIntent =
+  | 'welcome'
+  | 'reply'
+  | 'peer'
+  | 'ambient'
+  | 'react'
+  | 'comfort'
+  | 'advise';
 
 export interface ScheduledMessage {
   id: string;

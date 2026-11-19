@@ -109,6 +109,49 @@ test('普通聊天不触发两段式', () => {
   assert.ok(sent.scheduled.every((s) => s.intent === 'reply'));
 });
 
+test('新房间只排一条「欢迎新人」，不是四个人先自己聊起来', () => {
+  const fresh = room.newRoom(generateCast(4, NOW), NOW);
+  assert.equal(fresh.scheduled.length, 1);
+  assert.equal(fresh.scheduled[0].intent, 'welcome');
+});
+
+test('你说话之后，排着的 AI 互聊要让位', () => {
+  const base = freshRoom();
+  const withPeer = {
+    ...base,
+    scheduled: [{ id: 'p1', personaId: base.cast[0].id, at: NOW + 5_000, intent: 'peer', depth: 1 }],
+  };
+  const sent = room.postPlayerMessage(withPeer, '大家好', ME, [], undefined, NOW, 0.5);
+  assert.ok(!sent.scheduled.some((s) => s.intent === 'peer'), '不该继续排 AI 互聊');
+  assert.ok(sent.scheduled.some((s) => s.intent === 'reply'), '应该有人回你');
+});
+
+test('打招呼时要求先回招呼、报自己是谁', () => {
+  const cast = generateCast(2, NOW);
+  const reply = roomPrompt(cast, [], { mode: 'reply', replyName: '我' });
+  assert.ok(reply.includes('先把他这句话接住'), '回复要先接住对方那句');
+  const welcome = roomPrompt(cast, [], { mode: 'welcome' });
+  assert.ok(welcome.includes('名字、专业、年级'), '开场要自报家门');
+});
+
+test('接完玩家的招呼之后，不再立刻冒出 AI 互聊', async () => {
+  const config = { providerId: 'mock', baseUrl: '', model: 'demo', apiKey: '' };
+  const settings = { liveliness: 0.9, timeFlow: false, dailyMessages: 400 };
+  let current = room.postPlayerMessage(freshRoom(), '大家好', ME, [], undefined, NOW, 0.9);
+  let cursor = NOW;
+  for (let i = 0; i < 8 && current.scheduled.length > 0; i++) {
+    cursor += 8_000;
+    const out = await room.tickRoom({ room: current, settings, config, now: cursor });
+    current = out.room;
+    assert.ok(
+      !current.scheduled.some((s) => s.intent === 'peer'),
+      `第 ${i + 1} 次 tick 又排了 AI 互聊`,
+    );
+  }
+  const spoken = current.messages.filter((m) => m.authorKind === 'persona');
+  assert.ok(spoken.length >= 1, '至少要有人回你');
+});
+
 test('旧群聊：交换而不是覆盖，恢复后不会立刻补算一堆', () => {
   const a = { ...freshRoom(), id: 'room-a', title: '房间A' };
   const b = { ...freshRoom(), id: 'room-b', title: '房间B', archivedAt: NOW - 1000 };

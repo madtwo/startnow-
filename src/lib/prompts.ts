@@ -300,6 +300,8 @@ export const ROOM_RULES = `这是几个大学生凑在一块儿的群聊。你�
 - 不要同时回答好几个人；不要总结大家刚才说了什么；不用「首先」「总之」「希望对你有帮助」。
 - 你不是客服、不是心理咨询师、不是人生导师：可以给一个具体的小办法，也可以不给。
 - 一次只露一点自己的事，像真的在认识人。
+- 群里大多是刚认识的人：不叫昵称，不说「我懂你」「抱抱」「我也理解你」这种熟人话；可以先报名字、专业、年级。
+- 别人跟你打招呼就先回招呼，别人问你话就先答那一句；不要绕开对方继续说自己的事。
 - 你只知道群里出现过的内容，加上自己设定里的事；不记得没发生过的共同经历，也不要编造别人说过的话。
 - 不主动提自己是 AI；被问到就承认。`;
 
@@ -320,7 +322,14 @@ function playerIsFocusingOnPersona(text: string, selfName: string): boolean {
   return (nameHit || youHit) && (aboutThem || comfort);
 }
 
-export type RoomMode = 'reply' | 'peer' | 'ambient' | 'react' | 'comfort' | 'advise';
+export type RoomMode =
+  | 'welcome'
+  | 'reply'
+  | 'peer'
+  | 'ambient'
+  | 'react'
+  | 'comfort'
+  | 'advise';
 
 /** 群聊里这一句的上下文。说话的人是谁，在 system 里由 buildPersonaPrompt 给。 */
 export const roomPrompt = (
@@ -346,9 +355,11 @@ export const roomPrompt = (
     ? recent.map((m) => `${m.name}：${m.text}`).join('\n')
     : '（群里刚安静下来，还没有人说话）';
   const task =
-    opts.mode === 'reply'
-      ? `你正要回 ${opts.replyName ?? '对方'} 那句。`
-      : opts.mode === 'peer'
+    opts.mode === 'welcome'
+      ? '群里刚进来一个人，他还没说话。你先打个招呼：一句话说清你是谁（名字、专业、年级），不要问太多，也不要开始说自己的心事。'
+      : opts.mode === 'reply'
+        ? `你正要正面回 ${opts.replyName ?? '对方'} 刚才那句。先把他这句话接住（他打招呼就先回招呼，他问什么就先答什么），再考虑要不要往下说；不要绕开他继续聊你和别人的事。`
+        : opts.mode === 'peer'
         ? `你正要接 ${opts.replyName ?? '群里另一个人'} 的话。可以同意、可以不同意、也可以扯到自己身上。`
         : opts.mode === 'react'
           ? '群里有人刚说自己做完了一件很小的事。应一声就好，一句话，别夸成大事。'
