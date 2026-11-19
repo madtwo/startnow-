@@ -23,3 +23,6 @@ exports/
 expert-review/
 demo/
 .tmp-persona-v1.json
+
+# local diff snapshots
+startnow-*.diff
