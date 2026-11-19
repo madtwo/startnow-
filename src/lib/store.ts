@@ -205,6 +205,7 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     materialGoalId: material && typeof raw.materialGoalId==='string' && raw.materialGoalId.length<=128 ? raw.materialGoalId : undefined,
     deadlineConfirmedAt: Number.isFinite(raw.deadlineConfirmedAt)?raw.deadlineConfirmedAt:undefined,
     vulnerability: cleanVulnerability,
+    goalReplyBackfillAt: Number.isFinite(raw.goalReplyBackfillAt) ? raw.goalReplyBackfillAt : undefined,
     origin: raw.origin === 'model' || raw.origin === 'demo' || raw.origin === 'simulated' ? raw.origin : undefined,
     kind: raw.kind === 'brag' ? 'brag' : raw.kind === 'guide' ? 'guide' :
       raw.kind === 'goal' ? 'goal' : raw.kind === 'progress' ? 'progress' : 'worry',

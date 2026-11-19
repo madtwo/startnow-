@@ -208,6 +208,8 @@ export interface Card {
   materialGoalId?: string;
   deadlineConfirmedAt?: number;
   vulnerability?: {kind: 'misread' | 'missed' | 'lost'; personaId: string; at: number; comfortRequested?: boolean; resolvedAt?: number};
+  /** One-time repair marker for old goal-card comments that lost their reply queue. */
+  goalReplyBackfillAt?: number;
   createdAt: number;
   status: CardStatus;
   arrivals: string[];

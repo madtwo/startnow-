@@ -1204,14 +1204,36 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     }
 
     // AI 的本地目标/模拟结果是静态剧情卡。即使导入了旧任务队列，
-    // 也不安排同伴到场、系统补位、自动回复或衍生炫耀。
+    // 也不安排同伴到场、系统补位、自动回复或衍生炫耀；但作者本人
+    // 回复玩家的评论必须保留，否则玩家会觉得“正在回复中”闪一下就没下文。
+    let staticGoal = false;
     if (card.goalId && card.origin === 'simulated' && card.authorKind === 'persona') {
+      staticGoal = true;
+      const playerCommentIds = new Set(card.comments
+        .filter((row) => row.authorKind === 'player').map((row) => row.id));
       card.plan = [];
-      card.pending = [];
+      card.arrivals = [];
       card.helperAt = undefined;
       card.pendingBrag = undefined;
-      cards.push(card);
-      continue;
+      card.pending = card.pending.filter((item) =>
+        item.personaId === card.authorId && Boolean(item.sourceCommentId) &&
+        playerCommentIds.has(item.sourceCommentId!) &&
+        (item.phase === 'reply' || item.phase === 'decide'));
+      if (!card.pending.length) {
+        const lastPlayer = [...card.comments].reverse().find((row) => row.authorKind === 'player');
+        if (lastPlayer && !card.goalReplyBackfillAt && !card.comments.some((row) => row.authorKind === 'persona')) {
+          // Old saves lost this queue when the static-goal guard cleared pending.
+          // Repair once, then never recreate a reply loop.
+          card.goalReplyBackfillAt = now;
+          card.pending.push({
+            personaId: card.authorId, at: now + 3000 / speed, phase: 'reply',
+            sourceCommentId: lastPlayer.id,
+          });
+        } else {
+          cards.push(card);
+          continue;
+        }
+      }
     }
 
     // A stored job must be revalidated on EVERY tick (also after refresh/import).
@@ -1285,7 +1307,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     });
 
     if (
-      !input.bragOnly && !peerScheduled && !card.vulnerability &&
+      !input.bragOnly && !peerScheduled && !staticGoal && !card.vulnerability &&
       card.authorKind === 'persona' &&
       card.status !== 'done' && card.kind !== 'brag' &&
       card.pending.length === 0 &&
