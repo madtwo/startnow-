@@ -16,37 +16,33 @@ const intro = (over = {}) => ({
   createdAt:now,status:'talking',arrivals:[],plan:[],pending:[],comments:[],...over,
 });
 
-test('fresh four introductions require actual card opens, not scrolling/time', () => {
+test('fresh introductions are a soft welcome, not a read-time gate', () => {
   const cards = fresh();
   assert.equal(cards.filter(c=>c.intro).length, 4);
   assert.equal(openingReadCount(cards), 0);
-  assert.equal(openingStage(cards,null), 'reading');
-  assert.equal(openingStage(cards, 'reading'), 'reading');
-  assert.equal(openingStage(cards.map(c=>({...c,readAt:now+86_400_000})), null), 'reading');
-  assert.equal(openingReadCount(mark(cards,3)),3);
-  assert.equal(openingStage(mark(cards,3),null),'reading');
-  assert.equal(openingReadCount(mark(cards,4)),4);
-  assert.equal(openingStage(mark(cards,4),null),'need-intro');
+  assert.equal(openingStage(cards,null), 'need-intro');
+  assert.equal(openingReady(cards,null), false);
+  assert.equal(openingStage(mark(cards, 3), null), 'need-intro');
+  assert.equal(openingStage(mark(cards, 4), null), 'need-intro');
 });
 
-test('only a validated player intro unlocks; ordinary card never counts', () => {
+test('any first player card unlocks; persona/guide cards do not', () => {
   const read = mark(fresh(),4);
-  assert.equal(openingStage([...read, intro({playerIntro:false})],null),'need-intro');
-  assert.equal(openingStage([...read, intro({authorKind:'persona'})],null),'need-intro');
-  assert.equal(openingStage([...read, intro({authorId:'shenmo'})],null),'need-intro');
-  assert.equal(openingStage([...read, intro({image:'data:image/png;base64,a'})],null),'need-intro');
-  assert.equal(openingStage([...read, intro({kind:'brag'})],null),'need-intro');
-  assert.ok(isPlayerIntro(intro()));
-  assert.equal(openingStage([...read,intro()],null),'ready');
-  assert.ok(openingReady([...fresh(),intro()],null));
+  const ordinary = intro({ playerIntro:false, text:'高数第三章开不了头，想先记一下。' });
+  assert.equal(openingStage([...read, ordinary], null), 'ready');
+  assert.equal(openingStage([...read, intro()], null), 'ready');
+  assert.equal(openingStage([...read, intro({ kind:'brag', text:'今天把第一段写完了。' })], null), 'ready');
+  assert.equal(openingStage([...fresh(), intro({ authorKind:'persona' })], null), 'need-intro');
+  assert.equal(openingStage([...fresh(), { ...ordinary, authorId:'shenmo', authorKind:'persona' }], null), 'need-intro');
 });
 
-test('bad intro text is rejected, without treating a crisis as an intro', () => {
+test('intro validation still rejects short/crisis text', () => {
   assert.equal(validPlayerIntroText('少于十个字'),false);
   assert.equal(validPlayerIntroText('正'.repeat(2001)),false);
   assert.equal(validPlayerIntroText('最近遇到了一个难题，想在这里试试办法。'),true);
   assert.equal(validPlayerIntroText('我有自杀的冲动，不想活了。'),false);
-  assert.equal(isPlayerIntro(intro({text:'不想活了，我要自杀'})),false);
+  assert.ok(isPlayerIntro(intro()));
+  assert.equal(isPlayerIntro(intro({ text:'不想活了，我要自杀' })),false);
 });
 
 test('legacy saves without all four intros are ready; an old AI goal without key is ready', () => {
@@ -55,18 +51,16 @@ test('legacy saves without all four intros are ready; an old AI goal without key
   assert.equal(openingStage(base.filter(c=>c.authorId!=='miaoze'),null),'ready');
   const goal={...intro(),authorKind:'persona',authorId:'shenmo',playerIntro:undefined,kind:'goal',goalId:'old-goal'};
   assert.equal(openingStage([...base,goal],null),'ready');
-  assert.equal(openingStage([...base,goal],'reading'),'reading'); // explicitly new orientation
-  assert.equal(openingStage(base,'ready'),'ready');
+  assert.equal(openingStage([...base,goal],'need-intro'),'need-intro');
 });
 
-test('opening gate localStorage key reads/writes and reset removes only its key', () => {
+test('opening localStorage key reads/writes and reset removes only its key', () => {
   const oldStorage=global.localStorage;
   const data=new Map();
   global.localStorage={getItem:(key)=>data.get(key)??null,setItem:(key,value)=>data.set(key,String(value)),removeItem:(key)=>data.delete(key)};
   try {
-    persistOpeningStage('reading');
-    assert.equal(data.get(OPENING_GATE_KEY),'reading');
     persistOpeningStage('need-intro');
+    assert.equal(data.get(OPENING_GATE_KEY),'need-intro');
     assert.equal(readOpeningGate(),'need-intro');
     persistOpeningStage('ready');
     assert.equal(data.get(OPENING_GATE_KEY),'done');
@@ -76,7 +70,7 @@ test('opening gate localStorage key reads/writes and reset removes only its key'
   } finally { global.localStorage=oldStorage; }
 });
 
-test('duplicate or reordered seeded introduction cards cannot inflate read count',()=>{
+test('duplicate introductions cannot inflate the welcome state',()=>{
   const cards=fresh();
   const repeated=[cards[1],...cards,cards[2]];
   assert.equal(openingIntroCards(repeated).length,4);
@@ -103,9 +97,11 @@ test('store import sanitizer retains only one valid self-introduction, no inject
   assert.equal(rows.find(c=>c.id==='prefix-short').playerIntro,false);
 });
 
-test('App commit guards prevent rapid double introduction and unscheduled goal cheering during orientation',()=>{
+test('App offers a first-card entry and an admin skip instead of a hard gate',()=>{
   const {readFileSync}=require('node:fs'); const {join}=require('node:path');
   const app=readFileSync(join(__dirname,'..','src','App.tsx'),'utf8');
-  assert.match(app,/prev\.some\(card => card\.playerIntro\) \? prev : \[intro, \.\.\.prev\]/);
-  assert.match(app,/const sendGoalCheer = \(card: Card\) => \{\s*if \(!openingReady\(latest\.current\.cards, readOpeningGate\(\)\)\) return;/);
+  assert.match(app,/写第一张卡/);
+  assert.match(app,/跳过开场/);
+  assert.match(app,/onSkipOpening=\{skipOpening\}/);
+  assert.doesNotMatch(app,/先点开四张同伴介绍卡/);
 });

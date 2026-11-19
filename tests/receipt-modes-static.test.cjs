@@ -20,5 +20,5 @@ test('same card caches template step and preserves cancel/room access',()=>{
 test('fixture for migration is included in source, room and background code untouched',()=>{
  const baseline=JSON.parse(read('fixtures/persona-v3-text.json'));
  assert.ok(baseline && typeof baseline==='object');
- assert.match(read('src/lib/personaMigration.ts'),/PERSONA_SCHEMA_VERSION = 4/);
+ assert.match(read('src/lib/personaMigration.ts'),/PERSONA_SCHEMA_VERSION = 5/);
 });

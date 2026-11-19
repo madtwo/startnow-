@@ -26,7 +26,7 @@ test('cross-topic reply gets persona-specific but non-coercive prompt',()=>{
 });
 test('v3 text migration and import validation enabled without overwriting custom fields',()=>{
  const migration=read('src/lib/personaMigration.ts'),store=read('src/lib/store.ts');
- assert.match(migration,/PERSONA_SCHEMA_VERSION = 4/);
+ assert.match(migration,/PERSONA_SCHEMA_VERSION = 5/);
  assert.match(migration,/PERSONA_V1_TEXT, PERSONA_V2_TEXT, PERSONA_V3_TEXT/);
  assert.match(store,/redactMaterialText\(rawCapture.text\)===rawCapture.text/);
  assert.match(store,/checked\.anchorId===rawCapture\.anchorId/);

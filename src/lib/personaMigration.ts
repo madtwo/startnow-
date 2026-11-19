@@ -2,7 +2,7 @@ import type { Persona } from '../types';
 
 /** Bumped when the built-in four personas get new text. Stored separately from
  * persona data so the migration never rewrites a whole archive on import. */
-export const PERSONA_SCHEMA_VERSION = 4;
+export const PERSONA_SCHEMA_VERSION = 5;
 export const PERSONA_SCHEMA_KEY = 'shudong.personaSchema.v1';
 
 export type PersonaTextField = 'tagline' | 'background' | 'voice' | 'personality' | 'speech' | 'approach' | 'academicFocus';
@@ -131,7 +131,16 @@ export const PERSONA_V3_TEXT: Readonly<Record<string, Readonly<Partial<Record<Pe
   }
 };
 
-const LEGACY_TEXT = [PERSONA_V1_TEXT, PERSONA_V2_TEXT, PERSONA_V3_TEXT];
+/** Exact v4 built-in copy that changed in the research-first pass. */
+export const PERSONA_V4_TEXT: Readonly<Record<string, Readonly<Partial<Record<PersonaTextField, string>>>>> = {
+  miaoze: {
+    background: "钱塘大学材料科学与工程大三，21 岁，住四人寝；大三进了老师的课题组，跟着师兄做样品表征，要交一份文献综述。和室友一起开黑、吃夜宵，关系挺正常。课程设计、实验报告能按时做完，可一看到实习要求和考研经验帖就容易开一排网页。父母盼他毕业后找到相对稳定的工作，他不反感，只是一直拿不准先实习还是备考。最近整理了岗位表，还报了场职业分享会，结果简历第一段改来改去，仍没投几份。",
+    speech: "话不算少，讲事情有条理，偶尔冒一句很冷的吐槽；聊实习或实验会自然带出数字、清单，但普通回帖不是实验报告。熟了会干巴巴地损两句，被说「你太冷静了」会真的愣一下。爱用具体数字吐槽自己，比如「今天第 6 次打开这个文件夹」。",
+    academicFocus: "课题组的文献综述（下了二十多篇，正文零字，师兄周五要看框架）和表征数据处理（XRD 那组里有个 3.7 对不上，单位还没核对）：总觉得资料再多一点就能开始，结果一直在准备；考研还是工作也是同一个毛病。"
+  }
+};
+
+const LEGACY_TEXT = [PERSONA_V1_TEXT, PERSONA_V2_TEXT, PERSONA_V3_TEXT, PERSONA_V4_TEXT];
 
 /** Field-level text migration for saved personas. Idempotent; unknown ids and
  * hand-edited fields are left untouched. */

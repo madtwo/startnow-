@@ -21,7 +21,6 @@ import { findCrisis, isHeavyShare } from './safety';
 import { wantsDirectAdvice } from './directAdvice';
 import { clarificationFor } from './clarify';
 import { hasPlayerCrisis } from './submissionGuard';
-import { openingReady } from './openingGate';
 import { existingPeerCount, isGoalResultCard, isSafePeerReaction, peerReactionFallback, validPeerPlans } from './peerReactions';
 import { addMemory, inferWeight, sanitizeMemoryText } from './memory';
 import { describeError, LlmError, streamChat, scopedOpenCodeSessionId } from './llm';
@@ -1225,8 +1224,7 @@ const addressedToOther = (
 
 export async function tickCards(input: TickInput): Promise<TickOutput> {
   const now = input.now ?? Date.now();
-  // A fresh reader must finish the four intros and post one introduction before any automatic AI tasks.
-  if (!openingReady(input.cards) || input.settings.paused) {
+  if (input.settings.paused) {
     return { cards: input.cards, personas: input.personas, calls: 0, logs: [] };
   }
   if (input.bragOnly && !input.cards.some((card) => card.pendingBrag && card.pendingBrag.dueAt <= now)) {
@@ -1747,7 +1745,6 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     cards.push(card);
   }
 
-  const introActive = !openingReady(cards);
   const todayCards = cards.filter(
     (c) => c.authorKind === 'persona' && !c.intro && c.createdAt <= now && now - c.createdAt < DAY,
   );
@@ -1756,7 +1753,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
   const spreadMs = quota > 0 ? DAY / quota : Infinity;
   const newestWorryAt = todayCards.reduce((max, c) => Math.max(max, c.createdAt), -Infinity);
   const eligible = personas.filter((p) => !firedBragAuthors.has(p.id));
-  if (!input.bragOnly && !introActive && todayCards.length < quota &&
+  if (!input.bragOnly && todayCards.length < quota &&
       now - newestWorryAt >= spreadMs && ctx.calls < limit && eligible.length) {
     const candidates = eligible.filter((p) => !todayCards.some((c) => c.authorId === p.id));
     const pool = candidates.length ? candidates : eligible;
@@ -2001,7 +1998,6 @@ export async function catchUp(
     mind: ensureMind(p, now),
   }));
   let cards = [...input.cards];
-  if (!openingReady(cards)) return { cards, personas, calls: 0 };
 
   for (let i = 0; i < count; i++) {
     const todayCards = cards.filter((c) => c.authorKind === 'persona' && !c.intro && c.createdAt <= now && now - c.createdAt < DAY);

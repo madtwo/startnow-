@@ -32,8 +32,8 @@ test('academic copy extension preserves legacy action chains and seed wiring',()
     assert.match(actions,/actionMap/);
   }
   assert.match(app,/buildGuideCard, buildSeedCards, seedMemories/);
-  assert.match(app,/openingReady/);
   assert.match(app,/openingStage/);
+  assert.match(app,/onSkipOpening/);
 });
 
 test('vision model can be selected when image exists and stored in configured endpoint',()=>{

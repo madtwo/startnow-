@@ -52,8 +52,7 @@ import {
 } from './lib/cards';
 import { buildGuideCard, buildSeedCards, seedMemories } from './lib/seed';
 import {
-  clearOpeningStage, openingIntroCards, openingReadCount, openingReady, openingStage,
-  persistOpeningStage, readOpeningGate, validPlayerIntroText, type OpeningStage,
+  clearOpeningStage, openingStage, persistOpeningStage, readOpeningGate, type OpeningStage,
 } from './lib/openingGate';
 import { splitForumCards } from './lib/forumHistory';
 import { isGoalResultCard, settlePeerReactionsLocally } from './lib/peerReactions';
@@ -256,7 +255,7 @@ export default function App() {
   const [forumView, setForumView] = useState<ForumView>('全部');
   const [forumSection, setForumSection] = useState<'main' | 'history'>('main');
   const [openingGateFlag, setOpeningGateFlag] = useState<OpeningStage | null>(
-    () => (isFirstRun() ? 'reading' : readOpeningGate()),
+    () => (isFirstRun() ? 'need-intro' : readOpeningGate()),
   );
   const openingPhase = openingStage(cards, openingGateFlag);
   const [bellOpen, setBellOpen] = useState(false);
@@ -386,12 +385,11 @@ export default function App() {
     if (COMPETITION_MODE || document.hidden || externalTabChanged.current || gate.current.running()) return;
     const cur = latest.current;
     const now = Date.now();
-    if (!openingReady(cur.cards, readOpeningGate()) ||
-        !shouldCheckPersonaGoals(lastPersonaGoalCheck.current, now, cur.settings.paused)) return;
+    if (!shouldCheckPersonaGoals(lastPersonaGoalCheck.current, now, cur.settings.paused)) return;
     const result = tickPersonaGoals({
       goals: cur.goals, cards: cur.cards, personas: cur.personas,
       now, enabled: !cur.settings.paused, enableLost:true,
-      crisisAt:lastCrisisAt.current, introActive:!openingReady(cur.cards,readOpeningGate()),
+      crisisAt:lastCrisisAt.current, introActive:false,
     });
     if (!canCommitPersonaGoals({
       revisionCurrent: !gate.current.running(),
@@ -411,7 +409,7 @@ export default function App() {
   const runTick = useCallback(async (bragOnly = false, forced = false) => {
     if (document.hidden || externalTabChanged.current || localPersonaWritePending.current) return;
     const cur = latest.current;
-    if (!openingReady(cur.cards, readOpeningGate()) || cur.settings.paused || !isReady(cur.config)) return;
+    if (cur.settings.paused || !isReady(cur.config)) return;
     // 模型连续失败时，定时 tick 退避一段时间；用户主动触发的不受影响。
     if (!forced && (Date.now() < backoffUntil.current || modelRateLimitRemainingMs() > 0)) return;
     const used = cur.world.dayKey === dayKey(Date.now()) ? cur.world.callsToday : 0;
@@ -469,7 +467,7 @@ export default function App() {
         personaResult = tickPersonaGoals({
           goals: baseGoals, cards: out.cards, personas: out.personas,
           now: nowTs, enabled: !cur.settings.paused, enableLost:true,
-          crisisAt:lastCrisisAt.current, introActive:!openingReady(out.cards,readOpeningGate()),
+          crisisAt:lastCrisisAt.current, introActive:false,
         });
         lastPersonaGoalCheck.current = nowTs;
       }
@@ -577,7 +575,7 @@ export default function App() {
     const check = () => {
       if (document.hidden || externalTabChanged.current || gate.current.running() || localPersonaWritePending.current) return;
       const cur = latest.current;
-      if (cur.settings.paused || !openingReady(cur.cards, readOpeningGate())) return;
+      if (cur.settings.paused) return;
       const used = cur.world.dayKey === dayKey(Date.now()) ? cur.world.callsToday : 0;
       const unavailable = !isReady(cur.config) ||
         (used >= cur.settings.dailyCalls && !isMock(cur.config)) ||
@@ -706,32 +704,6 @@ export default function App() {
   };
 
   const send = () => {
-    const stage = openingStage(latest.current.cards, readOpeningGate());
-    if (stage === 'reading') {
-      setView('home'); setHomeTab('forum');
-      setToast('先点开四张同伴介绍卡，读完再介绍自己。');
-      return;
-    }
-    if (stage === 'need-intro') {
-      if (working) return;
-      const introText = draft.trim();
-      if (guardSubmission(introText)) return; // Crisis goes only to the safety layer, never to AI.
-      if (!validPlayerIntroText(introText)) {
-        setToast('自我介绍需要 10–2000 字，不支持上传图片。');
-        return;
-      }
-      // createPlayerCard is reused for IDs/rendering, but ALL generated AI
-      // jobs are stripped. Introduction itself does not consume a model call.
-      const base = createPlayerCard(introText, identity.name, personas, settings, '我的自我介绍', Date.now(), 'worry');
-      const intro: Card = {...base, kind:'worry', playerIntro:true, noMemory:true,
-        helperAt:undefined, plan:[], pending:[], comments:[], status:'talking'};
-      // A rapid double-submit must not create a second authoritative intro.
-      setCards(prev => prev.some(card => card.playerIntro) ? prev : [intro, ...prev]);
-      setDraft(''); setDraftKind('worry'); setDraftTitle(''); setImage('');
-      setHomeTab('forum'); setForumSection('main'); setView('home');
-      setToast('可以开始了。');
-      return;
-    }
     const text = draft.trim() || (image ? '我拍了一张学习材料，想先找到第一步。' : '');
     if (!text || working) return;
     if (guardSubmission(text, draftTitle)) return;
@@ -820,11 +792,6 @@ export default function App() {
       setHomeTab('forum');
       setForumSection('main');
     };
-    if (!openingReady(latest.current.cards, readOpeningGate())) {
-      revealAdvance();
-      setToast('先读完四位同伴介绍并发一张自我介绍，再推进时间');
-      return;
-    }
     const operation = gate.current.start('advance');
     if (!operation) {
       revealAdvance();
@@ -1192,7 +1159,6 @@ export default function App() {
     }));
   };
   const sendGoalCheer = (card: Card) => {
-    if (!openingReady(latest.current.cards, readOpeningGate())) return;
     const persona = personas[Math.abs(card.id.charCodeAt(0) + card.id.length) % personas.length];
     if (!persona) return;
     // 页面开着时一次同伴打气；不承诺离线后台继续。
@@ -1200,7 +1166,6 @@ export default function App() {
       let line = `你写的是「${card.title?.slice(0, 24)}」；我会在论坛看你下一步的进展。`;
       let origin: Comment['origin'] = 'simulated';
       const cur = latest.current;
-      if (!openingReady(cur.cards, readOpeningGate())) return;
       if (isReady(cur.config) && !isMock(cur.config) && !cur.settings.paused) {
         let reserved = false;
         try { reserveMeetingCall(); reserved = true; } catch { /* 额度不可用：保留模拟来源 */ }
@@ -1404,7 +1369,7 @@ export default function App() {
     materialInFlight.current.clear();
     deadlineConfirming.current.clear();
     clearAll();
-    setOpeningGateFlag('reading');
+    setOpeningGateFlag('need-intro');
     setForumSection('main');
     // 清除持有的 Key 和便签；不能只删除 localStorage 而继续沿用旧内存状态。
     setConfig(defaultConfig);
@@ -1434,7 +1399,7 @@ export default function App() {
 
   const doReseed = () => {
     clearOpeningStage();
-    setOpeningGateFlag('reading');
+    setOpeningGateFlag('need-intro');
     setForumSection('main');
     materialInFlight.current.forEach(controller=>controller.abort());
     materialInFlight.current.clear();
@@ -1443,6 +1408,13 @@ export default function App() {
     setPersonas((prev) => ensureMinds(seedMemories(prev)));
     setWorld(emptyWorld());
     resetGuideDismissed();
+  };
+
+  const skipOpening = () => {
+    persistOpeningStage('ready');
+    setOpeningGateFlag('ready');
+    setAdminOpen(false);
+    setToast('已跳过开场');
   };
 
   const guide = cards.find((c) => c.kind === 'guide');
@@ -1787,35 +1759,24 @@ export default function App() {
       {view === 'home' && (
         <div className="feed">
           {openingPhase !== 'ready' && (
-            <section className="opening-forum" aria-label="新同伴介绍">
+            <section className="opening-forum" aria-label="开始使用">
               <div className="card" style={{padding:16, marginBottom:16}} role="status">
                 <h1 className="page-title" style={{fontSize:'1.35rem'}}>
-                  {openingPhase === 'reading'
-                    ? `先看看四位同伴是谁（已读 ${openingReadCount(cards)}/4）`
-                    : '轮到你介绍一下自己了'}
+                  先看看四位同伴，或者直接写下现在卡在哪
                 </h1>
-                <p className="page-sub">{openingPhase === 'reading'
-                  ? '逐张点开下面四位同伴的卡片，阅读后才会计数。这里的同伴都是虚构角色。'
-                  : '不用写真名或学校。说说现在卡在哪里，想怎么用这个论坛。'}</p>
-                {openingPhase === 'need-intro' && (
-                  <button type="button" className="btn btn-primary"
-                    onClick={() => {setDraft('');setDraftTitle('');setImage('');setView('post');}}>
-                    写一张自我介绍
-                  </button>
+                <p className="page-sub">不用先自我介绍。四位同伴都是虚构角色，你的第一张卡就是开场。</p>
+                <button type="button" className="btn btn-primary"
+                  onClick={() => {setDraft('');setDraftKind('worry');setDraftTitle('');setImage('');setView('post');}}>
+                  写第一张卡
+                </button>
+                {homeTab === 'step' && (
+                  <button type="button" className="btn btn-ghost" style={{marginLeft:8}}
+                    onClick={() => setHomeTab('forum')}>去论坛看看</button>
                 )}
-              </div>
-              {guide && !guideDismissed && (
-                <GuideCard card={guide} onOpen={() => openCard(guide)} onDismiss={dismissGuide} />
-              )}
-              <div className="forum-grid">
-                {openingIntroCards(cards).map(card => (
-                  <CardRow key={card.id} card={card} personas={personas}
-                    onClick={() => openCard(card)} onLike={() => like(card)} onCheer={() => cheer(card)} />
-                ))}
               </div>
             </section>
           )}
-          {homeTab === 'step' && openingPhase === 'ready' && (
+          {homeTab === 'step' && (
             <StepBoard
               cards={cards}
               todos={todos}
@@ -1843,7 +1804,7 @@ export default function App() {
             />
           )}
 
-          {homeTab === 'forum' && openingPhase === 'ready' && (
+          {homeTab === 'forum' && (
             <>
               <div className="forum-head">
                 <div>
@@ -1946,24 +1907,12 @@ export default function App() {
         <div className="feed post-feed">
           <div className="page-head">
             <div>
-              <h1 className="page-title">{openingPhase === 'need-intro' ? '我的自我介绍' : '放一张卡'}</h1>
-              <p className="page-sub">{openingPhase === 'reading'
-                ? '先阅读四位同伴的介绍，再来发第一张卡。'
-                : openingPhase === 'need-intro'
-                  ? '不用写真实姓名或学校，10–2000 字就好。'
-                  : '想说什么都行：诉苦、炫耀、分享生活趣事，或定下一个目标。一两句就够，可以配一张图。'}</p>
+              <h1 className="page-title">放一张卡</h1>
+              <p className="page-sub">想说什么都行：诉苦、炫耀、分享生活趣事，或定下一个目标。一两句就够，可以配一张图。</p>
             </div>
           </div>
           <div className="post-layout">
-            {openingPhase === 'reading' ? (
-              <div className="card" style={{padding:16}}>
-                <button className="btn btn-primary" type="button"
-                  onClick={() => {setHomeTab('forum');setView('home');}}>
-                  先读介绍（{openingReadCount(cards)}/4）
-                </button>
-              </div>
-            ) : <PostForm
-              introMode={openingPhase === 'need-intro'}
+            <PostForm
               value={draft}
               kind={draftKind}
               onKind={setDraftKind}
@@ -1988,8 +1937,8 @@ export default function App() {
               onImage={setImage}
               onSubmit={send}
               onOpenSettings={() => openSettings()}
-            />}
-            {openingPhase === 'ready' && <aside className="post-side">
+            />
+            <aside className="post-side">
               <h2>发出去之后</h2>
               <ol className="post-steps">
                 <li>
@@ -2006,7 +1955,7 @@ export default function App() {
                 </li>
               </ol>
               <p className="post-side-note">不是真人社交，只在论坛上聊。你的卡只留在本机。</p>
-            </aside>}
+            </aside>
           </div>
         </div>
       )}
@@ -2570,6 +2519,7 @@ export default function App() {
             onPersonas={setPersonas}
             onTick={() => void nudge()}
             onAdvance={(hours) => void advance(hours)}
+            onSkipOpening={skipOpening}
             {...{
               // Optional debug extension: older AdminPanel versions can ignore these props.
               pendingBrags: cards.filter((c) => c.pendingBrag).map((c) => ({

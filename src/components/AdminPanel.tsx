@@ -22,6 +22,7 @@ interface Props {
   onPersonas: (personas: Persona[]) => void;
   onTick: () => void;
   onAdvance: (hours: number) => void;
+  onSkipOpening?: () => void;
   /** Author-only: isolated fictional brag jobs. Does not alter normal world time. */
   pendingBrags?: { sourceCardId: string; personaId: string; personaName: string; dueAt: number }[];
   onAdvanceBragMinutes?: (minutes: number) => void;
@@ -525,6 +526,11 @@ export default function AdminPanel(props: Props) {
                   +{hours} 小时
                 </button>
               ))}
+              {props.onSkipOpening && (
+                <button type="button" className="btn btn-ghost" onClick={props.onSkipOpening}>
+                  跳过开场
+                </button>
+              )}
             </div>
             <section className="adm-memory" aria-label="独立炫耀调试" data-testid="brag-author-controls">
               <p className="field-label">炫耀任务 · 作者调试（不修改正式 2–20 分钟排期规则）</p>

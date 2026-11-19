@@ -28,6 +28,9 @@ export function isPlayerIntro(card: Card): boolean {
   return card.playerIntro === true && card.authorKind === 'player' && card.authorId === 'me' &&
     card.kind === 'worry' && !card.image && !card.goalId && validPlayerIntroText(card.text);
 }
+export function isPlayerFirstCard(card: Card): boolean {
+  return card.authorKind === 'player' && card.authorId === 'me' && card.kind !== 'guide';
+}
 
 /** Missing or partial old introductions must never permanently lock archived players. */
 export function openingIntroCards(cards: readonly Card[]): Card[] {
@@ -46,11 +49,10 @@ export function openingReadCount(cards: readonly Card[]): number {
 export function openingStage(cards: readonly Card[], persisted: OpeningStage | null = readOpeningGate()): OpeningStage {
   const introductions = openingIntroCards(cards);
   if (introductions.length !== INTRO_PERSONA_IDS.length) return 'ready'; // old/partial saves
-  if (cards.some(isPlayerIntro) || persisted === 'ready') return 'ready';
+  if (persisted === 'ready' || cards.some(isPlayerFirstCard)) return 'ready';
   // Previously active AI story timelines were not gated; preserve access on upgrade.
   if (!persisted && cards.some(card => card.authorKind === 'persona' && card.kind === 'goal' && card.goalId)) return 'ready';
-  return introductions.some(card => !Number.isFinite(card.seenAt) || (card.seenAt ?? 0) <= 0)
-    ? 'reading' : 'need-intro';
+  return 'need-intro';
 }
 export const openingReady = (cards: readonly Card[], persisted?: OpeningStage | null): boolean =>
   openingStage(cards, persisted) === 'ready';

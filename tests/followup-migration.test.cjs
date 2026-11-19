@@ -20,13 +20,13 @@ const {defaultPersonas}=require('../src/lib/personas.ts');
 const fields=['tagline','background','voice','personality','speech','approach','academicFocus'];
 const ids=['shenmo','weini','miaoze','yanggao'];
 const saved=()=>defaultPersonas().map(p=>({...p,...baseline[p.id],memory:[{id:'old',what:'保留旧记忆'}],intimacy:77,weekLog:[{at:1,text:'旧周记'}]}));
-test('v3 frozen baseline matches the supplied fixture and schema is 4',()=>{
- assert.equal(PERSONA_SCHEMA_VERSION,4);assert.deepEqual(PERSONA_V3_TEXT,baseline);
+test('v3 frozen baseline matches the supplied fixture and schema is 5',()=>{
+ assert.equal(PERSONA_SCHEMA_VERSION,5);assert.deepEqual(PERSONA_V3_TEXT,baseline);
  for(const id of ids)for(const field of fields)assert.equal(typeof baseline[id][field],'string',`${id}.${field}`);
 });
-test('supplied v3 fixture is already identical to CURRENT seven text fields; schema bump is still needed',()=>{
+test('v3 fixture upgrades Miaoze research-first copy while preserving runtime state',()=>{
  const defaults=defaultPersonas();const original=saved();const out=migratePersonaText(original,defaults);
- assert.equal(out.changed,0);
+ assert.equal(out.changed,1);
  for(const row of out.rows){const target=defaults.find(p=>p.id===row.id);
    for(const field of fields)assert.equal(row[field],target[field],`${row.id}.${field}`);
    assert.equal(row.intimacy,77);assert.equal(row.memory[0].what,'保留旧记忆');assert.equal(row.weekLog[0].text,'旧周记');
@@ -47,7 +47,7 @@ test('unknown ids and nonexistent fields are never manufactured',()=>{
  assert.deepEqual(Object.keys(out.rows[1]),['id','tagline']);
 });
 
-test('older v2 text DOES upgrade to v4 while preserving unrelated runtime fields',()=>{
+test('older v2 text DOES upgrade to v5 while preserving unrelated runtime fields',()=>{
  const rows=defaultPersonas().map(p=>({...p,...PERSONA_V2_TEXT[p.id],intimacy:92}));
  const result=migratePersonaText(rows,defaultPersonas());
  assert.equal(result.changed,4);
