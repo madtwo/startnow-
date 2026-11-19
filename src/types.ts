@@ -60,6 +60,8 @@ export interface Persona {
   handle: string;
   tagline: string;
   background: string;
+  /** 这学期在学业/科研上具体卡在哪；公开帖子以它为主，生活线只做背景。 */
+  academicFocus?: string;
   voice: string;
   color: string;
   avatarKey: string;

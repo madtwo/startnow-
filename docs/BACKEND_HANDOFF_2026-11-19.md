@@ -96,3 +96,14 @@ node --no-warnings --experimental-strip-types scripts/check-action-fit.mjs
 - 提交：不直接推 `main`；用分支/PR。合并后跑全量测试。
 - 模型 Key 只在浏览器 localStorage 或本机环境，不入库。
 - 前端 owner 是你；后端逻辑文件（`src/lib/*`、`scripts/*`、`tests/*`）由后端维护。
+
+---
+
+## 9. 2026-11-19 晚补充：人设学习主线（第一赛道）
+
+- 四位固定角色新增 `academicFocus`，`buildPersonaPrompt` 注入“这学期学业上卡在…”与“公开帖子以学业/科研为主”的约束；群聊副本同步。
+- 困境权重调整为学习/未来为主；演示帖 16 学习/科研 : 4 生活（80/20）；生活线保留在背景与高熟悉度对话。
+- `personaGoalTemplates.ts` 每人 7 条全部改为学习/科研目标。
+- 群聊**保留**：不删除入口/12 人池；`VITE_COMPETITION=1` 只隐藏入口，开发/队友版可见。
+- 完整需求（动作库补链、比例测试、演示存档）：`startnow-track1-persona-requirements-2026-11-19.zip`。
+- 测试仍 474/474；tsc/build/H5 通过。

@@ -23,7 +23,7 @@ const { buildSeedCards } = lib('seed');
 const strip = (p) => ({
   id: p.id, archetype: p.archetype, name: p.name, handle: p.handle, tagline: p.tagline,
   gender: p.gender, age: p.age, school: p.school, major: p.major, cohort: p.cohort,
-  mbti: p.mbti, background: p.background, voice: p.voice, personality: p.personality,
+  mbti: p.mbti, background: p.background, academicFocus: p.academicFocus, voice: p.voice, personality: p.personality,
   speech: p.speech, approach: p.approach, weights: p.weights,
   followUp: p.followUp, intimacy: p.intimacy, replyDesire: p.replyDesire,
   color: p.color, avatarKey: p.avatarKey,
@@ -96,6 +96,7 @@ const profile = (p) => [
   `- **一句话**：${p.tagline}`,
   `- **基本信息**：${p.gender === 'female' ? '女' : '男'}，${p.age} 岁；${p.school}${p.major ? ` · ${p.major}` : ''}${p.cohort ? ` · ${p.cohort}` : ''}`,
   `- **背景（人生）**：${p.background}`,
+  p.academicFocus ? `- **这学期学业主线**：${p.academicFocus}` : '',
   `- **口吻样例**：${p.voice}`,
   `- **性格**：${p.personality}`,
   `- **说话习惯**：${p.speech}`,
