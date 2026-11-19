@@ -120,6 +120,8 @@ export interface Persona {
   peak?: [number, number];
   /** 喜欢的事：刚认识时用来找话题，认识久了才可能约着一起做 */
   interests?: string[];
+  /** 说话习惯：口癖、起头方式、改口的毛病 */
+  speechHabit?: string[];
   /** 大概几点醒着 [开始, 结束)，可跨零点 */
   awake?: [number, number];
 }

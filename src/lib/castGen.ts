@@ -250,6 +250,30 @@ const HOBBIES = [
   '最近在学着自己煮面',
 ];
 
+/** 说话习惯：让四个人不像同一个模型在说话。 */
+const HABITS: Record<Archetype, string[]> = {
+  quiet: [
+    '话短，经常只有半句；「嗯」「是」就能起头',
+    '不太主动，但别人说完会接一句，接完就停',
+    '常把话咽回去一半，用省略号收尾',
+  ],
+  shy: [
+    '常带「呃」「那个」，说到一半改口重说',
+    '先附和一句，再小声补一句自己的事',
+    '不确定的时候会加「可能吧」「我也不太清楚」',
+  ],
+  rational: [
+    '爱说「其实」「说白了」；喜欢把一句话拆成两半讲',
+    '会先复述对方的意思，再说自己的看法',
+    '下判断前先加「我觉得」',
+  ],
+  warm: [
+    '爱说「我也是」「我懂你意思」；会叫名字把人拉进来',
+    '常先接住对方一句，再讲自己类似的经历',
+    '句子偏长，一口气说完好几件事',
+  ],
+};
+
 /** 真正的兴趣：刚认识时拿来找话题，熟了才可能约着一起做。 */
 const INTERESTS = [
   '打球',
@@ -504,6 +528,7 @@ export function generatePersona(
   ];
   const interestPool = [...INTERESTS].sort(() => Math.random() - 0.5);
   const interests = interestPool.slice(0, 2);
+  const speechHabit = [...HABITS[archetype]].sort(() => Math.random() - 0.5).slice(0, 2);
   const worryShort = situation.worry.split('，').slice(-1)[0];
 
   return {
@@ -541,6 +566,7 @@ export function generatePersona(
     pace,
     peak,
     interests,
+    speechHabit,
     awake,
   };
 }

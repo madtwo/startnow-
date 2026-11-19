@@ -183,7 +183,21 @@ test('提示词里有正例和反例，不是只有禁令', () => {
   const system = room.systemForRoom(cast[0], cast);
   assert.ok(system.includes('可以照这个感觉说'), '要有正例');
   assert.ok(system.includes('不要这样说'), '要有反例');
-  assert.ok(system.includes('最多两个逗号'), '要给出句子长度约束');
+  assert.ok(system.includes('真人打字是这个味道'), '要说明真人打字的特征');
+  assert.ok(system.includes('不要每句都收成一个金句'), '不许每句都写成金句');
+  // 不许再要求「短句」：真人聊天是一口气说好几件事的
+  assert.ok(!system.includes('最多两个逗号'), '不该限制句子长度');
+});
+
+test('每个人有自己的打字习惯，四个人不像同一个模型', () => {
+  const cast = generateCast(4, NOW);
+  for (const p of cast) {
+    assert.equal((p.speechHabit ?? []).length, 2, `${p.name} 缺说话习惯`);
+    const system = room.systemForRoom(p, cast);
+    assert.ok(system.includes(p.speechHabit[0]), '说话习惯要进系统提示');
+  }
+  const all = new Set(cast.flatMap((p) => p.speechHabit ?? []));
+  assert.ok(all.size >= 4, '四个人的口癖不该一样');
 });
 
 test('新房间只排一条「欢迎新人」，不是四个人先自己聊起来', () => {

@@ -334,9 +334,18 @@ ${rows.join('\n')}`;
 };
 
 const interestBlock = (persona: Persona): string => {
+  const parts: string[] = [];
   const list = persona.interests ?? [];
-  if (!list.length) return '';
-  return `【你自己喜欢的事】${list.join('、')}（刚认识时用来找话题，别一上来就约；熟了才可能约着一起做，而且只能是线上能一起做的）`;
+  if (list.length) {
+    parts.push(
+      `【你自己喜欢的事】${list.join('、')}（刚认识时用来找话题，别一上来就约；熟了才可能约着一起做，而且只能是线上能一起做的）`,
+    );
+  }
+  const habits = persona.speechHabit ?? [];
+  if (habits.length) {
+    parts.push(`【你打字的习惯】${habits.join('；')}。照这个感觉写，但不许每句都一模一样。`);
+  }
+  return parts.join('\n');
 };
 
 export const systemForRoom = (persona: Persona, cast: Persona[]): string =>
@@ -461,10 +470,10 @@ const generateLine = async (
       signal: new AbortController().signal,
       sessionId: `ses_r_${Math.random().toString(36).slice(2, 10)}`,
       onDelta: () => {},
-      maxTokens: 90,
+      maxTokens: 110,
       lowEffort: true,
     });
-    const line = polishLine(cleanLine(text, 90));
+    const line = polishLine(cleanLine(text, 100));
     if (line && !findCrisis(line) && !auditTone(line)) return line;
     ctx.logs.push(`${persona.name} 那句被拦下了，换了一句`);
   } catch {
