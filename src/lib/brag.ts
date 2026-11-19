@@ -9,9 +9,19 @@ const clamp = (value: number, low: number, high: number) => Math.min(high, Math.
 
 /** 纯安慰/陪伴类语句不能当成可执行的下一步，也就不能作为炫耀卡的来源。 */
 const COMFORT_ONLY = /摸摸|抱抱|拍拍|陪你|陪朋友|陪你聊|休息一下|放松一下|别想太多|会好的|加油吧?|早点睡/;
-const ACTION_HINT = /打开|写|列|发|问|走|站|整理|收|喝|看|查|预约|设|定|准备|挑|改|做|投|读|背|练|画|跑|洗|换/;
+const ACTION_HINT = /打开|写|列|发|问|走|站|整理|收|喝|看|查|预约|设|定|准备|挑|改|做|投|读|背|练|画|跑|洗|换|锁|放|关|拿|交|删|清|记|听|抄|撕|拖/;
 export const isVagueComfortAdvice = (text: string) =>
   COMFORT_ONLY.test(text) && !ACTION_HINT.test(text);
+
+const SUGGESTION_HINT = /我一般|我的话|我会|我都是|我平常|我习惯|你可以|你试试|你应该|建议你|要不你|不如你|要不|不如|先把|先别|试试/;
+const IMPERATIVE_ADVICE = /^(?:先|要不|试试|快|赶紧|别)?(?:把|去|打开|写|列|发|问|看|查|做|背|读|练|画|跑|洗|换|锁|放|关|拿|交|删|清|记|听|抄|撕|拖|收|整|定|设|投|改|准备|挑|约)/;
+
+/** A player's natural suggestion on a persona's own worry, typed without the advice switch. */
+export const looksLikeActionableAdvice = (text: string): boolean => {
+  const clean = text.normalize('NFKC').trim();
+  if (!clean || clean.length > 200 || findCrisis(clean) || isVagueComfortAdvice(clean)) return false;
+  return (SUGGESTION_HINT.test(clean) || IMPERATIVE_ADVICE.test(clean)) && ACTION_HINT.test(clean);
+};
 
 /** The model never performs a real-world action. These are explicitly labelled fictional character updates. */
 export function unsafeBragContent(text: string): boolean {
@@ -66,7 +76,10 @@ export function canPublishBrag(source: Card, cards: readonly Card[]): boolean {
   return source.authorKind === 'persona' && source.kind !== 'brag' &&
     source.status === 'advised' && !source.noMemory &&
     Boolean(advice?.accepted && advice.fromPersonaId === 'me' &&
-      !unsafeBragContent(advice.text) && !isVagueComfortAdvice(advice.text) &&
+      // The player's wording is quoted source, not generated persona copy;
+      // tone policing here would reject harmless "你可以试试…" suggestions.
+      !findCrisis(advice.text) && !auditCriticalContent(advice.text) &&
+      !auditSocial(advice.text) && !isVagueComfortAdvice(advice.text) &&
       !findCrisis(source.text) &&
       !source.comments.some((comment) => comment.authorKind === 'player' && findCrisis(comment.text))) &&
     !isNewerPersonaWorry(cards, source) &&

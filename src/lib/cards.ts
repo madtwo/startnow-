@@ -38,7 +38,7 @@ import { GROWTH_REFERENCE, canReferenceGrowthFromCards, correctionForMisread, is
 import type { RecentAction } from './actions';
 import {
   canPublishBrag, cancelBragsForNewWorry, fallbackBragText, isVagueComfortAdvice,
-  isGroundedBrag, isNewerPersonaWorry, scheduleAcceptedBrag,
+  isGroundedBrag, isNewerPersonaWorry, looksLikeActionableAdvice, scheduleAcceptedBrag,
   unsafeBragContent,
 } from './brag';
 import { HELP_SEEKING_ACTIONS, isHelpSeekingAction, needsHelpSeeking, nextSmallerHelpAction } from './support';
@@ -256,7 +256,9 @@ export function addPlayerComment(
   if (!target) {
     return { ...card, comments, status: card.status === 'stuck' ? 'talking' : card.status };
   }
-  if (kind === 'advice') {
+  const theirOwnWorry = card.authorKind === 'persona' && card.authorId === target &&
+    (!card.kind || card.kind === 'worry') && !card.goalId && !card.vulnerability;
+  if (kind === 'advice' || (kind === 'comment' && theirOwnWorry && looksLikeActionableAdvice(text))) {
     pending.push({ personaId: target, at: now + (rand(4, 10) * 1000) / speed, phase: 'decide', sourceCommentId: commentId });
     return { ...card, comments, pending, status: card.status === 'stuck' ? 'talking' : card.status };
   }
@@ -1377,7 +1379,8 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     card.pending = [...card.pending].sort((a, b) => a.at - b.at).filter((item) => {
       if (item.sourceCommentId && item.phase !== 'reaction') {
         const source = card.comments.find((c) => c.id === item.sourceCommentId);
-        if (source?.authorKind !== 'player' || (item.phase === 'decide' && source.kind !== 'advice')) {
+        if (source?.authorKind !== 'player' ||
+            (item.phase === 'decide' && source.kind !== 'advice' && !looksLikeActionableAdvice(source.text))) {
           ctx.logs.push(`已丢弃失效的 ${item.phase} 任务：找不到原始玩家评论`);
           return false;
         }
@@ -1513,8 +1516,8 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
           });
         } else if (ready.phase === 'decide') {
           const adviceComment = ready.sourceCommentId
-            ? card.comments.find((c) => c.id === ready.sourceCommentId && c.authorKind === 'player' && c.kind === 'advice')
-            : [...card.comments].reverse().find((c) => c.authorKind === 'player' && c.kind === 'advice');
+            ? card.comments.find((c) => c.id === ready.sourceCommentId && c.authorKind === 'player')
+            : [...card.comments].reverse().find((c) => c.authorKind === 'player');
           adviceText = adviceComment?.text ?? '';
           let accept = false;
           let reply = '这个办法我暂时做不到，先不按它做。';
