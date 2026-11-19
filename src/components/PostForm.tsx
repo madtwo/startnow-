@@ -11,6 +11,8 @@ interface Props {
   ready: boolean;
   personas: Persona[];
   visionModel: string;
+  captureMode: 'single' | 'two-step';
+  onCaptureModeChange: (value:'single'|'two-step')=>void;
   onVisionModelChange: (model: string) => void;
   onChange: (value: string) => void;
   onTitle: (value: string) => void;
@@ -28,6 +30,8 @@ export default function PostForm({
   personas,
   visionModel,
   onVisionModelChange,
+  captureMode,
+  onCaptureModeChange,
   onChange,
   onTitle,
   onImage,
@@ -94,6 +98,15 @@ export default function PostForm({
           </label>
         )}
 
+        {image && <label className="field">
+          <span className="field-label">识别方式</span>
+          <select value={captureMode} aria-label="材料识别方式"
+            onChange={e=>onCaptureModeChange(e.target.value==='two-step'?'two-step':'single')}
+            style={{maxWidth:'100%'}}>
+            <option value="single">一步完成：识别材料并给第一步（推荐）</option>
+            <option value="two-step">兼容模式：先识别，再给下一步</option>
+          </select>
+        </label>}
         <div className="post-form-foot">
           <div className="who">
             <span className="who-avatars">

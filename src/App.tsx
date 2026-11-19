@@ -35,6 +35,7 @@ import { forgetAll, forgetOne, forgetRole } from './lib/memoryControl';
 import { modelFailureNotice } from './lib/modelStatus';
 import {
   acceptAdvice,
+  advicePersonaFor,
   addPlayerComment,
   adoptCommentAdvice,
   askForAdvice,
@@ -53,6 +54,7 @@ import { buildGuideCard, buildSeedCards, seedMemories, introPhaseActive } from '
 import { COMPETITION_MODE, competitionSummary } from './lib/competition';
 import { buildCompetitionSeedCards } from './lib/competitionSeed';
 import { extractMaterial } from './lib/materialVision';
+import { captureFirstStep } from './lib/materialCapture';
 import { confirmedDeadline } from './lib/deadline';
 import { ensureMinds } from './lib/mind';
 import { defaultPersonas } from './lib/personas';
@@ -544,23 +546,40 @@ export default function App() {
     const started=Date.now();
     materialInFlight.current.set(cardId,controller);
     setCards(prev=>prev.map(c=>c.id===cardId && c.image===imageDataUrl
-      ? {...c,material:undefined,materialAttemptAt:started,materialError:undefined,
+      ? {...c,material:undefined,materialCaptureStep:undefined,materialAttemptAt:started,materialError:undefined,
           ...(c.advice?.origin==='material' && !c.advice.accepted ? {
             advice:undefined, status:'talking' as const,
             comments:c.comments.filter(comment=>comment.origin!=='material'),
           } : {})}:c));
     try {
-      const result=await extractMaterial(latest.current.config,imageDataUrl,{
-        signal:controller.signal,onModelAttempt:()=>reserveMeetingCall('vision'),
-      });
+      const current=latest.current;
+      const sourceCard=current.cards.find(c=>c.id===cardId);
+      const presenter=(sourceCard && advicePersonaFor(sourceCard,current.personas)) ||
+        current.personas.find(p=>p.id==='miaoze') || current.personas[0];
+      const single=current.config.captureMode!=='two-step' && Boolean(presenter);
+      const result=single && presenter
+        ? await captureFirstStep({config:current.config,imageDataUrl,persona:presenter,now:started,
+            signal:controller.signal,onModelAttempt:()=>reserveMeetingCall('vision')})
+        : await extractMaterial(current.config,imageDataUrl,{
+            signal:controller.signal,onModelAttempt:()=>reserveMeetingCall('vision'),
+          });
       if (controller.signal.aborted || externalTabChanged.current) return;
+      // MaterialResult (legacy) has no step. Keep the union explicit so type
+      // checking cannot accidentally treat extracted text as a verified action.
+      const capturedStep=result.ok && 'step' in result
+        ? (result.step as { text: string; anchorId: string; source: 'model' | 'template' })
+        : undefined;
       setCards(prev=>prev.map(c=>c.id===cardId && c.image===imageDataUrl && c.materialAttemptAt===started
         ? result.ok
-          ? {...c,material:result.extraction,materialError:undefined}
-          : {...c,material:undefined,materialError:'code' in result ? result.code : 'server'}
+          ? {...c,material:result.extraction,materialError:undefined,
+              materialCaptureStep:capturedStep && presenter ? {
+                text:capturedStep.text,anchorId:capturedStep.anchorId,
+                source:capturedStep.source,personaId:presenter.id,
+              } : undefined}
+          : {...c,material:undefined,materialCaptureStep:undefined,materialError:result.code}
         : c));
       setToast(result.ok
-        ? '已提取可见材料片段，请先核对内容，再请 AI 给第一步'
+        ? ('step' in result ? '已找到材料锚点和今天的一步，请核对后领取' : '已提取可见材料片段，请核对后请 AI 给第一步')
         : '没看清这张图，可以重试，或把关键文字粘贴进来。');
     } catch {
       if (!controller.signal.aborted && !externalTabChanged.current) {
@@ -580,7 +599,7 @@ export default function App() {
     if (!controller) return;
     controller.abort();
     materialInFlight.current.delete(cardId);
-    patch(cardId, card => ({...card, material:undefined, materialError:'cancelled'}));
+    patch(cardId, card => ({...card, material:undefined, materialCaptureStep:undefined, materialError:'cancelled'}));
     setToast('已取消识别，可以重试或使用普通下一步。');
   };
 
@@ -1744,6 +1763,11 @@ export default function App() {
               ready={ready}
               personas={personas}
               visionModel={config.visionModel ?? ''}
+              captureMode={config.captureMode==='two-step'?'two-step':'single'}
+              onCaptureModeChange={(captureMode) => {
+                const next={...config,captureMode};
+                setConfig(next);saveConfig(next);
+              }}
               onVisionModelChange={(model) => {
                 const next = {...config, visionModel: model.slice(0, 160)};
                 setConfig(next);

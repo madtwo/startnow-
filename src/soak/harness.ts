@@ -22,6 +22,7 @@ import { isMock } from '../config/providers';
 import { followupTextFor, completionFixtures } from './scenarioFixtures';
 import { extractMaterial } from '../lib/materialVision';
 import { materialFirstStep, validateMaterialStep } from '../lib/materialAdvice';
+import { captureFirstStep } from '../lib/materialCapture';
 import type { Card, Persona, WorldSettings, LlmConfig, Goal } from '../types';
 
 const MIN = 60_000;
@@ -532,26 +533,35 @@ async function runMaterial(config: LlmConfig) {
         reader.onerror = () => reject(reader.error);
         reader.readAsDataURL(blob);
       });
-      const vision = await extractMaterial(config, dataUrl);
-      let anchored = false, actionable = false, fallback = true, text = '';
-      if (vision.ok) {
-        const step = await materialFirstStep({ extraction: vision.extraction, persona, config, now: Date.now(), budget: 600 });
-        if (step) {
-          const check = validateMaterialStep(step.text, vision.extraction);
-          anchored = check.ok;
+      let anchored = false, actionable = false, fallback = true, requestCount = 1;
+      if ((qs.get('capture') ?? 'single') === 'single') {
+        const capture = await captureFirstStep({ config, imageDataUrl: dataUrl, persona, now: Date.now() });
+        if (capture.ok) {
+          anchored = validateMaterialStep(capture.step.text, capture.extraction).ok;
           actionable = anchored;
-          fallback = step.source === 'template';
-          text = step.text;
+          fallback = capture.step.source === 'template';
+          requestCount = capture.retried ? 2 : 1;
+        }
+      } else {
+        const vision = await extractMaterial(config, dataUrl);
+        if (vision.ok) {
+          const step = await materialFirstStep({ extraction: vision.extraction, persona, config, now: Date.now(), budget: 600 });
+          if (step) {
+            const check = validateMaterialStep(step.text, vision.extraction);
+            anchored = check.ok;
+            actionable = anchored;
+            fallback = step.source === 'template';
+          }
+          requestCount = 2 + (vision.retried ? 1 : 0);
         }
       }
       const latencyMs = Math.round(performance.now() - started);
       const costUsd = +((usage.p - before.p) * 0.00000015 + (usage.c - before.c) * 0.0000006).toFixed(6);
       lines.push(JSON.stringify({
         id: row.id, source: 'real-api', anchored, actionable5m: actionable,
-        latencyMs, costUsd, fallback, requestCount: vision.ok ? 2 + (vision.retried ? 1 : 0) : 1,
+        latencyMs, costUsd, fallback, requestCount,
       }));
       log(`D4 ${row.id} ${anchored ? 'anchor' : 'MISS'} ${latencyMs}ms`, anchored ? 'ok' : 'warn');
-      void text;
     }
   } finally {
     window.fetch = originalFetch as typeof fetch;

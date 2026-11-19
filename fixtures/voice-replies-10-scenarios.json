@@ -1,0 +1,12 @@
+[
+  {"id":"rx01","personaId":"weini","topic":"课程进度","userText":"机械制图的草图改了五次，我觉得老师还是不喜欢。现在没勇气交。"},
+  {"id":"rx02","personaId":"yanggao","topic":"科研任务","userText":"师兄让我写文献综述，我一个字也没动，还说了周三能发他。"},
+  {"id":"rx03","personaId":"miaoze","topic":"室友矛盾","userText":"室友不洗碗我有点烦，但又怕提醒显得我很小气。"},
+  {"id":"rx04","personaId":"shenmo","topic":"面试准备","userText":"后天面试，简历我越改越乱，朋友叫我先背自我介绍。"},
+  {"id":"rx05","personaId":"weini","topic":"求职焦虑","userText":"同学都收到实习回复了，我也投了几家，消息一响就以为是面试通知。"},
+  {"id":"rx06","personaId":"miaoze","topic":"关系误解","userText":"今天群里没人接我那句话，我已经复盘十几遍了，是不是哪里说错了？"},
+  {"id":"rx07","personaId":"yanggao","topic":"论文修改","userText":"摘要被老师退回来两次，我想把电脑合上不管了。"},
+  {"id":"rx08","personaId":"shenmo","topic":"生活费用","userText":"这周吃饭花多了，周末又答应一起出去，真不知道怎么说。"},
+  {"id":"rx09","personaId":"weini","topic":"团队任务","userText":"小组报告总有人不交材料，快截止了，没人提这事。"},
+  {"id":"rx10","personaId":"shenmo","topic":"毕业去向","userText":"家里想让我考研，我又想先实习，已经拖了两周没定。"}
+]

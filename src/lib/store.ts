@@ -22,7 +22,7 @@ import { findCrisis } from './safety';
 import { normalizePendingBrag, unsafeBragContent } from './brag';
 import { hasCrisisInArchive, hasPlayerCrisis, isSafeMemoryEntry } from './submissionGuard';
 import { parseGoals, parseSchedule, parseSummaries } from './goalStorage';
-import { parseMaterialExtraction } from './materialVision';
+import { parseMaterialExtraction, redactMaterialText } from './materialVision';
 import { validateMaterialStep } from './materialAdvice';
 import { isManipulative } from './agentVulnerability';
 
@@ -117,6 +117,9 @@ export function loadConfig(): LlmConfig {
         ? saved.fallbackModel
         : PRESETS.find((p) => p.id === providerId)?.fallbackModel ?? '',
     visionModel: typeof saved.visionModel === 'string' ? saved.visionModel.slice(0, 200).trim() : '',
+    // Measured 2026-11-19: single-call DS4.1 drops anchors to 19/25 and P95 to 44.6s;
+    // keep the two-step flow as the safe default until a faster vision model is verified.
+    captureMode: saved.captureMode === 'single' ? 'single' : 'two-step',
   };
   return isReady(config) ? config : defaultConfig;
 }
@@ -152,6 +155,16 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
   // card or impersonate the player's image material.
   const material = validImage && raw.authorKind==='player' && raw.material && typeof raw.material === 'object'
     ? parseMaterialExtraction(JSON.stringify(raw.material)).extraction : undefined;
+  const rawCapture=raw.materialCaptureStep;
+  // Imported material suggestions are untrusted. Discard malformed / unanchored / PII-bearing steps.
+  const captureValid=material && raw.authorKind==='player' && rawCapture &&
+    typeof rawCapture==='object' && typeof rawCapture.text==='string' &&
+    typeof rawCapture.anchorId==='string' && typeof rawCapture.personaId==='string' &&
+    ['shenmo','weini','miaoze','yanggao'].includes(rawCapture.personaId) &&
+    ['model','template'].includes(String(rawCapture.source)) &&
+    redactMaterialText(rawCapture.text)===rawCapture.text &&
+    (()=>{const checked=validateMaterialStep(rawCapture.text,material);
+      return checked.ok && checked.anchorId===rawCapture.anchorId;})();
   const vulnerability = raw.vulnerability;
   const cleanVulnerability = raw.authorKind==='persona' && vulnerability &&
     ['misread','missed','lost'].includes(vulnerability.kind) &&
@@ -179,11 +192,15 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     title: typeof raw.title === 'string' ? raw.title : undefined,
     image: validImage ? raw.image : undefined,
     material,
+    materialCaptureStep: captureValid ? {
+      text: rawCapture!.text, anchorId: rawCapture!.anchorId,
+      source: rawCapture!.source, personaId: rawCapture!.personaId,
+    } : undefined,
     materialAttemptAt: Number.isFinite(raw.materialAttemptAt) ? raw.materialAttemptAt : undefined,
     // A page refresh cancels an in-flight browser fetch. Never show an
     // eternally spinning recognition indicator after restoring its card.
     materialError: typeof raw.materialError==='string' &&
-      /^(vision_unsupported|session_missing|auth|rate_limit|timeout|server|format_invalid|no_anchor|unsafe_output|invalid_image|cancelled)$/.test(raw.materialError)
+      /^(vision_unsupported|session_missing|auth|rate_limit|timeout|server|format_invalid|no_anchor|unsafe_output|invalid_image|cancelled|advice_invalid)$/.test(raw.materialError)
       ? raw.materialError : raw.materialAttemptAt && !material ? 'cancelled' : undefined,
     materialGoalId: material && typeof raw.materialGoalId==='string' && raw.materialGoalId.length<=128 ? raw.materialGoalId : undefined,
     deadlineConfirmedAt: Number.isFinite(raw.deadlineConfirmedAt)?raw.deadlineConfirmedAt:undefined,
@@ -369,7 +386,7 @@ export function loadPersonas(): Persona[] {
     markPersonaSchema();
     return defaultPersonas();
   }
-  // 只替换仍等于 v1 内置文案的字段；手改过的文本和记忆原样保留。
+  // 只替换仍等于旧版内置文案的字段；手改过的文本和记忆原样保留。
   const migrated = migratePersonaText(saved as { id?: string }[], defaultPersonas());
   if (migrated.changed) write(KEYS.personas, migrated.rows);
   markPersonaSchema();

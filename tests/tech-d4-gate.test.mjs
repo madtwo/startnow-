@@ -14,19 +14,31 @@ const check=(rows)=>{
   const done=spawnSync(process.execPath,[gate,file],{encoding:'utf8'});
   return {status:done.status,data:JSON.parse(done.stdout)};
 };
-const pristine=()=>fixtures.map(x=>({id:x.id,source:'real-api',anchored:true,actionable5m:true,latencyMs:2000,costUsd:.002,fallback:false,requestCount:1}));
-test('missing live evidence strictly fails and cannot be inferred from test fixtures',()=>{
-  const x=check([]);assert.equal(x.status,1);assert.equal(x.data.status,'FAIL_OR_UNVERIFIED');
+const hash=(i)=>(i+30).toString(16).padStart(64,'0');
+const pristine=()=>fixtures.map((x,i)=>({id:x.id,source:'real-api',imageOrigin:'real-camera',imageSha256:hash(i),
+  humanReviewed:true,reviewerId:'anonymous1',modelName:'ds4.1-test',captureMode:'single',
+  anchored:true,actionable5m:true,latencyMs:2000,costUsd:.002,fallback:false,requestCount:1}));
+test('no live evidence strictly fails; synthetic source and known synthetic image fail',()=>{
+  assert.equal(check([]).status,1);
+  const r=pristine();r[0].source='synthetic';assert.equal(check(r).status,1);
+  r[0].source='real-api';
+  r[0].imageSha256=JSON.parse(fs.readFileSync(path.join(root,'fixtures/d4-synthetic-sha256.json'),'utf8'))[0];
+  assert.equal(check(r).status,1);
 });
-test('synthetic source is rejected even if all thresholds look green',()=>{
-  const rows=pristine();rows[0].source='synthetic';const x=check(rows);assert.equal(x.status,1);
-});
-test('all five numerical thresholds are mechanically enforced when metadata is provided',()=>{
-  const rows=pristine();assert.equal(check(rows).status,0,'valid metadata only tests the checker, not any API');
+test('metadata validates all limits but does not attest unseen images',()=>{
+  const rows=pristine();assert.equal(check(rows).status,0,'the test checker input is synthetic METADATA, not D4 evidence');
   rows[0].costUsd=.02;assert.equal(check(rows).status,1);rows[0].costUsd=.002;
-  rows[0].latencyMs=16_001;rows[1].latencyMs=16_001;assert.equal(check(rows).status,1);rows[0].latencyMs=2000;rows[1].latencyMs=2000;
+  rows[0].latencyMs=16001;rows[1].latencyMs=16001;assert.equal(check(rows).status,1);
+  rows[0].latencyMs=2000;rows[1].latencyMs=2000;
   rows.slice(0,6).forEach(r=>r.fallback=true);assert.equal(check(rows).status,1);
 });
-test('raw OCR/prompt/key fields fail closed for privacy',()=>{
-  const rows=pristine();rows[0].ocrText='raw';assert.equal(check(rows).status,1);
+test('duplicate photo hashes, lack of human review and image metadata reject',()=>{
+  const rows=pristine();rows[1].imageSha256=rows[0].imageSha256;assert.equal(check(rows).status,1);
+  rows[1].imageSha256=hash(1);rows[1].humanReviewed=false;assert.equal(check(rows).status,1);
+  rows[1].humanReviewed=true;delete rows[1].imageOrigin;assert.equal(check(rows).status,1);
+});
+test('reject raw OCR, keys, two-stage and unreported retry',()=>{
+  const rows=pristine();rows[0].ocrText='sensitive OCR';assert.equal(check(rows).status,1);delete rows[0].ocrText;
+  rows[0].captureMode='two-step';assert.equal(check(rows).status,1);rows[0].captureMode='single';
+  rows[0].requestCount=3;assert.equal(check(rows).status,1);
 });

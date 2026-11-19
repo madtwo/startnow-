@@ -405,6 +405,7 @@ export default function CardDetail({
             <ul>{card.material.anchors.map(a=><li key={a.id}>
               <strong>{a.label}</strong>：<span>{a.quote}</span>{a.page ? `（第 ${a.page} 页）` : ''}
             </li>)}</ul>
+            {card.materialCaptureStep && <p role="status">已根据可见片段准备一条可核对的第一步。领取前可先检查下方引用。</p>}
             {card.material.excerpt && <details><summary>展开识别节选（可能有误）</summary>
               <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{card.material.excerpt}</p></details>}
             {card.material.deadlineText && <div>
@@ -537,7 +538,7 @@ export default function CardDetail({
         </div>
       )}
 
-      {mine && !card.advice && card.arrivals.length > 0 && !closed && (
+      {mine && !card.advice && (card.arrivals.length > 0 || card.materialCaptureStep) && !closed && (
         <div className="card-actions">
           <button className="btn btn-ghost" onClick={() => onAdvice(targetId || undefined)} disabled={busy}>
             直接要一个下一步

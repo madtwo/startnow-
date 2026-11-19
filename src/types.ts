@@ -17,6 +17,8 @@ export interface LlmConfig {
   fallbackModel?: string;
   /** Explicit opt-in vision model sharing the configured API endpoint and key. */
   visionModel?: string;
+  /** Single image+step request (default); two-step remains as a compatible fallback. */
+  captureMode?: 'single' | 'two-step';
 }
 
 export type Gender = 'female' | 'male' | 'none';
@@ -198,6 +200,8 @@ export interface Card {
   image?: string;
   /** Redacted, user-visible material extraction only; the image is never logged. */
   material?: MaterialExtraction;
+  /** A validated first step returned by single multimodal capture. Never trust imports without revalidation. */
+  materialCaptureStep?: {text: string; anchorId: string; source: 'model' | 'template'; personaId: string};
   materialAttemptAt?: number;
   materialError?: string;
   materialGoalId?: string;

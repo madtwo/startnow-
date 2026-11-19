@@ -32,7 +32,7 @@ import type { RejectedCompletionDiagnostic } from './completionDiagnostics';
 import { MAX_FREE_TEXT_SHRINK, canRequestSmallerComment, fallbackSmallerText, likelyFreeTextAction, safeSmallerText, validSmallerText } from './freeTextShrink';
 import { actionLabel, inferTrouble, pickActions, recentActionUses, selectActionLine, smallerAction } from './actions';
 import { chooseCuratedActionLine } from './curatedUsage';
-import { materialFirstStep, smallerMaterialStep } from './materialAdvice';
+import { materialFirstStep, smallerMaterialStep, templateMaterialStep, validateMaterialStep, type MaterialStep } from './materialAdvice';
 import { GROWTH_REFERENCE, canReferenceGrowthFromCards, correctionForMisread, isManipulative } from './agentVulnerability';
 import type { RecentAction } from './actions';
 import {
@@ -398,7 +398,11 @@ export function advicePersonaFor(
     ? personas.find((persona) => persona.id === id)
     : undefined;
   // Do not silently substitute a different persona if an explicit selection is invalid.
-  if (requestedId) return byId(requestedId) || undefined;
+  // A user-initiated image scan may finish before any scheduled AI arrival.
+  // Only allow its explicitly recorded presenter in that case.
+  const presenter = card.authorKind==='player' && card.material && card.materialCaptureStep
+    ? personas.find(p=>p.id===card.materialCaptureStep?.personaId) : undefined;
+  if (requestedId) return byId(requestedId) || (presenter?.id===requestedId ? presenter : undefined);
   for (let i = card.comments.length - 1; i >= 0; i--) {
     const row = card.comments[i];
     if (row.authorKind !== 'persona') continue;
@@ -409,7 +413,7 @@ export function advicePersonaFor(
     const found = byId(card.arrivals[i]);
     if (found) return found;
   }
-  return undefined;
+  return presenter;
 }
 
 export function shrinkAdvice(card: Card, now = Date.now()): Card {
@@ -1710,13 +1714,22 @@ export async function askForAdvice(
   // User-initiated image lane; tick never calls vision or invents a material extraction.
   if (card.authorKind==='player' && card.material && !seekingHelp) {
     let calls=0;
-    const material=await materialFirstStep({extraction:card.material,persona,config:input.config,now,
-      onModelAttempt:()=>{
-        if (calls>=2 || (input.modelCallBudget!==undefined && calls>=input.modelCallBudget))
-          throw new Error('material advice model budget exhausted');
-        calls++;
-      },
-    });
+    // Single capture already paid for a validated step. Never make a second
+    // expensive model call on the same uploaded image. A different presenter
+    // receives a neutral, validated template instead of another persona's prose.
+    const cached=card.materialCaptureStep;
+    const checkedCached=cached && validateMaterialStep(cached.text,card.material);
+    const verifiedCached:MaterialStep|null = cached && checkedCached?.ok &&
+      checkedCached.anchorId===cached.anchorId && cached.personaId===persona.id
+      ? {text:cached.text,anchorId:cached.anchorId,source:cached.source} : null;
+    const material=verifiedCached || (cached ? templateMaterialStep(card.material) :
+      await materialFirstStep({extraction:card.material,persona,config:input.config,now,
+        onModelAttempt:()=>{
+          if (calls>=2 || (input.modelCallBudget!==undefined && calls>=input.modelCallBudget))
+            throw new Error('material advice model budget exhausted');
+          calls++;
+        },
+      }));
     if (material) {
       const next:Card={...card,status:'advised',
         advice:{text:material.text,fromPersonaId:persona.id,at:now,accepted:false,origin:'material',
