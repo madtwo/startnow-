@@ -50,7 +50,13 @@ import {
   summonPersona,
   tickCards,
 } from './lib/cards';
-import { buildGuideCard, buildSeedCards, seedMemories, introPhaseActive } from './lib/seed';
+import { buildGuideCard, buildSeedCards, seedMemories } from './lib/seed';
+import {
+  clearOpeningStage, openingIntroCards, openingReadCount, openingReady, openingStage,
+  persistOpeningStage, readOpeningGate, validPlayerIntroText, type OpeningStage,
+} from './lib/openingGate';
+import { splitForumCards } from './lib/forumHistory';
+import { isGoalResultCard, settlePeerReactionsLocally } from './lib/peerReactions';
 import { COMPETITION_MODE, competitionSummary } from './lib/competition';
 import { FORUM_VIEWS, matchesForumView, type ForumView } from './lib/forumFilters';
 import { buildCompetitionSeedCards } from './lib/competitionSeed';
@@ -210,6 +216,7 @@ export default function App() {
   const summaryEpoch = useRef(0);
   const summaryGenerating = useRef(false);
   const backoffUntil = useRef(0);
+  const advanceFastForwardPeers = useRef(false);
   const externalTabChanged = useRef(false);
   const [otherTabWarning, setOtherTabWarning] = useState(false);
   const [config, rawSetConfig] = useState<LlmConfig>(() => loadConfig());
@@ -242,11 +249,16 @@ export default function App() {
     new URLSearchParams(window.location.search).has('room') ? 'room' : 'home',
   );
   const [homeTab, setHomeTab] = useState<'step' | 'forum'>(
-    () => (localStorage.getItem('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
+    () => (isFirstRun() || localStorage.getItem('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
   );
   const [forumQuery, setForumQuery] = useState('');
   const [forumCat, setForumCat] = useState<(typeof FORUM_CATS)[number]>('全部');
   const [forumView, setForumView] = useState<ForumView>('全部');
+  const [forumSection, setForumSection] = useState<'main' | 'history'>('main');
+  const [openingGateFlag, setOpeningGateFlag] = useState<OpeningStage | null>(
+    () => (isFirstRun() ? 'reading' : readOpeningGate()),
+  );
+  const openingPhase = openingStage(cards, openingGateFlag);
   const [bellOpen, setBellOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailPeer, setDetailPeer] = useState('');
@@ -277,6 +289,11 @@ export default function App() {
   const [, refreshClock] = useState(0);
 
   useEffect(() => saveCards(cards), [cards]);
+  useEffect(() => {
+    // Derived from actual card flags; reading a card, rather than scrolling, advances the gate.
+    if (openingGateFlag !== openingPhase) setOpeningGateFlag(openingPhase);
+    persistOpeningStage(openingPhase);
+  }, [openingPhase, openingGateFlag]);
   useEffect(() => savePersonas(personas), [personas]);
   useEffect(() => saveWorld(world), [world]);
   useEffect(() => saveSettings(settings), [settings]);
@@ -369,11 +386,12 @@ export default function App() {
     if (COMPETITION_MODE || document.hidden || externalTabChanged.current || gate.current.running()) return;
     const cur = latest.current;
     const now = Date.now();
-    if (!shouldCheckPersonaGoals(lastPersonaGoalCheck.current, now, cur.settings.paused)) return;
+    if (!openingReady(cur.cards, readOpeningGate()) ||
+        !shouldCheckPersonaGoals(lastPersonaGoalCheck.current, now, cur.settings.paused)) return;
     const result = tickPersonaGoals({
       goals: cur.goals, cards: cur.cards, personas: cur.personas,
       now, enabled: !cur.settings.paused, enableLost:true,
-      crisisAt:lastCrisisAt.current, introActive:introPhaseActive(cur.cards,now),
+      crisisAt:lastCrisisAt.current, introActive:!openingReady(cur.cards,readOpeningGate()),
     });
     if (!canCommitPersonaGoals({
       revisionCurrent: !gate.current.running(),
@@ -393,7 +411,7 @@ export default function App() {
   const runTick = useCallback(async (bragOnly = false, forced = false) => {
     if (document.hidden || externalTabChanged.current || localPersonaWritePending.current) return;
     const cur = latest.current;
-    if (cur.settings.paused || !isReady(cur.config)) return;
+    if (!openingReady(cur.cards, readOpeningGate()) || cur.settings.paused || !isReady(cur.config)) return;
     // 模型连续失败时，定时 tick 退避一段时间；用户主动触发的不受影响。
     if (!forced && (Date.now() < backoffUntil.current || modelRateLimitRemainingMs() > 0)) return;
     const used = cur.world.dayKey === dayKey(Date.now()) ? cur.world.callsToday : 0;
@@ -403,6 +421,8 @@ export default function App() {
     const revision = gate.current.revision();
     const baseCards = cur.cards;
     const baseGoals = cur.goals;
+    const fastForwardPeers = advanceFastForwardPeers.current;
+    advanceFastForwardPeers.current = false;
     const remaining = Math.max(1, cur.settings.dailyCalls - used);
     try {
       const out = await tickCards({
@@ -449,12 +469,29 @@ export default function App() {
         personaResult = tickPersonaGoals({
           goals: baseGoals, cards: out.cards, personas: out.personas,
           now: nowTs, enabled: !cur.settings.paused, enableLost:true,
-          crisisAt:lastCrisisAt.current, introActive:introPhaseActive(out.cards,nowTs),
+          crisisAt:lastCrisisAt.current, introActive:!openingReady(out.cards,readOpeningGate()),
         });
         lastPersonaGoalCheck.current = nowTs;
       }
       // One card update preserves the normal tick's comments AND new fictional posts.
-      setCards(personaResult ? personaResult.cards : out.cards);
+      let nextCards = personaResult ? personaResult.cards : out.cards;
+      if (personaResult && fastForwardPeers) {
+        // A debug +Nh jump should reveal the peer reactions that would have
+        // happened inside that window, not leave every new result card at 0.
+        const beforeIds = new Set(out.cards.map((card) => card.id));
+        let fastForwarded = false;
+        nextCards = nextCards.map((card) => {
+          if (beforeIds.has(card.id) || !isGoalResultCard(card) || !card.plan.length) return card;
+          fastForwarded = true;
+          return {
+            ...card,
+            createdAt: Math.min(card.createdAt, nowTs - 61_000),
+            plan: card.plan.map((item) => ({ ...item, at: nowTs - 1000 })),
+          };
+        });
+        if (fastForwarded) tickAfterCommit.current = 'full';
+      }
+      setCards(nextCards);
       if (personaResult && (personaResult.createdGoals || personaResult.publishedResults)) {
         setGoals(personaResult.goals);
       }
@@ -522,6 +559,37 @@ export default function App() {
       document.removeEventListener('visibilitychange', check);
     };
   }, [checkPersonaGoalsLocally]);
+
+  // Once the introduction card is committed, release the local story clock.
+  // Never run this from the synchronous submit handler against stale refs.
+  const previouslyReady = useRef(openingPhase === 'ready');
+  useEffect(() => {
+    if (openingPhase === 'ready' && !previouslyReady.current) {
+      lastPersonaGoalCheck.current = 0;
+      checkPersonaGoalsLocally();
+    }
+    previouslyReady.current = openingPhase === 'ready';
+  }, [openingPhase, checkPersonaGoalsLocally]);
+
+  // When model traffic is unavailable (no key, budget/backoff), a local
+  // fallback still consumes due result-peer plans. No helper/AI chains.
+  useEffect(() => {
+    const check = () => {
+      if (document.hidden || externalTabChanged.current || gate.current.running() || localPersonaWritePending.current) return;
+      const cur = latest.current;
+      if (cur.settings.paused || !openingReady(cur.cards, readOpeningGate())) return;
+      const used = cur.world.dayKey === dayKey(Date.now()) ? cur.world.callsToday : 0;
+      const unavailable = !isReady(cur.config) ||
+        (used >= cur.settings.dailyCalls && !isMock(cur.config)) ||
+        (Date.now() < backoffUntil.current || modelRateLimitRemainingMs() > 0);
+      if (!unavailable) return;
+      const result = settlePeerReactionsLocally(cur.cards, cur.personas, Date.now());
+      if (result.settled && latest.current.cards === cur.cards) setCards(result.cards);
+    };
+    const interval = window.setInterval(check, 10_000);
+    check();
+    return () => window.clearInterval(interval);
+  }, []);
 
   // React 提交 nudge/advance 的新卡片后才运行 tick，避免 latest 引用尚未更新。
   useEffect(() => {
@@ -638,6 +706,32 @@ export default function App() {
   };
 
   const send = () => {
+    const stage = openingStage(latest.current.cards, readOpeningGate());
+    if (stage === 'reading') {
+      setView('home'); setHomeTab('forum');
+      setToast('先点开四张同伴介绍卡，读完再介绍自己。');
+      return;
+    }
+    if (stage === 'need-intro') {
+      if (working) return;
+      const introText = draft.trim();
+      if (guardSubmission(introText)) return; // Crisis goes only to the safety layer, never to AI.
+      if (!validPlayerIntroText(introText)) {
+        setToast('自我介绍需要 10–2000 字，不支持上传图片。');
+        return;
+      }
+      // createPlayerCard is reused for IDs/rendering, but ALL generated AI
+      // jobs are stripped. Introduction itself does not consume a model call.
+      const base = createPlayerCard(introText, identity.name, personas, settings, '我的自我介绍', Date.now(), 'worry');
+      const intro: Card = {...base, kind:'worry', playerIntro:true, noMemory:true,
+        helperAt:undefined, plan:[], pending:[], comments:[], status:'talking'};
+      // A rapid double-submit must not create a second authoritative intro.
+      setCards(prev => prev.some(card => card.playerIntro) ? prev : [intro, ...prev]);
+      setDraft(''); setDraftKind('worry'); setDraftTitle(''); setImage('');
+      setHomeTab('forum'); setForumSection('main'); setView('home');
+      setToast('可以开始了。');
+      return;
+    }
     const text = draft.trim() || (image ? '我拍了一张学习材料，想先找到第一步。' : '');
     if (!text || working) return;
     if (guardSubmission(text, draftTitle)) return;
@@ -718,8 +812,22 @@ export default function App() {
   };
 
   const advance = async (hours: number) => {
+    const revealAdvance = () => {
+      // The author sheet covers both the toast and the feed; leave it so the
+      // result of a debug time jump is actually visible.
+      setAdminOpen(false);
+      setView('home');
+      setHomeTab('forum');
+      setForumSection('main');
+    };
+    if (!openingReady(latest.current.cards, readOpeningGate())) {
+      revealAdvance();
+      setToast('先读完四位同伴介绍并发一张自我介绍，再推进时间');
+      return;
+    }
     const operation = gate.current.start('advance');
     if (!operation) {
+      revealAdvance();
       setToast('后台正在处理另一个任务，稍后再推进时间');
       return;
     }
@@ -738,7 +846,22 @@ export default function App() {
       note: c.note ? { ...c.note, dueAt: c.note.dueAt - shift } : undefined,
       comments: c.comments.map((x) => ({ ...x, at: x.at - shift })),
     }));
+    const shiftedGoals = cur.goals.map((goal) => ({
+      ...goal,
+      createdAt: goal.createdAt - shift,
+      dueAt: goal.dueAt ? goal.dueAt - shift : undefined,
+      steps: goal.steps.map((step) => ({
+        ...step,
+        dueAt: step.dueAt ? step.dueAt - shift : undefined,
+        completedAt: step.completedAt ? step.completedAt - shift : undefined,
+      })),
+      postPlan: goal.postPlan ? {
+        ...goal.postPlan,
+        dueAt: goal.postPlan.dueAt - shift,
+      } : undefined,
+    }));
     setCards(shifted);
+    setGoals(shiftedGoals);
     const revision = gate.current.revision();
     try {
       const res = await catchUp({
@@ -750,11 +873,14 @@ export default function App() {
           setWorld((w) => ({ ...w, dayKey: day,
             callsToday: (w.dayKey === day ? w.callsToday : 0) + res.calls }));
         }
+        revealAdvance();
         setToast('有新消息，时间推进的旧结果已跳过');
         return;
       }
       // 先预约 effect，React 提交新卡片时才触发下一次 tick。
       tickAfterCommit.current = 'full';
+      lastPersonaGoalCheck.current = 0;
+      advanceFastForwardPeers.current = true;
       setCards(res.cards);
       setPersonas(res.personas);
       if (res.calls) {
@@ -762,9 +888,14 @@ export default function App() {
         setWorld((w) => ({ ...w, dayKey: day,
           callsToday: (w.dayKey === day ? w.callsToday : 0) + res.calls }));
       }
+      revealAdvance();
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      setToast(`过了 ${hours} 小时，多了 ${Math.max(0, res.cards.length - shifted.length)} 张卡`);
+      const added = Math.max(0, res.cards.length - shifted.length);
+      setToast(added
+        ? `过了 ${hours} 小时，多了 ${added} 张卡`
+        : `过了 ${hours} 小时，已推进现有卡片和目标；这次没有新卡`);
     } catch {
+      revealAdvance();
       setToast('时间已推进，但生成新卡失败；后台计时器会继续尝试');
     } finally {
       gate.current.finish(operation);
@@ -1061,6 +1192,7 @@ export default function App() {
     }));
   };
   const sendGoalCheer = (card: Card) => {
+    if (!openingReady(latest.current.cards, readOpeningGate())) return;
     const persona = personas[Math.abs(card.id.charCodeAt(0) + card.id.length) % personas.length];
     if (!persona) return;
     // 页面开着时一次同伴打气；不承诺离线后台继续。
@@ -1068,6 +1200,7 @@ export default function App() {
       let line = `你写的是「${card.title?.slice(0, 24)}」；我会在论坛看你下一步的进展。`;
       let origin: Comment['origin'] = 'simulated';
       const cur = latest.current;
+      if (!openingReady(cur.cards, readOpeningGate())) return;
       if (isReady(cur.config) && !isMock(cur.config) && !cur.settings.paused) {
         let reserved = false;
         try { reserveMeetingCall(); reserved = true; } catch { /* 额度不可用：保留模拟来源 */ }
@@ -1240,6 +1373,10 @@ export default function App() {
     materialInFlight.current.forEach(controller=>controller.abort());
     materialInFlight.current.clear();
     deadlineConfirming.current.clear();
+    // Imports do not carry device-local openingGate keys. Re-derive from the
+    // imported cards so a previous 'done' cannot silently unlock a new archive.
+    clearOpeningStage();
+    setOpeningGateFlag(null);
     setCards(
       bundle.cards.some((c) => c.kind === 'guide') ? bundle.cards : [buildGuideCard(), ...bundle.cards],
     );
@@ -1267,6 +1404,8 @@ export default function App() {
     materialInFlight.current.clear();
     deadlineConfirming.current.clear();
     clearAll();
+    setOpeningGateFlag('reading');
+    setForumSection('main');
     // 清除持有的 Key 和便签；不能只删除 localStorage 而继续沿用旧内存状态。
     setConfig(defaultConfig);
     setCards(COMPETITION_MODE ? [buildGuideCard(),...buildCompetitionSeedCards(buildSeedCards(),defaultPersonas())] : buildSeedCards());
@@ -1294,6 +1433,9 @@ export default function App() {
   };
 
   const doReseed = () => {
+    clearOpeningStage();
+    setOpeningGateFlag('reading');
+    setForumSection('main');
     materialInFlight.current.forEach(controller=>controller.abort());
     materialInFlight.current.clear();
     deadlineConfirming.current.clear();
@@ -1304,13 +1446,9 @@ export default function App() {
   };
 
   const guide = cards.find((c) => c.kind === 'guide');
-  const feed = useMemo(
-    () =>
-      cards
-        .filter((c) => c.kind !== 'guide')
-        .sort((a, b) => b.createdAt - a.createdAt),
-    [cards],
-  );
+  const forumSections = useMemo(() => splitForumCards(cards), [cards]);
+  const feed = forumSections.main;
+  const historyFeed = forumSections.history;
   const todayStart = new Date().setHours(0, 0, 0, 0);
   const myCards = useMemo(
     () => cards.filter((c) => c.authorId === 'me').sort((a, b) => b.createdAt - a.createdAt),
@@ -1648,7 +1786,36 @@ export default function App() {
           <main className="main">
       {view === 'home' && (
         <div className="feed">
-          {homeTab === 'step' && (
+          {openingPhase !== 'ready' && (
+            <section className="opening-forum" aria-label="新同伴介绍">
+              <div className="card" style={{padding:16, marginBottom:16}} role="status">
+                <h1 className="page-title" style={{fontSize:'1.35rem'}}>
+                  {openingPhase === 'reading'
+                    ? `先看看四位同伴是谁（已读 ${openingReadCount(cards)}/4）`
+                    : '轮到你介绍一下自己了'}
+                </h1>
+                <p className="page-sub">{openingPhase === 'reading'
+                  ? '逐张点开下面四位同伴的卡片，阅读后才会计数。这里的同伴都是虚构角色。'
+                  : '不用写真名或学校。说说现在卡在哪里，想怎么用这个论坛。'}</p>
+                {openingPhase === 'need-intro' && (
+                  <button type="button" className="btn btn-primary"
+                    onClick={() => {setDraft('');setDraftTitle('');setImage('');setView('post');}}>
+                    写一张自我介绍
+                  </button>
+                )}
+              </div>
+              {guide && !guideDismissed && (
+                <GuideCard card={guide} onOpen={() => openCard(guide)} onDismiss={dismissGuide} />
+              )}
+              <div className="forum-grid">
+                {openingIntroCards(cards).map(card => (
+                  <CardRow key={card.id} card={card} personas={personas}
+                    onClick={() => openCard(card)} onLike={() => like(card)} onCheer={() => cheer(card)} />
+                ))}
+              </div>
+            </section>
+          )}
+          {homeTab === 'step' && openingPhase === 'ready' && (
             <StepBoard
               cards={cards}
               todos={todos}
@@ -1676,14 +1843,14 @@ export default function App() {
             />
           )}
 
-          {homeTab === 'forum' && (
+          {homeTab === 'forum' && openingPhase === 'ready' && (
             <>
               <div className="forum-head">
                 <div>
-                  <h1 className="page-title">大家在说什么</h1>
-                  <p className="page-sub">看看别人卡在哪，也许你也有同感</p>
+                  <h1 className="page-title">{forumSection === 'history' ? '历史卡片' : '大家在说什么'}</h1>
+                  <p className="page-sub">{forumSection === 'history' ? '过去的目标和进度都在这里，原卡还可以打开和打气' : '看看别人卡在哪，也许你也有同感'}</p>
                 </div>
-                <label className="forum-search">
+                {forumSection === 'main' && <label className="forum-search">
                   <svg
                     viewBox="0 0 24 24"
                     fill="none"
@@ -1701,10 +1868,16 @@ export default function App() {
                     placeholder="搜索卡片"
                     aria-label="搜索卡片"
                   />
-                </label>
+                </label>}
               </div>
 
-              <div className="forum-chips" role="group" aria-label="话题分类">
+              <div className="forum-chips forum-view-chips" role="group" aria-label="论坛分区">
+                <button type="button" className={forumSection === 'main' ? 'on' : ''}
+                  aria-pressed={forumSection === 'main'} onClick={() => setForumSection('main')}>主论坛</button>
+                <button type="button" className={forumSection === 'history' ? 'on' : ''}
+                  aria-pressed={forumSection === 'history'} onClick={() => setForumSection('history')}>历史卡片</button>
+              </div>
+              {forumSection === 'main' && <div className="forum-chips" role="group" aria-label="话题分类">
                 {FORUM_CATS.map((cat) => (
                   <button
                     key={cat}
@@ -1716,8 +1889,8 @@ export default function App() {
                     {cat}
                   </button>
                 ))}
-              </div>
-              <div className="forum-chips forum-view-chips" role="group" aria-label="帖子类型">
+              </div>}
+              {forumSection === 'main' && <div className="forum-chips forum-view-chips" role="group" aria-label="帖子类型">
                 {FORUM_VIEWS.map((view) => (
                   <button
                     key={view}
@@ -1729,15 +1902,15 @@ export default function App() {
                     {view === '全部' ? '全部类型' : view}
                   </button>
                 ))}
-              </div>
+              </div>}
 
-              {guide && !guideDismissed && (
+              {forumSection === 'main' && guide && !guideDismissed && (
                 <GuideCard card={guide} onOpen={() => openCard(guide)} onDismiss={dismissGuide} />
               )}
 
               <div className="forum-layout">
                 <div className="forum-grid">
-                  {forumFeed.map((card) => (
+                  {(forumSection === 'history' ? historyFeed : forumFeed).map((card) => (
                     <CardRow
                       key={card.id}
                       card={card}
@@ -1747,22 +1920,22 @@ export default function App() {
                       onCheer={() => cheer(card)}
                     />
                   ))}
-                  {forumFeed.length === 0 && (
+                  {(forumSection === 'history' ? historyFeed : forumFeed).length === 0 && (
                     <div className="empty forum-empty">
-                      <h2>没有找到这样的卡</h2>
-                      <p>换个关键词，或者去「发一张」写下自己的。</p>
+                      <h2>{forumSection === 'history' ? '还没有历史目标卡' : '没有找到这样的卡'}</h2>
+                      {forumSection === 'main' && <p>换个关键词，或者去「发一张」写下自己的。</p>}
                     </div>
                   )}
                 </div>
 
-                <aside className="ai-watch" aria-label="同伴怎么看">
+                {forumSection === 'main' && <aside className="ai-watch" aria-label="同伴怎么看">
                   <h2>同伴怎么看</h2>
                   <div className="ai-watch-bubbles">
                     <p className="ai-bubble lav">你愿意记录下来，已经很勇敢</p>
                     <p className="ai-bubble mint">40 分钟也是有效进展</p>
                     <p className="ai-bubble peach">延后不等于失败，重新开始就好</p>
                   </div>
-                </aside>
+                </aside>}
               </div>
             </>
           )}
@@ -1773,12 +1946,24 @@ export default function App() {
         <div className="feed post-feed">
           <div className="page-head">
             <div>
-              <h1 className="page-title">放一张卡</h1>
-              <p className="page-sub">想说什么都行：诉苦、炫耀、分享生活趣事，或定下一个目标。一两句就够，可以配一张图。</p>
+              <h1 className="page-title">{openingPhase === 'need-intro' ? '我的自我介绍' : '放一张卡'}</h1>
+              <p className="page-sub">{openingPhase === 'reading'
+                ? '先阅读四位同伴的介绍，再来发第一张卡。'
+                : openingPhase === 'need-intro'
+                  ? '不用写真实姓名或学校，10–2000 字就好。'
+                  : '想说什么都行：诉苦、炫耀、分享生活趣事，或定下一个目标。一两句就够，可以配一张图。'}</p>
             </div>
           </div>
           <div className="post-layout">
-            <PostForm
+            {openingPhase === 'reading' ? (
+              <div className="card" style={{padding:16}}>
+                <button className="btn btn-primary" type="button"
+                  onClick={() => {setHomeTab('forum');setView('home');}}>
+                  先读介绍（{openingReadCount(cards)}/4）
+                </button>
+              </div>
+            ) : <PostForm
+              introMode={openingPhase === 'need-intro'}
               value={draft}
               kind={draftKind}
               onKind={setDraftKind}
@@ -1803,8 +1988,8 @@ export default function App() {
               onImage={setImage}
               onSubmit={send}
               onOpenSettings={() => openSettings()}
-            />
-            <aside className="post-side">
+            />}
+            {openingPhase === 'ready' && <aside className="post-side">
               <h2>发出去之后</h2>
               <ol className="post-steps">
                 <li>
@@ -1821,7 +2006,7 @@ export default function App() {
                 </li>
               </ol>
               <p className="post-side-note">不是真人社交，只在论坛上聊。你的卡只留在本机。</p>
-            </aside>
+            </aside>}
           </div>
         </div>
       )}

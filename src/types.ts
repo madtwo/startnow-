@@ -153,6 +153,8 @@ export interface Note {
 export interface PlannedArrival {
   personaId: string;
   at: number;
+  /** Only scheduled result-card peers carry this marker. */
+  phase?: 'arrival';
   attempt?: number;
 }
 
@@ -192,6 +194,8 @@ export interface Card {
   cheerCount?: number;
   cheeredByMe?: boolean;
   intro?: boolean;
+  /** One validated, voluntary player self-introduction unlocks the opening gate. */
+  playerIntro?: boolean;
   origin?: 'model' | 'demo' | 'simulated';
   likes?: number;
   helperAt?: number;

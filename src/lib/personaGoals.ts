@@ -5,6 +5,7 @@ import { dateKeyLocal } from './schedule';
 import { makePersonaGoal, publishPersonaGoal, resultCardForGoal } from './goals';
 import { PERSONA_GOAL_TEMPLATES } from './personaGoalTemplates';
 import { canPublishVulnerability, createLostCard, isLostSlot, isManipulative, missedComfortLines } from './agentVulnerability';
+import { planPeerReactions } from './peerReactions';
 
 export interface PersonaGoalTickInput {
   goals: readonly Goal[];
@@ -44,7 +45,7 @@ export function isSafePersonaGoalTemplate(input: { title: string; steps: readonl
 export function tickPersonaGoals(input: PersonaGoalTickInput): PersonaGoalTickResult {
   const goals = [...input.goals];
   const cards = [...input.cards];
-  if (!input.enabled || input.competition) return { goals, cards, createdGoals: 0, publishedResults: 0 };
+  if (!input.enabled || input.competition || input.introActive) return { goals, cards, createdGoals: 0, publishedResults: 0 };
 
   let publishedResults = 0;
   const personaNames = new Map(input.personas.map((p) => [p.id, p.name]));
@@ -65,6 +66,9 @@ export function tickPersonaGoals(input: PersonaGoalTickInput): PersonaGoalTickRe
         if (isManipulative(text)) continue;
         outcome.card = {...outcome.card,text,vulnerability:{kind:'missed',personaId:goal.ownerId,at:input.now}};
       }
+      // A result card is the sole exception to the static-goal no-peer rule.
+      // The persisted plan is built once; later ticks only consume it.
+      outcome.card.plan = planPeerReactions(outcome.card, input.personas, input.now);
       goals[i] = outcome.goal;
       cards.unshift(outcome.card);
       publishedResults++;

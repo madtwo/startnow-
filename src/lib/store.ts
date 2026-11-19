@@ -26,6 +26,7 @@ import { parseMaterialExtraction, redactMaterialText } from './materialVision';
 import { validateMaterialStep } from './materialAdvice';
 import { isManipulative } from './agentVulnerability';
 import { stripAiProvenance } from './displayText';
+import { OPENING_GATE_KEY, validPlayerIntroText } from './openingGate';
 
 const KEYS = {
   config: 'shudong.config.v1',
@@ -46,7 +47,7 @@ const KEYS = {
 
 const LEGACY_POST_KEYS = ['shudong.posts.v3', 'shudong.posts.v2', 'shudong.posts.v1'];
 const LEGACY_CARD_KEYS = ['shudong.cards.v5', 'shudong.cards.v4', 'shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'];
-const UI_KEYS = ['startnow.onboarded', 'startnow.mode', 'startnow.homeTab', 'startnow.calendarView', 'shudong.decomposeDraft.v1', 'shudong.decomposeUsage.v1', 'startnow.lastCrisisAt'];
+const UI_KEYS = ['startnow.onboarded', 'startnow.mode', 'startnow.homeTab', 'startnow.calendarView', 'shudong.decomposeDraft.v1', 'shudong.decomposeUsage.v1', 'startnow.lastCrisisAt', OPENING_GATE_KEY];
 // Independent room.html stores, same origin; a user's full reset should include these.
 const ROOM_KEYS = ['shudong.room.v1', 'shudong.archives.v1', 'shudong.roomsettings.v1'];
 
@@ -184,6 +185,10 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     return checked.ok && checked.anchorId === rawAdvice.materialAnchorId;
   })();
   const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : Date.now();
+  const text = stripAiProvenance(raw.text);
+  const playerIntro = raw.playerIntro === true && raw.authorKind === 'player' && raw.authorId === 'me' &&
+    (raw.kind === 'worry' || raw.kind === undefined) && !raw.goalId && !raw.image &&
+    !raw.material && !raw.intro && validPlayerIntroText(text);
   return {
     id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
     authorId: typeof raw.authorId === 'string' ? raw.authorId : 'me',
@@ -214,15 +219,20 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     cheerCount: Number.isInteger(raw.cheerCount) && (raw.cheerCount as number) >= 0 && (raw.cheerCount as number) <= 100000 ? raw.cheerCount : 0,
     cheeredByMe: raw.cheeredByMe === true,
     intro: raw.intro === true,
+    // Imported flags cannot bypass onboarding or impersonate a player's intro.
+    playerIntro,
     likes: typeof raw.likes === 'number' ? raw.likes : 0,
-    helperAt: typeof raw.helperAt === 'number' ? raw.helperAt : undefined,
+    helperAt: playerIntro ? undefined :
+      typeof raw.helperAt === 'number' ? raw.helperAt : undefined,
     likedByMe: Boolean(raw.likedByMe),
-    text: stripAiProvenance(raw.text),
+    text,
     createdAt,
     status: raw.status ?? 'stuck',
-    arrivals: Array.isArray(raw.arrivals) ? raw.arrivals.filter((id): id is string => typeof id === 'string') : [],
-    plan: Array.isArray(raw.plan) ? raw.plan.filter(isTimedPersonaRow) : [],
-    pending: Array.isArray(raw.pending) ? raw.pending.filter(isTimedPersonaRow) : [],
+    arrivals: playerIntro ? [] : Array.isArray(raw.arrivals) ? raw.arrivals.filter((id): id is string => typeof id === 'string') : [],
+    plan: playerIntro ? [] :
+      Array.isArray(raw.plan) ? raw.plan.filter(isTimedPersonaRow) : [],
+    pending: playerIntro ? [] :
+      Array.isArray(raw.pending) ? raw.pending.filter(isTimedPersonaRow) : [],
     comments: Array.isArray(raw.comments)
       ? raw.comments.filter((row) => row && typeof row.text === 'string' &&
           typeof row.authorId === 'string' &&
@@ -233,7 +243,7 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     advice: rawAdvice && importMaterialAdviceValid
       ? { ...rawAdvice, text: typeof rawAdvice.text === 'string' ? rawAdvice.text : '一个办法' }
       : undefined,
-    pendingBrag: normalizePendingBrag(raw.pendingBrag, raw),
+    pendingBrag: playerIntro ? undefined : normalizePendingBrag(raw.pendingBrag, raw),
     sourceCardId: typeof raw.sourceCardId === 'string' && raw.sourceCardId.length <= 128 ? raw.sourceCardId : undefined,
     sourceCommentId: typeof raw.sourceCommentId === 'string' && raw.sourceCommentId.length <= 128 ? raw.sourceCommentId : undefined,
     sourceAdviceText: typeof raw.sourceAdviceText === 'string' && raw.sourceAdviceText.length <= 600 &&
@@ -248,14 +258,26 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     handledAt: typeof raw.handledAt === 'number' ? raw.handledAt : undefined,
     refused: typeof raw.refused === 'number' ? raw.refused : undefined,
     topic: typeof raw.topic === 'string' ? raw.topic : undefined,
-    noMemory: raw.noMemory === true,
+    noMemory: playerIntro || raw.noMemory === true,
   };
 };
+
+/** Only the earliest valid introduction is authoritative, even for an imported archive. */
+export function normalizeCardRows(rows: readonly Partial<Card>[]): Card[] {
+  const parsed = rows.map(normalizeCard).filter((card): card is Card => Boolean(card));
+  const firstIntro = parsed.filter(card => card.playerIntro).sort((a, b) => a.createdAt - b.createdAt)[0];
+  let found = false;
+  return parsed.map(card => {
+    if (!card.playerIntro) return card;
+    if (card === firstIntro && !found) { found = true; return card; }
+    return { ...card, playerIntro: undefined };
+  });
+}
 
 export function loadCards(): Card[] {
   const saved = read(KEYS.cards);
   if (Array.isArray(saved)) {
-    return retention(saved.map(normalizeCard).filter((c): c is Card => Boolean(c)));
+    return retention(normalizeCardRows(saved));
   }
   // 旧版卡片：保留你自己开的卡，AI 的卡换成新种子
   const legacy =
@@ -265,9 +287,7 @@ export function loadCards(): Card[] {
     read('shudong.cards.v2') ??
     read('shudong.cards.v1');
   if (Array.isArray(legacy)) {
-    const mine = legacy
-      .map(normalizeCard)
-      .filter((c): c is Card => Boolean(c))
+    const mine = normalizeCardRows(legacy)
       .filter((c) => c.authorId === 'me');
     return retention([...mine, ...buildSeedCards()]);
   }
@@ -620,9 +640,7 @@ export function importBundle(raw: string): Bundle | null {
     return {
       version: 3,
       exportedAt: typeof data.exportedAt === 'number' ? data.exportedAt : Date.now(),
-      cards: retention(
-        (data.cards as Partial<Card>[]).map(normalizeCard).filter((c): c is Card => Boolean(c)),
-      ),
+      cards: retention(normalizeCardRows(data.cards as Partial<Card>[])),
       personas: mergeImportedPersonaHistory(data.personas),
       // 调用计数属于本设备的当日预算，导入存档不能把它清零或改写。
       world: { ...cleanWorld(data.world), dayKey: loadWorld().dayKey, callsToday: loadWorld().callsToday },

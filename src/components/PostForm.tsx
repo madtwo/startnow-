@@ -13,6 +13,7 @@ interface Props {
   image: string;
   busy: boolean;
   ready: boolean;
+  introMode?: boolean;
   personas: Persona[];
   visionModel: string;
   captureMode: 'two-step' | 'vision-template' | 'single';
@@ -42,6 +43,7 @@ export default function PostForm({
   image,
   busy,
   ready,
+  introMode = false,
   personas,
   visionModel,
   onVisionModelChange,
@@ -68,15 +70,15 @@ export default function PostForm({
   const meta = KIND_META[kind];
   return (
     <section className="post-form card compose-card">
-        <div className="meeting-switch post-kind-switch" role="group" aria-label="卡片类型">
+        {!introMode && <div className="meeting-switch post-kind-switch" role="group" aria-label="卡片类型">
           {POST_KINDS.map((row) => (
             <button key={row.id} type="button" className={kind === row.id ? 'on' : ''}
               aria-pressed={kind === row.id} onClick={() => onKind(row.id)}>
               {row.label}
             </button>
           ))}
-        </div>
-        <label className="field">
+        </div>}
+        {!introMode && <label className="field">
           <span className="field-label">标题（可以不写）</span>
           <input
             className="post-form-title"
@@ -85,21 +87,24 @@ export default function PostForm({
             onChange={(e) => onTitle(e.target.value)}
             aria-label="标题，可以不写"
           />
-        </label>
+        </label>}
 
         <label className="field">
-          <span className="field-label">{meta.textLabel}</span>
+          <span className="field-label">{introMode ? '我的自我介绍（10–2000 字）' : meta.textLabel}</span>
           <textarea
             className="post-form-input"
             rows={6}
             value={value}
-            placeholder={meta.placeholder}
+            placeholder={introMode
+              ? '不用写真实姓名/学校，写你现在卡在哪、想怎么用这个论坛。'
+              : meta.placeholder}
+            maxLength={introMode ? 2000 : undefined}
             onChange={(e) => onChange(e.target.value)}
-            aria-label="写下你当下的困难"
+            aria-label={introMode ? '写下我的自我介绍' : '写下你当下的困难'}
           />
         </label>
 
-        {image && (
+        {!introMode && image && (
           <div className="post-image">
             <img src={image} alt="" />
             <button className="post-image-remove" onClick={() => onImage('')}>
@@ -108,7 +113,7 @@ export default function PostForm({
           </div>
         )}
 
-        {image && (
+        {!introMode && image && (
           <label className="field">
             <span className="field-label">视觉识别模型（需支持图片输入）</span>
             <input
@@ -122,7 +127,7 @@ export default function PostForm({
           </label>
         )}
 
-        {image && <label className="field">
+        {!introMode && image && <label className="field">
           <span className="field-label">识别方式</span>
           <select value={captureMode} aria-label="材料识别方式"
             onChange={e=>onCaptureModeChange(e.target.value==='vision-template'?'vision-template':e.target.value==='single'?'single':'two-step')}
@@ -132,7 +137,7 @@ export default function PostForm({
             <option value="single">实验：一次生成识别和步骤（实测较慢）</option>
           </select>
         </label>}
-        {image && <p className="compose-tip">目前默认使用两步模式。模板实验模式仅做一次视觉请求，不再请求文字模型；15 秒内完成仍需实测验证。</p>}
+        {!introMode && image && <p className="compose-tip">目前默认使用两步模式。模板实验模式仅做一次视觉请求，不再请求文字模型；15 秒内完成仍需实测验证。</p>}
         <div className="post-form-foot">
           <div className="who">
             <span className="who-avatars">
@@ -148,36 +153,39 @@ export default function PostForm({
             </span>
           </div>
           <div className="post-form-actions" style={{flexWrap:'wrap',maxWidth:'100%'}}>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              hidden
-              onChange={(e) => {
-                void pick(e.target.files?.[0]);
-                e.target.value = '';
-              }}
-            />
-            <input
-              ref={cameraRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              capture="environment"
-              hidden
-              onChange={(e) => {
-                void pick(e.target.files?.[0]);
-                e.target.value = '';
-              }}
-            />
-            <button className="btn btn-ghost" onClick={() => cameraRef.current?.click()}>
-              拍一下卡住你的东西
-            </button>
-            <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
-              选材料图片
-            </button>
-            {ready ? (
-              <button className="btn btn-primary" disabled={(!value.trim() && !image) || busy} onClick={onSubmit}>
-                放出去
+            {!introMode && <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                onChange={(e) => {
+                  void pick(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
+              <input
+                ref={cameraRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                hidden
+                onChange={(e) => {
+                  void pick(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
+              <button className="btn btn-ghost" onClick={() => cameraRef.current?.click()}>
+                拍一下卡住你的东西
+              </button>
+              <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
+                选材料图片
+              </button>
+            </>}
+            {(ready || introMode) ? (
+              <button className="btn btn-primary" disabled={busy || (introMode
+                ? value.trim().length < 10 || value.trim().length > 2000 : !value.trim() && !image)} onClick={onSubmit}>
+                {introMode ? '发布自我介绍' : '放出去'}
               </button>
             ) : (
               <button className="btn btn-primary" onClick={onOpenSettings}>
@@ -187,8 +195,10 @@ export default function PostForm({
           </div>
         </div>
 
-        {image && <p className="compose-tip">点击「放出去」后，图片会发送给你配置的视觉模型识别；原图保存在本地卡片中，导出存档也会包含它。请先遮住姓名、学号等隐私信息；未配置视觉模型时，仍可使用普通建议。</p>}
-        <p className="compose-tip">放出去后，会有同伴来回应你。不用守着，忙完回来看看。</p>
+        {!introMode && image && <p className="compose-tip">点击「放出去」后，图片会发送给你配置的视觉模型识别；原图保存在本地卡片中，导出存档也会包含它。请先遮住姓名、学号等隐私信息；未配置视觉模型时，仍可使用普通建议。</p>}
+        <p className="compose-tip">{introMode
+          ? '只需介绍一次；不接入图片识别，也不会安排 AI 自动回复这张开场卡。'
+          : '放出去后，会有同伴来回应你。不用守着，忙完回来看看。'}</p>
     </section>
   );
 }

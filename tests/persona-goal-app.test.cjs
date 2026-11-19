@@ -69,7 +69,8 @@ test('R2: App wiring includes local-first check, tick revision guard and no extr
  assert.match(code,/localPersonaWritePending\.current/);
  assert.match(code,/shouldCheckPersonaGoals\(/);
  assert.match(code,/canCommitPersonaGoals\(/);
- assert.match(code,/setCards\(personaResult \? personaResult\.cards : out\.cards\)/);
+ assert.match(code,/let nextCards = personaResult \? personaResult\.cards : out\.cards/);
+ assert.match(code,/setCards\(nextCards\)/);
  assert.match(code,/checkPersonaGoalsLocally\(\)/);
  assert.doesNotMatch(code,/AI 虚构剧情/);
 });
