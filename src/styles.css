@@ -863,6 +863,25 @@ button {
   animation: rise calc(var(--ease) * 1.3) ease both;
 }
 
+/* Context reminder uses the existing sheet, including scroll and focus behavior. */
+.sheet.advice-context-sheet {
+  width: min(480px, 100%);
+  max-height: min(88vh, calc(100dvh - 32px));
+  box-sizing: border-box;
+}
+
+.advice-context-sheet textarea {
+  width: 100%;
+  min-height: 84px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.advice-context-sheet .sheet-actions .btn {
+  max-width: 100%;
+  white-space: normal;
+}
+
 .sheet-head {
   display: flex;
   align-items: flex-start;

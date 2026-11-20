@@ -44,7 +44,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
   const [deadline,setDeadline] = useState(stored.confirmedDeadline);
   const [manualSteps,setManualSteps] = useState(stored.manualSteps);
   const [mode,setMode] = useState<'manual'|'ai'|'grill'>(stored.mode);
-  const [phase,setPhase] = useState<'entry'|'loadingQuestions'|'questions'|'deciding'|'requesting'|'preview'>('entry');
+  const [phase,setPhase] = useState<'entry'|'loadingQuestions'|'questions'|'deciding'|'requesting'|'failed'|'preview'>('entry');
   const [grillRounds,setGrillRounds] = useState<PersonalizedQuestion[][]>([]);
   const [grillAnswers,setGrillAnswers] = useState<Record<string,string>>({});
   const [grillSource,setGrillSource] = useState<'model'|'local'>('model');
@@ -63,6 +63,11 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
   const activeController = useRef<AbortController | null>(null);
   const operationId = useRef(0);
   const activeMounted = useRef(true);
+  const lastRequest = useRef<{
+    answers: Partial<Record<MissingField,string>>;
+    skipped: boolean;
+    notes: readonly {question:string;answer:string}[];
+  } | null>(null);
   const [error,setError] = useState('');
   const [visionText,setVisionText] = useState('');
   const [visionResult,setVisionResult] = useState<Extract<VisionResult,{ok:true}> | null>(null);
@@ -220,6 +225,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     const ticket = ++operationId.current;
     const controller = new AbortController();
     activeController.current = controller;
+    lastRequest.current = { answers: nextAnswers, skipped: didSkip, notes };
     setBusy(true); setError(''); setLocalOffer(false);setPhase('requesting');
     reportJob({status:'running',goal,stage:'requesting'});
     try {
@@ -239,13 +245,17 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
       if (!openRef.current) onBackgroundReady?.();
     } catch (e) {
       if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted) return;
-      setError(`${scrubSecrets((e as Error)?.message ?? '模型请求失败',config.apiKey).slice(0,240)}。可以重试，或使用明确标注的本地示例/自由拆解。`);
-      setLocalOffer(mode==='grill');setPhase('entry');
+      setError(`${scrubSecrets((e as Error)?.message ?? '模型请求失败',config.apiKey).slice(0,240)}。答案还在，可以重试，或使用明确标注的本地示例/自由拆解。`);
+      setLocalOffer(true);setPhase('failed');
       reportJob({status:'failed',goal,error:'模型请求失败，可返回拆解窗口查看并重试',seen:openRef.current});
       if (!openRef.current) onBackgroundFailed?.();
     } finally {
       if (ticket === operationId.current && activeMounted.current) { setBusy(false); activeController.current = null; }
     }
+  };
+  const retryFailed = () => {
+    const previous = lastRequest.current;
+    void generate(previous?.answers ?? answers, previous?.skipped ?? skipped, previous?.notes ?? []);
   };
   const submitAnswer = () => {
     const q = questions[0];
@@ -382,6 +392,15 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
         {elapsed >= 20 && <p>请求仍在进行；关闭窗口不会取消。</p>}
         <div className="sheet-actions"><button className="btn btn-ghost" onClick={stopCurrent}>取消拆解（保留输入）</button></div>
       </>}
+      {phase==='failed' && <>
+        <p className="meeting-label">这次没有拆完，答案和问题都还在。</p>
+        <p className="meeting-error">{error}</p>
+        <div className="sheet-actions">
+          <button className="btn btn-primary" onClick={retryFailed}>重试拆解</button>
+          {localOffer && <button className="btn btn-ghost" onClick={useLocalPlan}>使用本地示例步骤（非模型）</button>}
+          <button className="btn btn-ghost" onClick={()=>{setPhase('entry');setError('');setLocalOffer(false);}}>返回修改</button>
+        </div>
+      </>}
       {mode==='grill' && (phase==='loadingQuestions'||phase==='deciding') && <>
         <p role="status" aria-live="polite" className="meeting-label">
           {phase==='loadingQuestions'?'正在按目标生成个性化问题…':'正在判断还需不需要追问…'}
@@ -455,7 +474,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
           <button className="btn btn-primary" onClick={()=>save(true)}>加入我的目标并排日程</button>
         </div>
       </>}
-      {!!error && <p role="status" className="meeting-error">{error}</p>}
+      {!!error && phase!=='failed' && <p role="status" className="meeting-error">{error}</p>}
     </div>
   </div>;
 }

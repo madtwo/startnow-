@@ -26,6 +26,7 @@ import { addMemory, inferWeight, sanitizeMemoryText } from './memory';
 import { describeError, LlmError, streamChat, scopedOpenCodeSessionId } from './llm';
 import type { ChatTelemetry } from './llm';
 import { SHORT_TASK_TOKEN_BUDGETS } from './shortTaskBudgets';
+import { adviceContextText } from './adviceContext';
 import { completedActionAnchor, fallbackCompletionReaction, isGroundedCompletionReaction, unsafeCompletionReaction } from './completionReaction';
 import { diagnosticExcerpt } from './completionDiagnostics';
 import type { RejectedCompletionDiagnostic } from './completionDiagnostics';
@@ -1868,12 +1869,13 @@ export async function askForAdvice(
     }
     // No identifiable anchor: the existing curated action path remains available.
   }
-  const trouble = inferTrouble(card.text);
+  const contextText = adviceContextText(card);
+  const trouble = inferTrouble(contextText);
   // Include direct-advice comments, not only pinned advice, in the 24h history.
   const recentAdvice = recentActionUses(input.cards, now, card.id);
   const options = seekingHelp
     ? [...HELP_SEEKING_ACTIONS.slice(0, 1)]
-    : pickActions(new Date(now).getHours(), 6, trouble, card.text, recentAdvice);
+    : pickActions(new Date(now).getHours(), 6, trouble, contextText, recentAdvice);
   if (!options.length) {
     const line = '这次没找到更贴合你这件事的预置下一步，我先不硬塞一个。你最想先处理哪一个具体卡点？';
     const alreadyExplained = card.comments.some((row) => row.authorId === persona.id && row.text === line);
@@ -1911,7 +1913,7 @@ export async function askForAdvice(
           },
           {
             role: 'user',
-            content: withUntrustedHistory(`卡片：${card.text}\n\n${options
+            content: withUntrustedHistory(`卡片：${contextText}\n\n${options
               .map((o) => `${o.id} | ${o.label}（${o.minutes} 分钟）`)
               .join('\n')}\n\n只输出所选编号。`, persona, now),
           },

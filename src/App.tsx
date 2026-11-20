@@ -11,6 +11,7 @@ import {
 } from 'react';
 import Avatar from './components/Avatar';
 import CardDetail from './components/CardDetail';
+import AdviceContextDialog from './components/AdviceContextDialog';
 import CardRow from './components/CardRow';
 import GuideCard from './components/GuideCard';
 import NoteDrawer from './components/NoteDrawer';
@@ -33,6 +34,7 @@ import { modelRateLimitRemainingMs, streamChat } from './lib/llm';
 import { auditCriticalContent, auditSocial, auditTone } from './lib/baseline';
 import { containsCrisis, hasCrisisInArchive } from './lib/submissionGuard';
 import { createOperationGate } from './lib/operationGate';
+import { adviceContextCheck, type AdviceContextReason, type AdviceStart } from './lib/adviceContext';
 import { advanceBragMinutes, cancelBragsForNewWorry, cancelBragsForPersona, triggerNextBrag } from './lib/brag';
 import { forgetAll, forgetOne, forgetRole } from './lib/memoryControl';
 import { modelFailureNotice } from './lib/modelStatus';
@@ -240,6 +242,10 @@ export default function App() {
   const [draftTitle, setDraftTitle] = useState('');
   const [image, setImage] = useState('');
   const [working, setWorking] = useState(false);
+  const [adviceGate, setAdviceGate] = useState<{
+    cardId: string; personaId?: string; reason: AdviceContextReason;
+  } | null>(null);
+  const adviceBypassed = useRef(new Set<string>());
   const [toast, setToast] = useState('');
   const [onboardOpen, setOnboardOpen] = useState(
     () => localStorage.getItem('startnow.onboarded') !== '1',
@@ -389,6 +395,13 @@ export default function App() {
   const ready = isReady(config);
   const latest = useRef({ cards, personas, world, settings, config, working, goals, schedule });
   latest.current = { cards, personas, world, settings, config, working, goals, schedule };
+
+  useEffect(() => {
+    if (!adviceGate) return;
+    const card = cards.find((row) => row.id === adviceGate.cardId);
+    if (!card || card.advice || card.status === 'noted' || card.status === 'done' ||
+        card.status === 'handled') setAdviceGate(null);
+  }, [adviceGate, cards]);
 
   const guardSubmission = (...parts: (string | undefined | null)[]): boolean => {
     if (!containsCrisis(parts)) return false;
@@ -964,50 +977,110 @@ export default function App() {
     }
   };
 
-  const advice = async (card: Card, personaId?: string) => {
-    if (guardSubmission(card.text, card.title,
-      ...card.comments.filter((c) => c.authorKind === 'player').map((c) => c.text))) return;
+  // The one owner of the advice operation gate. Supplement, when provided,
+  // becomes a normal visible comment *before* we build the advice input.
+  const adviceNow = async (card: Card, personaId?: string, supplement?: string): Promise<AdviceStart> => {
+    const text = supplement?.trim();
+    if (supplement !== undefined && (!text || text.length < 4 || text.length > 120)) {
+      setToast('补充一句需在 4–120 字之间');
+      return 'blocked';
+    }
+    if (text && guardSubmission(text)) return 'blocked';
+    const current = latest.current.cards.find((row) => row.id === card.id);
+    if (!current || current.advice || current.status === 'noted' ||
+        current.status === 'done' || current.status === 'handled') {
+      setToast('这张卡已经有下一步了');
+      return 'blocked';
+    }
+    if (guardSubmission(current.text, current.title,
+      ...current.comments.filter((row) => row.authorKind === 'player').map((row) => row.text))) {
+      return 'blocked';
+    }
     const operation = gate.current.start('advice');
     if (!operation) {
       setToast('同伴正在处理另一条消息，稍后再点下一步');
-      return;
+      return 'busy';
     }
     const cur = latest.current;
+    let nextCards = cur.cards;
+    let nextPersonas = cur.personas;
+    if (text) {
+      // No peer target: a supplement must not schedule a new persona reply.
+      const supplemented = addPlayerComment(current, text, Date.now(), cur.settings.speed, 'comment');
+      if (supplemented === current) {
+        gate.current.finish(operation);
+        return 'blocked';
+      }
+      nextCards = cur.cards.map((row) => row.id === current.id ? supplemented : row);
+      setCards(nextCards);
+      if (!current.noMemory) {
+        nextPersonas = notePlayerShare(cur.personas, text);
+        setPersonas(nextPersonas);
+      }
+    }
+    // Both state writes above increment the operation revision synchronously.
     const revision = gate.current.revision();
     setWorking(true);
-    try {
-      const out = await askForAdvice({
-        cards: cur.cards, personas: cur.personas, settings: cur.settings,
-        config: cur.config, cardId: card.id, personaId,
-        modelCallBudget:Math.max(0,cur.settings.dailyCalls-(cur.world.dayKey===dayKey(Date.now())?cur.world.callsToday:0)),
-      });
-      if (!gate.current.isCurrent(operation, revision) || latest.current.cards !== cur.cards) {
+    // Start the existing single advice operation, but do not await its network
+    // completion: the dialog can close immediately while the app stays busy.
+    void (async () => {
+      try {
+        const out = await askForAdvice({
+          cards: nextCards, personas: nextPersonas, settings: cur.settings,
+          config: cur.config, cardId: current.id, personaId,
+          modelCallBudget: Math.max(0, cur.settings.dailyCalls -
+            (cur.world.dayKey === dayKey(Date.now()) ? cur.world.callsToday : 0)),
+        });
+        const liveCard = latest.current.cards.find((row) => row.id === current.id);
+        const stale = !gate.current.isCurrent(operation, revision) ||
+          (text ? (!liveCard || !!liveCard.advice || liveCard.status === 'noted' ||
+            liveCard.status === 'done' || liveCard.status === 'handled')
+            : latest.current.cards !== cur.cards);
+        if (stale) {
+          if (out.calls) {
+            const day = dayKey(Date.now());
+            setWorld((w) => ({ ...w, dayKey: day,
+              callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls }));
+          }
+          setToast('刚才有新消息，下一步再点一次');
+          return;
+        }
+        setCards(out.cards);
+        setPersonas(out.personas);
         if (out.calls) {
           const day = dayKey(Date.now());
           setWorld((w) => ({ ...w, dayKey: day,
             callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls }));
         }
-        setToast('刚才有新消息，下一步再点一次');
-        return;
+        if (out.logs.length) {
+          setWorld((w) => ({ ...w, logs: [...out.logs, ...w.logs].slice(0, 20) }));
+        }
+        const failureNotice = modelFailureNotice(out.logs);
+        if (failureNotice) setToast(failureNotice);
+      } catch {
+        setToast('暂时无法获取下一步，请稍后重试');
+      } finally {
+        gate.current.finish(operation);
+        setWorking(false);
       }
-      setCards(out.cards);
-      setPersonas(out.personas);
-      if (out.calls) {
-        const day = dayKey(Date.now());
-        setWorld((w) => ({ ...w, dayKey: day,
-          callsToday: (w.dayKey === day ? w.callsToday : 0) + out.calls }));
-      }
-      if (out.logs.length) {
-        setWorld((w) => ({ ...w, logs: [...out.logs, ...w.logs].slice(0, 20) }));
-      }
-      const failureNotice = modelFailureNotice(out.logs);
-      if (failureNotice) setToast(failureNotice);
-    } catch {
-      setToast('暂时无法获取下一步，请稍后重试');
-    } finally {
-      gate.current.finish(operation);
-      setWorking(false);
+    })();
+    return 'started';
+  };
+
+  // Only the two direct UI entry points show the contextual reminder.
+  const requestAdvice = (card: Card, personaId?: string) => {
+    if (guardSubmission(card.text, card.title,
+      ...card.comments.filter((row) => row.authorKind === 'player').map((row) => row.text))) return;
+    const current = latest.current.cards.find((row) => row.id === card.id);
+    if (!current) { setToast('这张卡已经不存在了'); return; }
+    if (guardSubmission(current.text, current.title,
+      ...current.comments.filter((row) => row.authorKind === 'player').map((row) => row.text))) return;
+    const check = adviceContextCheck(current);
+    if (check.thin && !adviceBypassed.current.has(current.id)) {
+      setAdviceGate({ cardId: current.id, personaId, reason: check.reason ?? 'no-followup' });
+      return;
     }
+    void adviceNow(current, personaId);
   };
 
   const nudge = () => {
@@ -1819,7 +1892,7 @@ export default function App() {
               onShrink={(card) => patch(card.id, (c) => shrinkAdvice(c))}
               onRequestSmaller={(card) => void requestSmaller(card)}
               onDone={(card) => patch(card.id, (c) => completeCard(c, Date.now(), settings.speed))}
-              onAdvice={(card) => void advice(card)}
+              onAdvice={(card) => requestAdvice(card)}
               onWrite={() => setView('post')}
               onForum={() => setHomeTab('forum')}
               onAddTodo={addTodo}
@@ -1861,6 +1934,8 @@ export default function App() {
                     aria-label="搜索卡片"
                   />
                 </label>}
+                <button type="button" className="btn btn-ghost" onClick={openDecompose}
+                  style={{whiteSpace:'nowrap'}}>拆解目标</button>
               </div>
 
               <div className="forum-chips forum-view-chips" role="group" aria-label="论坛分区">
@@ -2009,7 +2084,7 @@ export default function App() {
             personas={personas}
             busy={working}
             onComment={(text, kind, peer, replyTo) => comment(detailCard, text, kind, peer, replyTo)}
-            onAdvice={(personaId) => void advice(detailCard, personaId)}
+            onAdvice={(personaId) => requestAdvice(detailCard, personaId)}
             onAdoptAdvice={(commentId) => adoptReply(detailCard, commentId)}
             onShrink={() => patch(detailCard.id, (c) => shrinkAdvice(c))}
             onRequestSmaller={() => void requestSmaller(detailCard)}
@@ -2522,6 +2597,34 @@ export default function App() {
       </footer>
 
       {detailCard && view !== 'detail' && null}
+
+      {adviceGate && (
+        <AdviceContextDialog
+          key={adviceGate.cardId}
+          reason={adviceGate.reason}
+          busy={working}
+          onClose={() => setAdviceGate(null)}
+          onStillRequest={() => {
+            const current = latest.current.cards.find((row) => row.id === adviceGate.cardId);
+            setAdviceGate(null);
+            if (!current || current.advice || current.status === 'noted' ||
+                current.status === 'done' || current.status === 'handled') {
+              setToast('这张卡已经有下一步了');
+              return;
+            }
+            adviceBypassed.current.add(adviceGate.cardId);
+            void adviceNow(current, adviceGate.personaId);
+          }}
+          onSupplement={(text) => {
+            const current = latest.current.cards.find((row) => row.id === adviceGate.cardId);
+            if (!current) {
+              setToast('这张卡已经不存在了');
+              return Promise.resolve('blocked');
+            }
+            return adviceNow(current, adviceGate.personaId, text);
+          }}
+        />
+      )}
 
       {settingsOpen && (
         <Suspense fallback={null}>
