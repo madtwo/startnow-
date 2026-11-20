@@ -143,7 +143,8 @@ function ForumMock() {
           <span>学习</span>
           <span>情绪</span>
           <span>生活</span>
-          <span>延期记录</span>
+          <span>成功</span>
+          <span>失败</span>
           <span className="on">全部</span>
         </div>
         <div className="ob-forum-grid">

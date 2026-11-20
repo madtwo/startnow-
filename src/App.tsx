@@ -60,7 +60,7 @@ import {
 import { splitForumCards } from './lib/forumHistory';
 import { isGoalResultCard, settlePeerReactionsLocally } from './lib/peerReactions';
 import { COMPETITION_MODE, competitionSummary } from './lib/competition';
-import { FORUM_VIEWS, matchesForumView, type ForumView } from './lib/forumFilters';
+import { matchesForumView } from './lib/forumFilters';
 import { buildCompetitionSeedCards } from './lib/competitionSeed';
 import { extractMaterial } from './lib/materialVision';
 import { captureFirstStep, captureVisionTemplate } from './lib/materialCapture';
@@ -144,12 +144,12 @@ const AVATAR_COLORS: Record<string, string> = {
 
 type View = 'home' | 'post' | 'mine' | 'profile' | 'detail' | 'room' | 'schedule' | 'goal';
 
-const FORUM_CATS = ['学习', '情绪', '生活', '延期记录', '全部'] as const;
+const FORUM_FILTERS = ['全部', '学习', '情绪', '生活', '成功', '失败'] as const;
+type ForumFilter = (typeof FORUM_FILTERS)[number];
 const CAT_KEYWORDS: Record<string, string[]> = {
   学习: ['学习', '复习', '作业', '论文', '考试', '上课', '笔记', '背书', '读书', '课程'],
   情绪: ['情绪', '焦虑', '难过', '压力', '烦', '累', '害怕', '崩溃', '开心'],
   生活: ['生活', '起床', '吃饭', '睡', '房间', '洗', '运动', '出门', '桌面', '整理'],
-  延期记录: ['延期', '延后', '拖延', '明天', '下周', '之后', '推迟', '改天'],
 };
 
 function forumCategory(card: Card) {
@@ -254,8 +254,7 @@ export default function App() {
     () => (isFirstRun() || localStorage.getItem('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
   );
   const [forumQuery, setForumQuery] = useState('');
-  const [forumCat, setForumCat] = useState<(typeof FORUM_CATS)[number]>('全部');
-  const [forumView, setForumView] = useState<ForumView>('全部');
+  const [forumFilter, setForumFilter] = useState<ForumFilter>('全部');
   const [forumSection, setForumSection] = useState<'main' | 'history'>('main');
   const [openingGateFlag, setOpeningGateFlag] = useState<OpeningStage | null>(
     () => (isFirstRun() ? 'need-intro' : readOpeningGate()),
@@ -1512,12 +1511,15 @@ export default function App() {
   const forumFeed = useMemo(() => {
     const q = forumQuery.trim().toLowerCase();
     return feed.filter((c) => {
-      if (forumCat !== '全部' && forumCategory(c) !== forumCat) return false;
-      if (!matchesForumView(c, forumView)) return false;
+      if (forumFilter !== '全部') {
+        if (forumFilter === '成功' || forumFilter === '失败') {
+          if (!matchesForumView(c, forumFilter)) return false;
+        } else if (forumCategory(c) !== forumFilter) return false;
+      }
       if (!q) return true;
       return `${c.title ?? ''} ${c.text} ${c.authorName}`.toLowerCase().includes(q);
     });
-  }, [feed, forumCat, forumView, forumQuery]);
+  }, [feed, forumFilter, forumQuery]);
 
   const noteCount =
     todos.filter((t) => !t.doneAt).length +
@@ -1867,29 +1869,16 @@ export default function App() {
                 <button type="button" className={forumSection === 'history' ? 'on' : ''}
                   aria-pressed={forumSection === 'history'} onClick={() => setForumSection('history')}>历史卡片</button>
               </div>
-              {forumSection === 'main' && <div className="forum-chips" role="group" aria-label="话题分类">
-                {FORUM_CATS.map((cat) => (
+              {forumSection === 'main' && <div className="forum-chips" role="group" aria-label="论坛分类">
+                {FORUM_FILTERS.map((filter) => (
                   <button
-                    key={cat}
+                    key={filter}
                     type="button"
-                    className={forumCat === cat ? 'on' : ''}
-                    aria-pressed={forumCat === cat}
-                    onClick={() => setForumCat(cat)}
+                    className={forumFilter === filter ? 'on' : ''}
+                    aria-pressed={forumFilter === filter}
+                    onClick={() => setForumFilter(filter)}
                   >
-                    {cat}
-                  </button>
-                ))}
-              </div>}
-              {forumSection === 'main' && <div className="forum-chips forum-view-chips" role="group" aria-label="帖子类型">
-                {FORUM_VIEWS.map((view) => (
-                  <button
-                    key={view}
-                    type="button"
-                    className={forumView === view ? 'on' : ''}
-                    aria-pressed={forumView === view}
-                    onClick={() => setForumView(view)}
-                  >
-                    {view === '全部' ? '全部类型' : view}
+                    {filter}
                   </button>
                 ))}
               </div>}

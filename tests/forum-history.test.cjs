@@ -36,7 +36,7 @@ test('history UI reuses CardRow, onOpen and onCheer; filters stay scoped to main
  assert.match(app,/onClick=\{\(\) => openCard\(card\)\}/);
  assert.match(app,/onCheer=\{\(\) => cheer\(card\)\}/);
  assert.match(app,/还没有历史目标卡/);
- assert.match(app,/forumSection === 'main' && <div className="forum-chips" role="group" aria-label="话题分类"/);
+ assert.match(app,/forumSection === 'main' && <div className="forum-chips" role="group" aria-label="论坛分类"/);
 });
 
 test('neither code nor tests change or hide room routes',()=>{
