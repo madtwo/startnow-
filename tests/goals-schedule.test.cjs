@@ -64,7 +64,7 @@ test('R8: 删除目标时默认将日程保留为普通日程，可选择一并�
  assert.equal(kept.schedule.length,2);assert.equal(kept.schedule[0].source,'manual');assert.equal(kept.schedule[0].stepId,undefined);
  assert.equal(deleteGoal([goal],schedule,goal.id,true).schedule.length,0);
 });
-test('R1/R2: AI JSON 严格解析，只有动作且 3–8 步、≤120 分钟；跳过有标注',()=>{
+test('R1/R2: AI JSON 严格解析，只有动作且 3–5 步、≤120 分钟；跳过有标注',()=>{
  const input={goalText:'周三完成实验报告',answers:{},skipped:true,now};
  assert.equal(goalQuestions('写一份报告').some(q=>q.field==='deadline'),true);
  assert.equal(goalQuestions('周五前写一份报告').length>=0,true);
@@ -120,7 +120,7 @@ test('R20: 显式 null 与伪造的关联步骤不会被旧存档兼容规则吞
  assert.equal(m.has('shudong.goals.v1'),false);
 });
 
-test('R2: /grill-me 最多问 5 个关键问题，随时可跳过并标注假设',()=>{
+test('R2: 旧本地问题仅作降级备用，最多五问且能过滤已回答项',()=>{
   const vague='把事情弄好';
   const questions=grillQuestions(vague,{});
   assert.ok(questions.length>=3 && questions.length<=5);

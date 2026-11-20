@@ -19,7 +19,10 @@ import PostForm from './components/PostForm';
 import StepBoard from './components/StepBoard';
 import ScheduleView from './components/ScheduleView';
 import DecomposeSheet from './components/DecomposeSheet';
+import DecomposeOrb from './components/DecomposeOrb';
+import { acknowledgeDecomposeJob, emptyDecomposeJob, updateDecomposeJob } from './lib/decomposeJob';
 import { recordDecomposeAttempt } from './lib/decomposeUsage';
+import { DECOMPOSE_DRAFT_KEY } from './lib/decomposeDraft';
 import GoalDetail from './components/GoalDetail';
 import Onboarding from './components/Onboarding';
 import CrisisCard from './components/CrisisCard';
@@ -276,6 +279,24 @@ export default function App() {
   summaryLatest.current = summaries;
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
+  // Reset/import replace the account data; remount the retained sheet so its in-flight work
+  // cannot write a plan built for the previous account into this one. Ordinary close does not.
+  const [decomposeEpoch, setDecomposeEpoch] = useState(0);
+  const decomposeEpochRef = useRef(0);
+  // Ephemeral page-local state: never exported, stored, or logged.
+  const [decomposeJob, setDecomposeJob] = useState(emptyDecomposeJob);
+  const openDecompose = () => {
+    setDecomposeJob(acknowledgeDecomposeJob);
+    setDecomposeOpen(true);
+  };
+  const invalidateDecompose = () => {
+    // Invalidate synchronously so callbacks from the old sheet are ignored even
+    // before React commits the remount. The retained request aborts on unmount.
+    decomposeEpochRef.current += 1;
+    setDecomposeEpoch(decomposeEpochRef.current);
+    setDecomposeJob(emptyDecomposeJob());
+    setDecomposeOpen(false);
+  };
   const [goalId, setGoalId] = useState('');
   const [legacyKeys, setLegacyKeys] = useState<string[]>(() => listLegacyPostKeys());
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -1335,6 +1356,10 @@ export default function App() {
       alert('这份 JSON 读不了，检查一下是不是本页导出的。');
       return;
     }
+    invalidateDecompose();
+    // Local drafts are device state, not part of the imported archive; never
+    // inherit a previous user's draft after replacing the active archive.
+    try { localStorage.removeItem(DECOMPOSE_DRAFT_KEY); } catch { /* disabled storage */ }
     materialInFlight.current.forEach(controller=>controller.abort());
     materialInFlight.current.clear();
     deadlineConfirming.current.clear();
@@ -1364,6 +1389,8 @@ export default function App() {
   };
 
   const doClear = () => {
+    // Clearing user data explicitly cancels any task tied to the old account.
+    invalidateDecompose();
     lastCrisisAt.current=0;
     materialInFlight.current.forEach(controller=>controller.abort());
     materialInFlight.current.clear();
@@ -1398,6 +1425,8 @@ export default function App() {
   };
 
   const doReseed = () => {
+    invalidateDecompose();
+    try { localStorage.removeItem(DECOMPOSE_DRAFT_KEY); } catch { /* disabled storage */ }
     clearOpeningStage();
     setOpeningGateFlag('need-intro');
     setForumSection('main');
@@ -1797,7 +1826,7 @@ export default function App() {
               onBragCard={openCardBrag}
               onOpenMine={() => setView('mine')}
               goals={goals}
-              onDecompose={() => {if(!COMPETITION_MODE)setDecomposeOpen(true);}}
+              onDecompose={() => {if(!COMPETITION_MODE)openDecompose();}}
               competitionMode={COMPETITION_MODE}
               onOpenGoal={openGoal}
               onShareGoal={(id) => { const g = goals.find((x) => x.id === id); if (g) shareMyGoal(g); }}
@@ -2319,13 +2348,32 @@ export default function App() {
         </div>
       </div>
 
-      {!COMPETITION_MODE && decomposeOpen && (
+      {!COMPETITION_MODE && (
         <DecomposeSheet
+          key={decomposeEpoch}
+          open={decomposeOpen}
           config={config}
           onClose={() => setDecomposeOpen(false)}
+          onBackgroundState={(event) => {
+            if (decomposeEpochRef.current !== decomposeEpoch) return;
+            setDecomposeJob((previous) => decomposeEpochRef.current === decomposeEpoch
+              ? updateDecomposeJob(previous, event) : previous);
+          }}
+          onBackgroundReady={() => {
+            if (decomposeEpochRef.current === decomposeEpoch) setToast('目标拆好了，点击右下角浮动球查看预览');
+          }}
+          onBackgroundFailed={() => {
+            if (decomposeEpochRef.current === decomposeEpoch) setToast('目标拆解未完成，点击右下角浮动球查看原因');
+          }}
+          onCrisis={() => setCrisis('目标内容触发安全提示')}
           onSave={saveGoalDraft}
           onModelAttempt={reserveMeetingCall}
         />
+      )}
+
+      {!COMPETITION_MODE && (
+        <DecomposeOrb job={decomposeJob} sheetOpen={decomposeOpen} onOpen={openDecompose}
+          hasToast={Boolean(toast || otherTabWarning)} />
       )}
 
       {toast && <div className="toast">{toast}</div>}
@@ -2407,7 +2455,7 @@ export default function App() {
           onToggle={toggleScheduleItem}
           onAdd={addScheduleItem}
           onOpenGoal={openGoal}
-          onDecompose={() => setDecomposeOpen(true)}
+          onDecompose={openDecompose}
         />
       )}
 

@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GoalSource, LlmConfig } from '../types';
+import type { DecomposeJobEvent } from '../lib/decomposeJob';
 import type { StepInput } from '../lib/goals';
-import { decomposeViaApi, estimateDailyEffort, goalQuestions, grillQuestions, recognizeNotice } from '../lib/decompose';
+import { decomposeViaApi, estimateDailyEffort, goalQuestions, recognizeNotice } from '../lib/decompose';
+import { isMock, isReady } from '../config/providers';
+import { scrubSecrets } from '../lib/llm';
+import { answeredPersonalizedQuestions, localPersonalizedPlan, localPersonalizedQuestions,
+  personalizedQuestionHistory, requestPersonalizedQuestions } from '../lib/personalizedQuestions';
+import type { PersonalizedQuestion } from '../lib/personalizedQuestions';
 import type { Decomposition, MissingField, VisionResult } from '../lib/decompose';
 import { buildNoticeAppend, type NoticeFields } from '../lib/noticeFields';
 import { containsCrisis } from '../lib/submissionGuard';
@@ -13,15 +19,38 @@ interface Props {
   config: LlmConfig;
   onSave: (input: { title: string; detail: string; source: GoalSource; steps: StepInput[]; dueAt?: number }, schedule: boolean) => void;
   onClose: () => void;
+  /** Keep this component mounted while open is false: in-flight decomposition persists. */
+  open: boolean;
+  onBackgroundReady?: () => void;
+  onBackgroundFailed?: () => void;
+  /** The app owns the single page-local task status; this sheet only reports transitions. */
+  onBackgroundState?: (event: DecomposeJobEvent) => void;
+  onCrisis?: () => void;
   onModelAttempt: (kind?: 'decompose' | 'vision') => void;
 }
-export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt }: Props) {
-  const [stored] = useState(() => readDecomposeDraft(localStorage));
+export default function DecomposeSheet({ config, onSave, onClose, open, onBackgroundReady, onBackgroundFailed, onBackgroundState, onCrisis, onModelAttempt }: Props) {
+  const openRef = useRef(open);
+  const draftActivated = useRef(open);
+  openRef.current = open;
+  if (open) draftActivated.current = true;
+  const [stored] = useState(() => {
+    try { return readDecomposeDraft(localStorage); }
+    catch { // Privacy settings can block localStorage; keep the sheet usable in memory.
+      return {goal:'', confirmedDeadline:'', manualSteps:'', mode:'ai' as const,
+        answers:{} as Partial<Record<MissingField,string>>};
+    }
+  });
   const [goal,setGoal] = useState(stored.goal);
   const [deadline,setDeadline] = useState(stored.confirmedDeadline);
   const [manualSteps,setManualSteps] = useState(stored.manualSteps);
   const [mode,setMode] = useState<'manual'|'ai'|'grill'>(stored.mode);
-  const [phase,setPhase] = useState<'entry'|'questions'|'requesting'|'preview'>('entry');
+  const [phase,setPhase] = useState<'entry'|'loadingQuestions'|'questions'|'deciding'|'requesting'|'preview'>('entry');
+  const [grillRounds,setGrillRounds] = useState<PersonalizedQuestion[][]>([]);
+  const [grillAnswers,setGrillAnswers] = useState<Record<string,string>>({});
+  const [grillSource,setGrillSource] = useState<'model'|'local'>('model');
+  const [grillNotice,setGrillNotice] = useState('');
+  const [followupRounds,setFollowupRounds] = useState(0);
+  const [localOffer,setLocalOffer] = useState(false);
   const [answers,setAnswers] = useState<Partial<Record<MissingField,string>>>(stored.answers);
   const [questionIndex,setQuestionIndex] = useState(Object.values(stored.answers).filter((v) => Boolean(v?.trim())).length);
   const [answer,setAnswer] = useState('');
@@ -41,13 +70,9 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
   const [visionNotice,setVisionNotice] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const goalInputRef = useRef<HTMLTextAreaElement>(null);
-  const questions = useMemo(
-    () => (mode === 'grill' ? grillQuestions(goal, answers) : goalQuestions(goal, answers)),
-    [mode, goal, answers],
-  );
-  // Grill shows every prompt at once; the list must not disappear as answers are typed.
-  const grillPrompts = useMemo(() => grillQuestions(goal, {}), [goal]);
+  const questions = useMemo(() => goalQuestions(goal, answers), [goal, answers]);
   useEffect(() => {
+    if (!draftActivated.current) return;
     try { saveDecomposeDraft(localStorage, { goal, manualSteps, answers, confirmedDeadline: deadline, mode }); }
     catch { /* storage may be unavailable */ }
   }, [goal, manualSteps, answers, deadline, mode]);
@@ -66,55 +91,158 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
       activeController.current?.abort();
     };
   }, []);
+  const reportJob = (event: DecomposeJobEvent) => onBackgroundState?.(event);
   const stopCurrent = () => {
     operationId.current++;
     activeController.current?.abort();
     activeController.current = null;
     setBusy(false);
     setVisionBusy(false);
+    // Discard the canceled result, not the player's typed goal and answers.
+    setPlan(null); setChecked([]); setLocalOffer(false);
     setPhase('entry');
     setError('');
+    reportJob({status:'idle'});
   };
-  const closeSheet = () => { stopCurrent(); onClose(); };
+  // Hiding is NOT cancellation. React keeps the component (and request) mounted.
+  const closeSheet = () => { openRef.current = false; onClose(); };
+  const useLocalPlan = () => {
+    if (!goal.trim()) { setError('请先填写目标'); return; }
+    if (containsCrisis([goal])) { handleCrisis(); return; }
+    const result = localPersonalizedPlan(goal);
+    setPlan(result); setChecked(result.steps.map((_,i)=>i));setSource('manual');
+    setLocalOffer(false);setError('');setBusy(false);setPhase('preview');
+    reportJob({status:'ready',goal,title:result.title,seen:openRef.current});
+    if (!openRef.current) onBackgroundReady?.();
+  };
+  const handleCrisis = () => {
+    operationId.current++;activeController.current?.abort();activeController.current=null;setBusy(false);setPhase('entry');
+    setError('这个目标涉及需要优先处理的风险内容，暂不进入普通拆解。');
+    setPlan(null); setChecked([]);reportJob({status:'idle'});
+    onCrisis?.();
+  };
+  const personalizedInput = () => {
+    const first = grillRounds[0] ?? [];
+    const next: Partial<Record<MissingField,string>> = {};
+    first.forEach((q) => { if (q.field && grillAnswers[q.id]?.trim()) next[q.field] = grillAnswers[q.id].trim(); });
+    return { next, notes: answeredPersonalizedQuestions(grillRounds,grillAnswers) };
+  };
+  const beginPersonalized = async () => {
+    const ticket = ++operationId.current;
+    const controller = new AbortController(); activeController.current = controller;
+    setGrillAnswers({});setGrillRounds([]);setFollowupRounds(0);setGrillNotice('');
+    setLocalOffer(false);setBusy(true);setPhase('loadingQuestions');
+    reportJob({status:'running',goal,stage:'loadingQuestions',newTask:true});
+    try {
+      let prompts: PersonalizedQuestion[];
+      let origin: 'model'|'local' = 'model';
+      let notice = '';
+      if (!isReady(config) || isMock(config)) {
+        prompts = localPersonalizedQuestions(goal); origin = 'local';
+        notice = '这次用本地问题继续（演示模式或未配置真实模型），不是 AI 生成。';
+      } else {
+        try { prompts = await requestPersonalizedQuestions({config,goal,stage:'initial',signal:controller.signal,
+          onModelAttempt:()=>onModelAttempt('decompose')}); }
+        catch (e) {
+          if (controller.signal.aborted || ticket!==operationId.current) return;
+          prompts = localPersonalizedQuestions(goal);origin='local';
+          notice = '模型问题生成失败或额度不足，这次用本地问题继续（非 AI 生成）。';
+        }
+      }
+      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current) return;
+      setGrillSource(origin);setGrillNotice(notice);setGrillRounds([prompts]);setPhase('questions');
+      reportJob({status:'running',goal,stage:'questions'});
+    } catch (e) {
+      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current) return;
+      setError('个性化问题暂时无法生成，请稍后重试或改用自由拆解。');
+      setPhase('entry');
+      reportJob({status:'failed',goal,error:'个性化问题生成失败',seen:openRef.current});
+      if (!openRef.current) onBackgroundFailed?.();
+    } finally {
+      if (ticket===operationId.current && activeMounted.current) {setBusy(false);activeController.current=null;}
+    }
+  };
+  const decidePersonalized = async () => {
+    if (busy) return;
+    if (containsCrisis(Object.values(grillAnswers))) {handleCrisis();return;}
+    const {next,notes}=personalizedInput();
+    if (grillSource==='local' || followupRounds>=3) { void generate(next,false,notes);return; }
+    const ticket = ++operationId.current;const controller = new AbortController();
+    activeController.current=controller;setBusy(true);setError('');setPhase('deciding');
+    reportJob({status:'running',goal,stage:'deciding'});
+    try {
+      const history = personalizedQuestionHistory(grillRounds,grillAnswers);
+      const added = await requestPersonalizedQuestions({config,goal,stage:'followup',history,
+        signal:controller.signal,onModelAttempt:()=>onModelAttempt('decompose')});
+      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current) return;
+      if (added.length===0) {void generate(next,false,notes);return;}
+      setGrillRounds((prev)=>[...prev,added]);setFollowupRounds((r)=>r+1);setPhase('questions');
+      reportJob({status:'running',goal,stage:'questions'});
+    } catch(e) {
+      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current) return;
+      setGrillNotice('模型本轮判断不可用，已停止追加追问，直接尝试拆解。');
+      void generate(next,true,notes);
+    } finally {
+      if (ticket===operationId.current && activeMounted.current) {setBusy(false);activeController.current=null;}
+    }
+  };
+  const immediatelyDecompose = () => {
+    if (activeController.current && (phase==='deciding' || phase==='loadingQuestions')) {
+      activeController.current.abort();activeController.current=null;
+    }
+    if (containsCrisis(Object.values(grillAnswers))) {handleCrisis();return;}
+    const {next,notes}=personalizedInput();
+    void generate(next,true,notes);
+  };
   const effort = useMemo(() => plan ? estimateDailyEffort(
     plan.steps.filter((_, i) => checked.includes(i)), parseLocalDate(deadline), Date.now()) : null,
     [plan, checked, deadline]);
   const start = () => {
     if (!goal.trim() || goal.length > 2000) {setError('请先填写目标（最多 2000 字）');return;}
-    setError('');
+    setError('');setLocalOffer(false);
+    if (containsCrisis([goal])) {handleCrisis();return;}
+    setPlan(null); setChecked([]);
     if (mode === 'manual') {
       const lines=manualSteps.split(/\r?\n/).map((s)=>s.trim()).filter(Boolean);
       if (lines.length < 1 || lines.length > 12) {setError('自由拆解需要输入 1–12 行步骤');return;}
       setPlan({title:goal.trim().slice(0,120), assumptions:[],
         steps:lines.map((text)=>({text,minutes:20,kind:'other' as const}))});
-      setChecked(lines.map((_,i)=>i)); setSource('manual');setPhase('preview');return;
+      setChecked(lines.map((_,i)=>i)); setSource('manual');setPhase('preview');
+      reportJob({status:'ready',goal,title:goal.trim().slice(0,120),seen:openRef.current});return;
     }
-    if (mode === 'grill') {
-      if (grillPrompts.length) setPhase('questions');
-      else void generate(answers, true);
-      return;
-    }
+    if (mode === 'grill') {void beginPersonalized();return;}
     setQuestionIndex(Object.values(answers).filter((v) => Boolean(v?.trim())).length);setAnswer('');
-    if (questions.length) setPhase('questions');
+    if (questions.length) {setPhase('questions');reportJob({status:'running',goal,stage:'questions',newTask:true});}
     else void generate(answers,false);
   };
-  const generate = async (nextAnswers: Partial<Record<MissingField,string>>, didSkip: boolean) => {
+  const generate = async (nextAnswers: Partial<Record<MissingField,string>>, didSkip: boolean,
+    notes: readonly {question:string;answer:string}[] = []) => {
     const ticket = ++operationId.current;
     const controller = new AbortController();
     activeController.current = controller;
-    setBusy(true); setError(''); setPhase('requesting');
+    setBusy(true); setError(''); setLocalOffer(false);setPhase('requesting');
+    reportJob({status:'running',goal,stage:'requesting'});
     try {
+      if (mode==='grill' && (!isReady(config) || isMock(config))) {
+        if (controller.signal.aborted || ticket!==operationId.current) return;
+        useLocalPlan();return;
+      }
       onModelAttempt('decompose'); // reserve before the first network request
       const result = await decomposeViaApi(config, {
-        goalText: goal, answers: nextAnswers, skipped: didSkip, signal: controller.signal,
+        goalText: goal, answers: nextAnswers, skipped: didSkip, personalized:mode==='grill', notes, signal: controller.signal,
         onRetryAttempt: () => onModelAttempt('decompose'),
       });
       if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted) return;
       setPlan(result); setChecked(result.steps.map((_, i) => i));
       setSource(visionText ? 'image' : 'ai'); setPhase('preview');
+      reportJob({status:'ready',goal,title:result.title,seen:openRef.current});
+      if (!openRef.current) onBackgroundReady?.();
     } catch (e) {
       if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted) return;
-      setError(`${(e as Error).message}。可以重试或选择自由拆解。`); setPhase('entry');
+      setError(`${scrubSecrets((e as Error)?.message ?? '模型请求失败',config.apiKey).slice(0,240)}。可以重试，或使用明确标注的本地示例/自由拆解。`);
+      setLocalOffer(mode==='grill');setPhase('entry');
+      reportJob({status:'failed',goal,error:'模型请求失败，可返回拆解窗口查看并重试',seen:openRef.current});
+      if (!openRef.current) onBackgroundFailed?.();
     } finally {
       if (ticket === operationId.current && activeMounted.current) { setBusy(false); activeController.current = null; }
     }
@@ -124,7 +252,7 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
     if (!q) { void generate(answers, skipped); return; }
     const next = { ...answers, [q.field]: answer.trim() };
     setAnswers(next); setAnswer(''); setQuestionIndex((i) => i + 1);
-    const remaining = mode === 'grill' ? grillQuestions(goal, next) : goalQuestions(goal, next);
+    const remaining = goalQuestions(goal, next);
     if (!remaining.length) void generate(next, false);
   };
   const skipQuestions = () => {
@@ -192,17 +320,20 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
       onSave({title:plan.title,detail:[goal,plan.assumptions.length?'【拆解假设（非事实）】'+plan.assumptions.join('；'):''].filter(Boolean).join('\n'),source,
         steps:plan.steps.filter((_,i)=>checked.includes(i)), dueAt:parseLocalDate(deadline)},schedule);
       localStorage.removeItem(DECOMPOSE_DRAFT_KEY);
-      onClose();
+      reportJob({status:'idle'});
+      setPlan(null);setChecked([]);setGoal('');setAnswers({});setGrillRounds([]);setGrillAnswers({});
+      setPhase('entry');setDeadline('');setVisionText('');onClose();
     } catch(e) {setError((e as Error).message);}
   };
+  if (!open) return null;
   return <div className="scrim" onMouseDown={(e)=>{if(e.target===e.currentTarget) closeSheet();}}>
     <div className="sheet meeting-sheet" role="dialog" aria-modal="true" aria-label="拆解一个目标">
-      <div className="sheet-head"><div><h2>拆解一个目标</h2><p>可以自己拆，也可以让系统提几个关键问题；「/grill-me」会多问几句，随时可以跳过。</p></div>
+      <div className="sheet-head"><div><h2>拆解一个目标</h2><p>个性化定制会按你的目标提问；拆解进行中可以关闭窗口，完成后回来查看。</p></div>
         <button className="icon-btn" type="button" aria-label="关闭" onClick={closeSheet}>×</button></div>
       {phase==='entry' && <>
         <div className="meeting-switch" role="group" aria-label="拆解方式">
           <button className={mode==='ai'?'on':''} onClick={()=>setMode('ai')}>自动拆解</button>
-          <button className={mode==='grill'?'on':''} onClick={()=>setMode('grill')}>/grill-me · 问清楚</button>
+          <button className={mode==='grill'?'on':''} onClick={()=>setMode('grill')}>个性化定制</button>
           <button className={mode==='manual'?'on':''} onClick={()=>setMode('manual')}>自由拆解</button>
         </div>
         <label className="field"><span className="field-label">我想完成的目标</span>
@@ -240,28 +371,48 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
         {mode==='manual' && <label className="field"><span className="field-label">每行一个小步骤（1–12 行）</span>
           <textarea rows={5} value={manualSteps} onChange={(e)=>setManualSteps(e.target.value)}
             placeholder={'列出异常数据\n写方法段 200 字\n核对参考文献'} /></label>}
-        <div className="sheet-actions"><button className="btn btn-ghost" onClick={closeSheet}>取消（保留草稿）</button>
+        {localOffer && <button type="button" className="btn btn-ghost" onClick={useLocalPlan}>使用本地示例步骤（非模型）</button>}
+        <div className="sheet-actions"><button className="btn btn-ghost" onClick={closeSheet}>关闭（保留草稿）</button>
           <button className="btn btn-primary" disabled={busy||!goal.trim()} onClick={start}>{busy?'处理中…':'开始拆解'}</button></div>
       </>}
       {phase==='requesting' && <>
         <p role="status" aria-live="polite" className="meeting-label">{elapsed < 8 ? '正在理解目标…' : elapsed < 20 ? '正在拆步骤…' : '正在整理日期…'}</p>
-        {elapsed >= 8 && <p>通常需要 10–40 秒。</p>}
-        {elapsed >= 20 && <p>还在拆，你可以继续等，也可以取消。</p>}
+        <p>可以先关掉窗口去论坛看看，拆好了会提示你。只有点「取消拆解」才会中止请求。</p>
+        {elapsed >= 8 && <p>响应时间取决于当前模型和网络。</p>}
+        {elapsed >= 20 && <p>请求仍在进行；关闭窗口不会取消。</p>}
         <div className="sheet-actions"><button className="btn btn-ghost" onClick={stopCurrent}>取消拆解（保留输入）</button></div>
       </>}
-      {phase==='questions' && mode==='grill' && <>
-        <p className="meeting-label">一次填完；不想回答的留空，也可以直接拆解。</p>
-        <div className="grill-form">
-          {grillPrompts.map((q)=><label className="field" key={q.field}>
-            <span className="field-label">{q.text}</span>
-            <textarea rows={2} maxLength={180} value={answers[q.field] ?? ''}
-              aria-label={q.text}
-              onChange={(e)=>setAnswers((prev)=>({ ...prev, [q.field]: e.target.value }))}/>
-          </label>)}
-        </div>
+      {mode==='grill' && (phase==='loadingQuestions'||phase==='deciding') && <>
+        <p role="status" aria-live="polite" className="meeting-label">
+          {phase==='loadingQuestions'?'正在按目标生成个性化问题…':'正在判断还需不需要追问…'}
+        </p>
+        <p>你不需要决定追问轮数，也可以立刻拆解。</p>
         <div className="sheet-actions">
-          <button className="btn btn-ghost" onClick={()=>void generate(answers, true)}>跳过，直接拆解</button>
-          <button className="btn btn-primary" disabled={busy} onClick={()=>void generate(answers, false)}>用这些答案拆解</button>
+          <button type="button" className="btn btn-primary" onClick={immediatelyDecompose}>立刻拆解</button>
+          <button type="button" className="btn btn-ghost" onClick={stopCurrent}>取消提问</button>
+        </div>
+      </>}
+      {phase==='questions' && mode==='grill' && <>
+        <p className="meeting-label">个性化定制 · {grillSource==='model'?'模型生成的问题':'本地降级问题'} · 已追问 {followupRounds}/3 轮</p>
+        {grillNotice && <p role="status" className="meeting-error">{grillNotice}</p>}
+        <p className="field-hint">每个问题一行就够，也可以点一个快捷回答；已经回答的内容不会丢失。</p>
+        <div className="grill-form">
+          {(grillRounds[grillRounds.length-1] ?? []).map((q)=><div className="field" key={q.id}>
+            <label htmlFor={`grill-${q.id}`} className="field-label">{q.question}</label>
+            <input id={`grill-${q.id}`} type="text" maxLength={180} value={grillAnswers[q.id]??''}
+              onChange={(e)=>setGrillAnswers((prev)=>({...prev,[q.id]:e.target.value}))}/>
+            <div className="meeting-step-meta" role="group" aria-label={`${q.question}的快捷回答`}>
+              {q.chips.map((chip)=><button type="button" className="btn btn-ghost" key={chip}
+                onClick={()=>setGrillAnswers((prev)=>({...prev,[q.id]:chip}))}>{chip}</button>)}
+            </div>
+          </div>)}
+        </div>
+        {grillRounds.length>1 && <details><summary>已回答的前几轮</summary>
+          {grillRounds.slice(0,-1).flat().map((q)=><p key={q.id}>{q.question}：{grillAnswers[q.id]?.trim() || '未回答'}</p>)}
+        </details>}
+        <div className="sheet-actions">
+          <button type="button" className="btn btn-ghost" onClick={immediatelyDecompose}>立刻拆解</button>
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={()=>void decidePersonalized()}>继续</button>
         </div>
       </>}
       {phase==='questions' && mode!=='grill' && <>
@@ -298,8 +449,8 @@ export default function DecomposeSheet({ config, onSave, onClose, onModelAttempt
           </div>
         </div>)}
         <div className="sheet-actions meeting-actions">
-          <button className="btn btn-ghost" onClick={()=>{setPlan(null);setChecked([]);setPhase('entry');}}>放弃方案（保留草稿）</button>
-          <button className="btn btn-ghost" onClick={()=>{setPhase('entry');setError('');}}>返回修改</button>
+          <button className="btn btn-ghost" onClick={()=>{setPlan(null);setChecked([]);setPhase('entry');reportJob({status:'idle'});}}>放弃方案（保留草稿）</button>
+          <button className="btn btn-ghost" onClick={()=>{setPhase('entry');setError('');reportJob({status:'idle'});}}>返回修改</button>
           <button className="btn btn-ghost" onClick={()=>save(false)}>只保存不排日程</button>
           <button className="btn btn-primary" onClick={()=>save(true)}>加入我的目标并排日程</button>
         </div>
