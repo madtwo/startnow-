@@ -1,0 +1,27 @@
+{
+  "version": "q01-adversarial-20-v1",
+  "provenance": "assistant-authored-synthetic-no-player-content",
+  "status": "characterization-only-not-human-review",
+  "cases": [
+    { "id": "A01", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "你帮他把那个问题写下来了。", "expected": true },
+    { "id": "A02", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "你替她把那个问题写下来了。", "expected": true },
+    { "id": "A03", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "他帮你把那个问题写下来了。", "expected": false },
+    { "id": "A04", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "我看着你把那个问题写下来了。", "expected": true },
+    { "id": "A05", "kind": "adversarial", "anchor": "打开简历", "text": "她看着你把简历打开了。", "expected": true },
+    { "id": "A06", "kind": "adversarial", "anchor": "打开简历", "text": "你看着她把简历打开了。", "expected": false },
+    { "id": "A07", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "那个问题你已经写下来了，室友也写下来了。", "expected": true },
+    { "id": "A08", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "那个问题你和我一起写下来了。", "expected": true },
+    { "id": "A09", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "我和你一起写下了那个问题。", "expected": true },
+    { "id": "A10", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "那个问题你同桌写下来了。", "expected": false },
+    { "id": "A11", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "那个问题，你老师写下来了。", "expected": false },
+    { "id": "A12", "kind": "adversarial", "anchor": "打开简历", "text": "他替你打开了简历。", "expected": false },
+    { "id": "A13", "kind": "adversarial", "anchor": "打开简历", "text": "他的简历你打开了。", "expected": true },
+    { "id": "A14", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "我已经让你把那个问题写下来了。", "expected": true },
+    { "id": "A15", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "他看着你把问题写下来了。", "expected": true },
+    { "id": "A16", "kind": "adversarial", "anchor": "打开简历", "text": "她替你把简历打开了。", "expected": false },
+    { "id": "A17", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "那个问题是你自己写下来的。", "expected": true },
+    { "id": "A18", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "那个问题写下来了，我只是看着。", "expected": true },
+    { "id": "A19", "kind": "adversarial", "anchor": "写出一个尚未确定的问题", "text": "我对这个问题还有一点好奇，你已经写下来了。", "expected": true },
+    { "id": "A20", "kind": "adversarial", "anchor": "打开简历", "text": "你的朋友把简历打开了。", "expected": false }
+  ]
+}

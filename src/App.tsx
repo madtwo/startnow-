@@ -35,6 +35,7 @@ import { auditCriticalContent, auditSocial, auditTone } from './lib/baseline';
 import { containsCrisis, hasCrisisInArchive } from './lib/submissionGuard';
 import { createOperationGate } from './lib/operationGate';
 import { adviceContextCheck, type AdviceContextReason, type AdviceStart } from './lib/adviceContext';
+import { sanitizeCardLineSources } from './lib/adviceLine';
 import { advanceBragMinutes, cancelBragsForNewWorry, cancelBragsForPersona, triggerNextBrag } from './lib/brag';
 import { forgetAll, forgetOne, forgetRole } from './lib/memoryControl';
 import { modelFailureNotice } from './lib/modelStatus';
@@ -205,9 +206,9 @@ export default function App() {
       const seeded = personas.every((p) => p.memory.length === 0)
         ? seedMemories(personas)
         : personas;
-      return { cards: withGuide(loadCards()), personas: ensureMinds(seeded) };
+      return { cards: withGuide(loadCards().map(sanitizeCardLineSources)), personas: ensureMinds(seeded) };
     }
-    return { cards: withGuide(loadCards()), personas: ensureMinds(loadPersonas()) };
+    return { cards: withGuide(loadCards().map(sanitizeCardLineSources)), personas: ensureMinds(loadPersonas()) };
   });
   // 同步变更时立即推进版本号，不依赖 React 下一次 render 的时间。
   const gate = useRef(createOperationGate());
@@ -1440,7 +1441,9 @@ export default function App() {
     clearOpeningStage();
     setOpeningGateFlag(null);
     setCards(
-      bundle.cards.some((c) => c.kind === 'guide') ? bundle.cards : [buildGuideCard(), ...bundle.cards],
+      bundle.cards.some((c) => c.kind === 'guide')
+        ? bundle.cards.map(sanitizeCardLineSources)
+        : [buildGuideCard(), ...bundle.cards.map(sanitizeCardLineSources)],
     );
     setPersonas(ensureMinds(bundle.personas));
     setWorld(bundle.world);

@@ -1,0 +1,413 @@
+{
+  "version": "q01-candidate-extension-58-v1",
+  "provenance": "assistant-authored-synthetic-no-player-content",
+  "status": "candidate-labels-not-human-reviewed",
+  "cases": [
+    {
+      "id": "E01",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "小明把简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E02",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "老师已经把简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E03",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你的简历，你的朋友已经打开了。",
+      "expected": false
+    },
+    {
+      "id": "E04",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你的简历你打开了。",
+      "expected": true
+    },
+    {
+      "id": "E05",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你的简历，他看着你打开了。",
+      "expected": true
+    },
+    {
+      "id": "E06",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你的简历，你看着他打开了。",
+      "expected": false
+    },
+    {
+      "id": "E07",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "她帮你把那个问题写好了。",
+      "expected": false
+    },
+    {
+      "id": "E08",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "你帮她把那个问题写好了。",
+      "expected": true
+    },
+    {
+      "id": "E09",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "你把那个问题写好了，后来她也写好了。",
+      "expected": true
+    },
+    {
+      "id": "E10",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "她没写那个问题，你已经写下来了。",
+      "expected": true
+    },
+    {
+      "id": "E11",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "你没写那个问题，他已经写下来了。",
+      "expected": false
+    },
+    {
+      "id": "E12",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "她写好了那个问题，但你还没写。",
+      "expected": false
+    },
+    {
+      "id": "E13",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "他看着我把简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E14",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "他看着你把简历打开了。",
+      "expected": true
+    },
+    {
+      "id": "E15",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "我叫你把简历打开了。",
+      "expected": true
+    },
+    {
+      "id": "E16",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "他让我把简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E17",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "我和你共同写下了那个问题。",
+      "expected": true
+    },
+    {
+      "id": "E18",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "我跟你一起写好那个问题了。",
+      "expected": true
+    },
+    {
+      "id": "E19",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "我跟他一起写好那个问题了。",
+      "expected": false
+    },
+    {
+      "id": "E20",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "你和朋友一起写好那个问题了。",
+      "expected": true
+    },
+    {
+      "id": "E21",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "你和我的朋友一起写好那个问题了。",
+      "expected": true
+    },
+    {
+      "id": "E22",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "我的朋友和你一起把那个问题写下来了。",
+      "expected": true
+    },
+    {
+      "id": "E23",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "我让你的朋友把简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E24",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你让他把简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E25",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你叫我把简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E26",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你觉得他把简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E27",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "他觉得你把简历打开了。",
+      "expected": true
+    },
+    {
+      "id": "E28",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你帮他把简历打开了。",
+      "expected": true
+    },
+    {
+      "id": "E29",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "他帮你把简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E30",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "那个问题，你的朋友也已经帮你写下来了。",
+      "expected": false
+    },
+    {
+      "id": "E31",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "那个问题，你帮我的朋友写下来了。",
+      "expected": true
+    },
+    {
+      "id": "E32",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "他和你共同把那个问题写下来了。",
+      "expected": true
+    },
+    {
+      "id": "E33",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "你和他共同把那个问题写下来了。",
+      "expected": true
+    },
+    {
+      "id": "E34",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "你也已经写下来了，不管他怎么样。",
+      "expected": false
+    },
+    {
+      "id": "E35",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "他写下来了，你还没写。",
+      "expected": false
+    },
+    {
+      "id": "E36",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "她写下了那个问题，你已经把那个问题写下来了。",
+      "expected": true
+    },
+    {
+      "id": "E37",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你看着简历已经打开了。",
+      "expected": false
+    },
+    {
+      "id": "E38",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "我看着简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E39",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你的同桌说你把简历打开了。",
+      "expected": true
+    },
+    {
+      "id": "E40",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "你说你的同桌把简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E41",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "我看到那个问题你写下来了。",
+      "expected": true
+    },
+    {
+      "id": "E42",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "你看到那个问题他写下来了。",
+      "expected": false
+    },
+    {
+      "id": "E43",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "隔壁同学已经把那个问题写下来了。",
+      "expected": false
+    },
+    {
+      "id": "E44",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "那个问题小王已经写下来了。",
+      "expected": false
+    },
+    {
+      "id": "E45",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "那个问题别人已经写下来了。",
+      "expected": false
+    },
+    {
+      "id": "E46",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "那个问题由他写下来了。",
+      "expected": false
+    },
+    {
+      "id": "E47",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "简历已经被他打开了。",
+      "expected": false
+    },
+    {
+      "id": "E48",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "简历已经被我打开了。",
+      "expected": false
+    },
+    {
+      "id": "E49",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "简历已经被你打开了。",
+      "expected": true
+    },
+    {
+      "id": "E50",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "简历已经被老师打开了。",
+      "expected": false
+    },
+    {
+      "id": "E51",
+      "kind": "extension",
+      "anchor": "打开简历",
+      "text": "他把你的简历打开了。",
+      "expected": false
+    },
+    {
+      "id": "E52",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "你的朋友见你写下了那个问题。",
+      "expected": true
+    },
+    {
+      "id": "E53",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "你的朋友已经帮你写下来了。",
+      "expected": false
+    },
+    {
+      "id": "E54",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "那个问题已经由你写下来了。",
+      "expected": true
+    },
+    {
+      "id": "E55",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "那个问题在你帮助下她写下来了。",
+      "expected": false
+    },
+    {
+      "id": "E56",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "那个问题在她帮助下你写下来了。",
+      "expected": true
+    },
+    {
+      "id": "E57",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "她写好了那个问题，我只是看着。",
+      "expected": false
+    },
+    {
+      "id": "E58",
+      "kind": "extension",
+      "anchor": "写出一个尚未确定的问题",
+      "text": "我写好了那个问题，你只是看着。",
+      "expected": false
+    }
+  ]
+}

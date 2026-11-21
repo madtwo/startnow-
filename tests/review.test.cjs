@@ -228,7 +228,8 @@ test('动作编号被采用且缩小保持同一条链', async () => {
     const advice=result.cards[0].advice;
     assert.equal(advice.actionId,'draft-3');
     assert.equal(advice.origin,'curated');
-    assert.equal(advice.text,'我会先把文档打开，只写标题和三个小标题，正文先不管。');
+    assert.equal(advice.lineSource,'curated');
+    assert.equal(advice.text,'先打开文档，写标题和三个小标题，正文先不碰。');
     assert.equal(shrinkAdvice(result.cards[0],now+1).advice.actionId,'draft-2');
   } finally {global.fetch=before;}
 });

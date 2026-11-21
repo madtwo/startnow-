@@ -151,6 +151,8 @@ export interface Comment {
   parentAdviceSource?: string;
   // 不给本地生成或审查回退的台词伪装成真实模型输出。
   origin?: 'model' | 'demo' | 'boundary' | 'curated' | 'simulated' | 'system' | 'material';
+  /** Wording provenance; origin still records action provenance. */
+  lineSource?: 'model' | 'curated' | 'demo';
   /** Stable ID for local curated action copy; never set for model prose. */
   actionId?: string;
   /** Source-backed once-per-week acknowledgment of a player's suggestion. */
@@ -171,6 +173,8 @@ export interface Advice {
   shrinkDepth?: number;
   parentAdviceSource?: string;
   origin?: 'curated' | 'demo' | 'adopted' | 'material';
+  /** Wording provenance; absent on legacy cards. */
+  lineSource?: 'model' | 'curated' | 'demo';
   materialAnchorId?: string;
   materialSource?: 'model' | 'template';
 }
@@ -251,6 +255,8 @@ export interface Card {
   /** One-time repair marker for old goal-card comments that lost their reply queue. */
   goalReplyBackfillAt?: number;
   createdAt: number;
+  /** Recorded addPlayerComment time (user-writable metadata, not a security proof); legacy imports do not reset idle expiry. */
+  lastPlayerActivityAt?: number;
   status: CardStatus;
   arrivals: string[];
   plan: PlannedArrival[];

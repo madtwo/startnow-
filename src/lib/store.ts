@@ -27,6 +27,7 @@ import { validateMaterialStep } from './materialAdvice';
 import { isManipulative } from './agentVulnerability';
 import { stripAiProvenance } from './displayText';
 import { OPENING_GATE_KEY, validPlayerIntroText } from './openingGate';
+import { repairForumComments, repairForumPending, repairForumPlan } from './forumArchive';
 
 const KEYS = {
   config: 'shudong.config.v1',
@@ -144,11 +145,7 @@ const retention = (cards: Card[], now = Date.now()) =>
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 200);
 
-const isTimedPersonaRow = (row: unknown): row is { personaId: string; at: number } =>
-  Boolean(row) && typeof (row as { personaId?: unknown }).personaId === 'string' &&
-  Number.isFinite((row as { at?: unknown }).at);
-
-const normalizeCard = (raw: Partial<Card>): Card | null => {
+const normalizeCard = (raw: Partial<Card>, allowedPersonas?: ReadonlySet<string>): Card | null => {
   if (!raw || typeof raw.text !== 'string' || hasPlayerCrisis(raw) ||
       (raw.authorKind==='persona' && isManipulative(raw.text))) return null;
   const validImage = typeof raw.image==='string' &&
@@ -184,13 +181,21 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     const checked = validateMaterialStep(rawAdvice.text, material);
     return checked.ok && checked.anchorId === rawAdvice.materialAnchorId;
   })();
-  const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : Date.now();
+  const createdAt = typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt) && raw.createdAt >= 0 ? raw.createdAt : Date.now();
   const text = stripAiProvenance(raw.text);
+  const validComments = Array.isArray(raw.comments)
+    ? raw.comments.filter((row) => row && typeof row.text === 'string' &&
+        typeof row.authorId === 'string' &&
+        ['player', 'persona', 'helper'].includes(row.authorKind) &&
+        !(row.authorKind === 'persona' && isManipulative(row.text)))
+      .map((row) => ({ ...row, growthReference: row.authorKind === 'persona' && row.growthReference === true }))
+    : [];
+  const { comments, ambiguousIds } = repairForumComments(validComments, createdAt);
   const playerIntro = raw.playerIntro === true && raw.authorKind === 'player' && raw.authorId === 'me' &&
     (raw.kind === 'worry' || raw.kind === undefined) && !raw.goalId && !raw.image &&
     !raw.material && !raw.intro && validPlayerIntroText(text);
   return {
-    id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
+    id: typeof raw.id === 'string' && raw.id.trim() && raw.id.length <= 128 ? raw.id : crypto.randomUUID(),
     authorId: typeof raw.authorId === 'string' ? raw.authorId : 'me',
     authorName: typeof raw.authorName === 'string' ? raw.authorName : '我',
     authorKind:
@@ -227,19 +232,21 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     likedByMe: Boolean(raw.likedByMe),
     text,
     createdAt,
+    // Preserve only plausible local activity markers backed by a real player
+    // comment at the same timestamp; legacy imports without a marker expire
+    // from creation time, even if a comment timestamp looks recent.
+    lastPlayerActivityAt: Number.isFinite(raw.lastPlayerActivityAt) &&
+      (raw.lastPlayerActivityAt as number) >= createdAt &&
+      (raw.lastPlayerActivityAt as number) <= Date.now() &&
+      comments.some(row => row.authorKind === 'player' && row.at === raw.lastPlayerActivityAt)
+      ? raw.lastPlayerActivityAt : undefined,
     status: raw.status ?? 'stuck',
-    arrivals: playerIntro ? [] : Array.isArray(raw.arrivals) ? raw.arrivals.filter((id): id is string => typeof id === 'string') : [],
-    plan: playerIntro ? [] :
-      Array.isArray(raw.plan) ? raw.plan.filter(isTimedPersonaRow) : [],
-    pending: playerIntro ? [] :
-      Array.isArray(raw.pending) ? raw.pending.filter(isTimedPersonaRow) : [],
-    comments: Array.isArray(raw.comments)
-      ? raw.comments.filter((row) => row && typeof row.text === 'string' &&
-          typeof row.authorId === 'string' &&
-          ['player', 'persona', 'helper'].includes(row.authorKind) &&
-          !(row.authorKind==='persona' && isManipulative(row.text)))
-        .map((row) => ({...row,growthReference:row.authorKind==='persona' && row.growthReference===true}))
-      : [],
+    arrivals: playerIntro ? [] : Array.isArray(raw.arrivals)
+      ? [...new Set(raw.arrivals.filter((id): id is string => typeof id === 'string' &&
+          id.length > 0 && id.length <= 128 && (!allowedPersonas || allowedPersonas.has(id))))] : [],
+    plan: playerIntro ? [] : repairForumPlan(raw.plan, allowedPersonas),
+    pending: playerIntro ? [] : repairForumPending(raw.pending, comments, ambiguousIds, allowedPersonas),
+    comments,
     advice: rawAdvice && importMaterialAdviceValid
       ? { ...rawAdvice, text: typeof rawAdvice.text === 'string' ? rawAdvice.text : '一个办法' }
       : undefined,
@@ -263,8 +270,23 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
 };
 
 /** Only the earliest valid introduction is authoritative, even for an imported archive. */
-export function normalizeCardRows(rows: readonly Partial<Card>[]): Card[] {
-  const parsed = rows.map(normalizeCard).filter((card): card is Card => Boolean(card));
+export function normalizeCardRows(rows: readonly Partial<Card>[], personaIds?: readonly string[]): Card[] {
+  const allowedPersonas = personaIds ? new Set(personaIds) : undefined;
+  const parsed = rows.map(row => normalizeCard(row, allowedPersonas)).filter((card): card is Card => Boolean(card));
+  const counts = new Map<string, number>();
+  for (const card of parsed) counts.set(card.id, (counts.get(card.id) ?? 0) + 1);
+  const ambiguous = new Set([...counts].filter(([, count]) => count > 1).map(([id]) => id));
+  const used = new Set(counts.keys());
+  for (const card of parsed) {
+    // Keep both conversations; an ambiguous card id must not route UI updates
+    // into the first match or give a brag a fabricated source relationship.
+    if (ambiguous.has(card.id)) {
+      do { card.id = crypto.randomUUID(); } while (used.has(card.id));
+      used.add(card.id);
+    }
+    if (card.sourceCardId && ambiguous.has(card.sourceCardId)) card.sourceCardId = undefined;
+    if (card.bragCardId && ambiguous.has(card.bragCardId)) card.bragCardId = undefined;
+  }
   const firstIntro = parsed.filter(card => card.playerIntro).sort((a, b) => a.createdAt - b.createdAt)[0];
   let found = false;
   return parsed.map(card => {
@@ -277,7 +299,7 @@ export function normalizeCardRows(rows: readonly Partial<Card>[]): Card[] {
 export function loadCards(): Card[] {
   const saved = read(KEYS.cards);
   if (Array.isArray(saved)) {
-    return retention(normalizeCardRows(saved));
+    return retention(normalizeCardRows(saved, loadPersonas().map(persona => persona.id)));
   }
   // 旧版卡片：保留你自己开的卡，AI 的卡换成新种子
   const legacy =
@@ -287,7 +309,7 @@ export function loadCards(): Card[] {
     read('shudong.cards.v2') ??
     read('shudong.cards.v1');
   if (Array.isArray(legacy)) {
-    const mine = normalizeCardRows(legacy)
+    const mine = normalizeCardRows(legacy, loadPersonas().map(persona => persona.id))
       .filter((c) => c.authorId === 'me');
     return retention([...mine, ...buildSeedCards()]);
   }
@@ -638,11 +660,12 @@ export function importBundle(raw: string): Bundle | null {
       return true;
     });
     if (!valid) return null;
+    const personas = mergeImportedPersonaHistory(data.personas);
     return {
       version: 3,
       exportedAt: typeof data.exportedAt === 'number' ? data.exportedAt : Date.now(),
-      cards: retention(normalizeCardRows(data.cards as Partial<Card>[])),
-      personas: mergeImportedPersonaHistory(data.personas),
+      cards: retention(normalizeCardRows(data.cards as Partial<Card>[], personas.map(persona => persona.id))),
+      personas,
       // 调用计数属于本设备的当日预算，导入存档不能把它清零或改写。
       world: { ...cleanWorld(data.world), dayKey: loadWorld().dayKey, callsToday: loadWorld().callsToday },
       settings: {
