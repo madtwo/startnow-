@@ -336,6 +336,42 @@ export default function App() {
   const [, refreshClock] = useState(0);
 
   useEffect(() => saveCards(cards), [cards]);
+  // Keep browser back/forward aligned with the app's own view state instead of
+  // leaving the site from a detail/goal/schedule page.
+  const historyReady = useRef(false);
+  const historySuppress = useRef(false);
+  useEffect(() => {
+    const state = { __app: true, view, homeTab, detailId, goalId };
+    if (!historyReady.current) {
+      window.history.replaceState(state, '', window.location.href);
+      historyReady.current = true;
+      return;
+    }
+    if (historySuppress.current) {
+      historySuppress.current = false;
+      return;
+    }
+    window.history.pushState(state, '', window.location.href);
+  }, [view, homeTab, detailId, goalId]);
+  useEffect(() => {
+    const onPop = (event: PopStateEvent) => {
+      const state = event.state as {
+        __app?: boolean; view?: View; homeTab?: 'step' | 'forum'; detailId?: string; goalId?: string;
+      } | null;
+      if (!state?.__app || !state.view) return;
+      historySuppress.current = true;
+      setView(state.view);
+      setHomeTab(state.homeTab === 'forum' ? 'forum' : 'step');
+      setDetailId(typeof state.detailId === 'string' ? state.detailId : '');
+      setGoalId(typeof state.goalId === 'string' ? state.goalId : '');
+      setSettingsOpen(false);
+      setAdminOpen(false);
+      setDrawerOpen(false);
+      setDecomposeOpen(false);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   useEffect(() => {
     // Derived from actual card flags; reading a card, rather than scrolling, advances the gate.
     if (openingGateFlag !== openingPhase) setOpeningGateFlag(openingPhase);
@@ -2169,7 +2205,7 @@ export default function App() {
             onAccept={() => patch(detailCard.id, (c) => acceptAdvice(c))}
             onDone={() => completeCardSafely(detailCard)}
             onCloseCard={() => patch(detailCard.id, (c) => closeCard(c))}
-            onBack={() => setView('home')}
+            onBack={() => window.history.back()}
             onLike={() => like(detailCard)}
             onCheer={() => cheer(detailCard)}
             onReidentify={detailCard.image ? ()=>void scanMaterial(detailCard.id,detailCard.image!) : undefined}
@@ -2624,7 +2660,7 @@ export default function App() {
       {!COMPETITION_MODE && view === 'goal' && activeGoal && (
         <GoalDetail
           goal={activeGoal}
-          onBack={() => setView('home')}
+          onBack={() => window.history.back()}
           onToggle={toggleGoalStep}
           onShare={() => shareMyGoal(activeGoal)}
           onDelete={(remove) => dropGoal(activeGoal.id, remove)}
