@@ -13,6 +13,7 @@ import { canRequestSmallerComment } from '../lib/freeTextShrink';
 import { latestCommentId, orderThreadComments } from '../lib/threading';
 import { isCommentInView, keyboardLift, scrollDeltaForComment } from '../lib/threadViewport';
 import { parseMaterialDeadline, confirmedDeadline, deadlineInputValue } from '../lib/deadline';
+import { canUseNextStep, isActionableStepText } from '../lib/cardPolicy';
 
 interface Props {
   card: Card;
@@ -66,6 +67,7 @@ export default function CardDetail({
   initialPeer,
 }: Props) {
   const defaultTarget = card.authorKind === 'persona' ? card.authorId : '';
+  const nextStepAllowed = canUseNextStep(card);
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<'comment' | 'advice'>('comment');
   const [targetId, setTargetId] = useState(initialPeer || defaultTarget);
@@ -282,9 +284,10 @@ export default function CardDetail({
       ? parent.authorKind === 'player' ? '你' : peerName(parent.authorId)
       : comment.peer && comment.peer !== card.authorId ? peerName(comment.peer) : '';
     const pc = persona?.color ?? (isMe ? '#c96442' : 'var(--warm-silver)');
-    const adoptable = mine && !isGuide && !closed && card.status !== 'noted' &&
+    const adoptable = mine && !isGuide && !closed && nextStepAllowed && card.status !== 'noted' &&
       !card.advice?.accepted && comment.authorKind === 'persona' &&
-      comment.origin !== 'boundary' && comment.origin !== 'system' && Boolean(persona);
+      comment.origin !== 'boundary' && comment.origin !== 'system' && Boolean(persona) &&
+      (Boolean(comment.actionId) || isActionableStepText(comment.text));
     return (
       <div className={`forum-thread forum-depth-${visualDepth}`} key={comment.id} data-depth={visualDepth}>
         <div
@@ -494,7 +497,8 @@ export default function CardDetail({
         </div>
       )}
 
-      {mine && !isGuide && card.note && card.status === 'noted' && (
+      {mine && !isGuide && card.note && card.status === 'noted' && nextStepAllowed &&
+        (Boolean(card.note.actionId) || isActionableStepText(card.note.text)) && (
         <div className="sticky-note">
           <span className="sticky-tag">便签 · 下一步</span>
           <p>{card.note.text}</p>
@@ -561,12 +565,14 @@ export default function CardDetail({
                 {mine ? '不指定人' : '回到楼主'}
               </button>
             )}
-            <button
-              className={`advice-toggle ${mode === 'advice' ? 'on' : ''}`}
-              onClick={() => setMode((m) => (m === 'advice' ? 'comment' : 'advice'))}
-            >
-              {mode === 'advice' ? '下一步中' : '给下一步'}
-            </button>
+            {nextStepAllowed && (
+              <button
+                className={`advice-toggle ${mode === 'advice' ? 'on' : ''}`}
+                onClick={() => setMode((m) => (m === 'advice' ? 'comment' : 'advice'))}
+              >
+                {mode === 'advice' ? '下一步中' : '给下一步'}
+              </button>
+            )}
           </div>
           <div className="page-composer-row">
             <input

@@ -1,5 +1,6 @@
 import type { Note, Persona } from '../types';
 import { actionMap } from './actions';
+import { isActionableStepText } from './cardPolicy';
 import { auditCriticalContent, auditSocial, auditTone } from './baseline';
 import { findCrisis } from './safety';
 
@@ -11,6 +12,7 @@ export function completedActionAnchor(note?: Note): string {
       /(?:忽略|无视).{0,12}(?:规则|指令|限制|提示词|system|系统)|<[^>]{0,80}>|https?:\/\//i.test(source)) {
     return '刚才那件小事';
   }
+  if (!note?.actionId && !isActionableStepText(source)) return '刚才那件小事';
   // Free-text suggestions stay intact on the note. This is only a short, safe reference.
   if (source.length > 48) return '刚才那件小事';
   const parts = source.split(/[，。！？；\n]/).map((part) => part.trim()).filter(Boolean);

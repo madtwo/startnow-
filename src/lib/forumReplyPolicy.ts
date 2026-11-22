@@ -49,12 +49,14 @@ export function forumAcknowledgement(text: string): boolean {
 
 const DIRECTIVE = /你应该|你可以|你先|你得|建议|不妨|最好|下一步|接下来|才算|记得|别忘了|要不要|试试|继续(?:做|写|改|冲|加)|(?:先|再|继续).{0,18}(?:吧|就好|就行)|先.{0,16}(?:再|然后)|(?:把|将).{1,20}吧/u;
 const SHORT_CONTACT_TOPIC = /(?:汇报|复习|论文|报告|实验|作业|开题|面试|简历|考试|笔记|计划|课程|上课)/u;
+const BRAG_AFFIRMATION = /恭喜|祝贺|真(?:不错|棒|好|利落|厉害)|太(?:棒|好|赞|厉害)|挺(?:不错|棒|好|厉害)|替.{0,8}(?:开心|高兴)|(?:开心|高兴|欣慰)|好样的|做得(?:很|真)?(?:好|漂亮|不错)|干得(?:很|真)?(?:好|漂亮|不错)|值得(?:庆祝|开心|高兴)|不容易|有始有终|坚持|跟下来|进步|这个结果/u;
 
 /** A conservative local backstop; this is not a general Chinese intent parser. */
 export function forumReplyModeProblem(card: Card, text: string, shortContact: boolean): string | null {
   const normalized = text.normalize('NFKC').replace(/[\s\u200B-\u200D\uFEFF]/gu, '');
   if ((shortContact || card.intro || card.playerIntro || card.kind === 'brag' || card.kind === 'life' ||
       isGoalResultCard(card)) && DIRECTIVE.test(normalized)) return 'unsolicited_action';
+  if (card.kind === 'brag' && !BRAG_AFFIRMATION.test(normalized)) return 'off_card';
   // A "嗯嗯" turn should stay a short acknowledgement, not turn into a new
   // presentation/diary entry. This is a length guard, not a topic classifier.
   if (shortContact && ([...normalized].length > 24 || SHORT_CONTACT_TOPIC.test(normalized))) {

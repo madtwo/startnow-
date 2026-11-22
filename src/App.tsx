@@ -672,6 +672,15 @@ export default function App() {
   const patch = (id: string, fn: (card: Card) => Card) =>
     setCards((prev) => prev.map((c) => (c.id === id ? fn(c) : c)));
 
+  const completeCardSafely = (card: Card) => {
+    const next = completeCard(card, Date.now(), settings.speed);
+    if (next === card) {
+      setToast('这条更像回应，不是可完成的下一步；先换一条具体建议。');
+      return;
+    }
+    patch(card.id, () => next);
+  };
+
   const switchTo = (next: View, tab?: 'step' | 'forum') => {
     window.scrollTo({ top: 0, behavior: 'auto' });
     if (tab) setHomeTab(tab);
@@ -1959,7 +1968,7 @@ export default function App() {
               onAccept={(card) => patch(card.id, (c) => acceptAdvice(c))}
               onShrink={(card) => patch(card.id, (c) => shrinkAdvice(c))}
               onRequestSmaller={(card) => void requestSmaller(card)}
-              onDone={(card) => patch(card.id, (c) => completeCard(c, Date.now(), settings.speed))}
+              onDone={(card) => completeCardSafely(card)}
               onAdvice={(card) => requestAdvice(card)}
               onWrite={() => setView('post')}
               onForum={() => setHomeTab('forum')}
@@ -2158,7 +2167,7 @@ export default function App() {
             onShrink={() => patch(detailCard.id, (c) => shrinkAdvice(c))}
             onRequestSmaller={() => void requestSmaller(detailCard)}
             onAccept={() => patch(detailCard.id, (c) => acceptAdvice(c))}
-            onDone={() => patch(detailCard.id, (c) => completeCard(c, Date.now(), settings.speed))}
+            onDone={() => completeCardSafely(detailCard)}
             onCloseCard={() => patch(detailCard.id, (c) => closeCard(c))}
             onBack={() => setView('home')}
             onLike={() => like(detailCard)}

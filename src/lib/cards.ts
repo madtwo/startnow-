@@ -32,6 +32,7 @@ import { completedActionAnchor, fallbackCompletionReaction, isGroundedCompletion
 import { diagnosticExcerpt } from './completionDiagnostics';
 import type { RejectedCompletionDiagnostic } from './completionDiagnostics';
 import { MAX_FREE_TEXT_SHRINK, canRequestSmallerComment, fallbackSmallerText, likelyFreeTextAction, safeSmallerText, validSmallerText } from './freeTextShrink';
+import { canUseNextStep, isActionableStepText } from './cardPolicy';
 import { actionLabel, inferTrouble, pickActions, recentActionUses, selectActionLine, smallerAction } from './actions';
 import { chooseAdviceCopy, parseAdviceChoice, validateAdviceLine } from './adviceLine';
 import { emitSyntheticAnchorRejection, type LocalAnchorProbe } from './adviceAnchorDiagnostics';
@@ -314,6 +315,9 @@ export function adoptCommentAdvice(
       card.status === 'noted' || card.advice?.accepted) {
     return { card, error: '这张卡已进入便签或完成状态，不能覆盖现有下一步' };
   }
+  if (!canUseNextStep(card)) {
+    return { card, error: '这张卡只收回应，不生成下一步' };
+  }
   if (hasPlayerCrisisInput(card)) return { card, error: '当前卡片需先显示危机求助提示' };
   const comment = card.comments.find((row) => row.id === commentId);
   if (!comment || comment.authorKind !== 'persona' ||
@@ -325,6 +329,9 @@ export function adoptCommentAdvice(
   if (!text || text.length > 600 || findCrisis(text) ||
       auditSocial(text) || auditCriticalContent(text)) {
     return { card, error: '这条回复包含不适合写入便签的内容，请换一条安全、具体的建议' };
+  }
+  if (!comment.actionId && !isActionableStepText(text)) {
+    return { card, error: '这条更像回应，不是下一步；换一条具体建议' };
   }
   const context = [card.text, ...card.comments.filter((row) => row.authorKind === 'player')
     .map((row) => row.text)].join(' ');
@@ -475,7 +482,8 @@ export function shrinkAdvice(card: Card, now = Date.now()): Card {
 }
 
 export function acceptAdvice(card: Card, now = Date.now()): Card {
-  if (card.status !== 'advised' || !card.advice || card.advice.accepted || hasPlayerCrisisInput(card)) return card;
+  if (!canUseNextStep(card) || card.status !== 'advised' || !card.advice || card.advice.accepted || hasPlayerCrisisInput(card)) return card;
+  if (!card.advice.actionId && !isActionableStepText(card.advice.text)) return card;
   return {
     ...card,
     status: 'noted',
@@ -499,8 +507,9 @@ export function closeCard(card: Card, now = Date.now()): Card {
 }
 
 export function completeCard(card: Card, now = Date.now(), speed = 6): Card {
-  if (card.authorId !== 'me' ||
+  if (!canUseNextStep(card) || card.authorId !== 'me' ||
       card.status !== 'noted' || !card.note || hasPlayerCrisisInput(card)) return card;
+  if (!card.note.actionId && !isActionableStepText(card.note.text)) return card;
   const rawLabel = (card.note?.text ?? '那件小事').replace(/\s+/g, ' ').trim();
   const label = (rawLabel.length > 48 ? `${rawLabel.slice(0, 48)}…` : rawLabel)
     .replace(/[。.!！?？]+$/u, '') || '那件小事';
@@ -562,6 +571,16 @@ const TENTATIVE: Record<string, (word: string) => string> = {
   weini: (word) => `嗯……${word}，我可能也说不好。你想从哪讲起？`,
   miaoze: (word) => `我也刚来，不太会回。${word}的话，先说是哪一件？`,
   yanggao: (word) => `哎，${word}啊。我其实也不太懂，不过你说，我听着。`,
+};
+
+// Brag cards ask for recognition, not for more context. Keep mock replies
+// congratulatory even when the persona is still unfamiliar.
+const BRAG_MOCK: Record<string, string[]> = {
+  shenmo: ['能把这件闲活跟完整天，也算有始有终。', '一整天跟下来，先把这个结果记着。'],
+  weini: ['嗯，一整天都跟下来了，挺不容易的。', '能跟完整天，已经说明不少了。'],
+  miaoze: ['一整天跟下来，这个结果挺具体。', '“闲”也是活，能跟完就是进展。'],
+  yanggao: ['哇，一整天！这个得记一下。', '跟了一整天，挺能扛啊。'],
+  default: ['这次有了具体进展，挺替你高兴。', '能坚持下来，先把这个结果记着。'],
 };
 
 const MOCK_LINES: Record<MockTopic, Record<string, { arrival: string[]; reply: string[] }>> = {
@@ -1026,6 +1045,13 @@ async function generateComment(
 
   if (isMock(ctx.config)) {
     if (isGoalResultCard(card)) return {kind:'reply',text:uniqueFallback(careFocus),origin:'demo'};
+    if (card.kind === 'brag') {
+      const rows = BRAG_MOCK[persona.id] ?? BRAG_MOCK.default;
+      const used = new Set(card.comments.filter((c) => c.authorId === persona.id).map((c) => c.text.trim()));
+      const fresh = rows.filter((line) => !used.has(line));
+      ctx.logs.push('brag 卡使用祝贺回复，不追问细节');
+      return { kind: 'reply', text: pick(fresh.length ? fresh : rows), origin: 'demo' };
+    }
     const isShort = shortContact;
     const text = persona.intimacy < 22 && card.comments.length === 0 && !isShort
       ? (TENTATIVE[persona.id]?.(TOPIC_WORD[topicGroup(inferTrouble(card.text))]) ?? mockComment(persona, card, phase, sourceCommentId))
