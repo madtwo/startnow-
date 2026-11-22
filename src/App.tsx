@@ -89,8 +89,12 @@ import {
   defaultSettings,
   emptyWorld,
   exportBundle,
+  exportCorruptStorage,
+  discardCorruptStorage,
   importBundle,
   isFirstRun,
+  listCorruptStorageKeys,
+  listFailedStorageKeys,
   loadCards,
   loadConfig,
   loadIdentity,
@@ -113,6 +117,7 @@ import {
   saveSchedule,
   saveSummaries,
   setStorageErrorHandler,
+  setStorageReadOnly,
 } from './lib/store';
 import type {
   Card,
@@ -133,6 +138,18 @@ import type {
 const TICK_MS = 4000;
 const MODEL_BACKOFF_MS = 60_000;
 const GUIDE_DISMISSED_KEY = 'startnow.guideDismissed';
+
+// UI preferences are best-effort metadata, not a reason to crash the app when
+// the browser blocks storage (private mode, enterprise policies, quota).
+const readUiPreference = (key: string): string | null => {
+  try { return localStorage.getItem(key); } catch { return null; }
+};
+const writeUiPreference = (key: string, value: string): void => {
+  try { localStorage.setItem(key, value); } catch { /* persistence banner handles main data */ }
+};
+const removeUiPreference = (key: string): void => {
+  try { localStorage.removeItem(key); } catch { /* best effort */ }
+};
 
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const SettingsDialog = lazy(() => import('./components/SettingsDialog'));
@@ -269,17 +286,17 @@ export default function App() {
   const adviceBypassed = useRef(new Set<string>());
   const [toast, setToast] = useState('');
   const [onboardOpen, setOnboardOpen] = useState(
-    () => localStorage.getItem('startnow.onboarded') !== '1',
+    () => readUiPreference('startnow.onboarded') !== '1',
   );
   const [modeChoiceOpen, setModeChoiceOpen] = useState(false);
   const [guideDismissed, setGuideDismissed] = useState(
-    () => localStorage.getItem(GUIDE_DISMISSED_KEY) === '1',
+    () => readUiPreference(GUIDE_DISMISSED_KEY) === '1',
   );
   const [view, setView] = useState<View>(() =>
     new URLSearchParams(window.location.search).has('room') ? 'room' : 'home',
   );
   const [homeTab, setHomeTab] = useState<'step' | 'forum'>(
-    () => (isFirstRun() || localStorage.getItem('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
+    () => (isFirstRun() || readUiPreference('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
   );
   const [forumQuery, setForumQuery] = useState('');
   const [forumFilter, setForumFilter] = useState<ForumFilter>('全部');
@@ -302,6 +319,9 @@ export default function App() {
   const setGoals: Dispatch<SetStateAction<Goal[]>> = (next) => { touch(); rawSetGoals(next); };
   const [schedule, setSchedule] = useState<ScheduleItem[]>(() => loadSchedule());
   const [summaries, setSummaries] = useState<DailySummary[]>(() => loadSummaries());
+  // Capture startup read/parse failures after every local data domain is loaded.
+  const [corruptKeys, setCorruptKeys] = useState(() => listCorruptStorageKeys());
+  const [storageFailed, setStorageFailed] = useState(() => listFailedStorageKeys().length > 0);
   const summaryLatest = useRef(summaries);
   summaryLatest.current = summaries;
   const [summaryBusy, setSummaryBusy] = useState(false);
@@ -404,9 +424,9 @@ export default function App() {
   useEffect(() => saveSummaries(summaries), [summaries]);
   // Do not launch a new API tick against refs from before a local goal/card commit.
   useEffect(() => { localPersonaWritePending.current = false; }, [cards, goals]);
-  useEffect(() => localStorage.setItem('startnow.homeTab', homeTab), [homeTab]);
+  useEffect(() => writeUiPreference('startnow.homeTab', homeTab), [homeTab]);
   useEffect(() => {
-    if (onboardOpen) localStorage.setItem('startnow.onboarded', '1');
+    if (onboardOpen) writeUiPreference('startnow.onboarded', '1');
   }, [onboardOpen]);
 
   useEffect(() => {
@@ -439,7 +459,9 @@ export default function App() {
     const onOtherTabChange = (event: StorageEvent) => {
       if (event.storageArea !== localStorage) return;
       const key = event.key;
-      if (key !== null && !/^shudong\.(cards|personas|world|settings|todos|identity|goals|schedule|summaries)\./.test(key)) return;
+      if (key !== null && !/^shudong\.(cards|personas|world|settings|todos|identity|goals|schedule|summaries|room|archives|roomsettings|config)\./.test(key)) return;
+      // Must be synchronous: React may still commit async work from this tab.
+      setStorageReadOnly(true);
       externalTabChanged.current = true;
       materialInFlight.current.forEach(controller=>controller.abort());
       materialInFlight.current.clear();
@@ -706,13 +728,11 @@ export default function App() {
   }, [cards, tick]);
 
   useEffect(() => {
-    let lastWarning = 0;
     setStorageErrorHandler(() => {
-      const now = Date.now();
-      if (now - lastWarning < 5000) return;
-      lastWarning = now;
-      setToast('本地保存失败：可能是空间不足或隐私模式。先导出备份，再清理空间。');
+      // Do not hide a data-loss warning after the normal toast timeout.
+      setStorageFailed(true);
     });
+    if (listFailedStorageKeys().length > 0) setStorageFailed(true);
     return () => setStorageErrorHandler(null);
   }, []);
 
@@ -1224,13 +1244,13 @@ export default function App() {
     const next = { ...defaultConfig };
     setConfig(next);
     saveConfig(next);
-    localStorage.setItem('startnow.modeChosen', '1');
+    writeUiPreference('startnow.modeChosen', '1');
     setModeChoiceOpen(false);
     setToast('演示模式：不用 Key，也能体验完整流程');
   };
 
   const chooseApi = () => {
-    localStorage.setItem('startnow.modeChosen', '1');
+    writeUiPreference('startnow.modeChosen', '1');
     setModeChoiceOpen(false);
     openSettings('选择服务商并填入 Key；不想接也可以先用演示模式。');
   };
@@ -1505,21 +1525,42 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const doExportCorrupt = () => {
+    const raw = exportCorruptStorage();
+    const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `startnow-corrupt-backup-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const doDiscardCorrupt = () => {
+    if (!window.confirm('仅丢弃上方列出的损坏条目并刷新页面。此操作不可撤销；请先下载原始数据备份。确认继续？')) return;
+    const result = discardCorruptStorage();
+    if (result.failed.length) {
+      setCorruptKeys(listCorruptStorageKeys());
+      setToast('有条目已被其他页面修改或无法移除，请先关闭其他标签页并刷新。');
+      return;
+    }
+    window.location.reload();
+  };
+
   const dismissGuide = () => {
     setGuideDismissed(true);
-    localStorage.setItem(GUIDE_DISMISSED_KEY, '1');
+    writeUiPreference(GUIDE_DISMISSED_KEY, '1');
   };
 
   const showRules = () => {
     setGuideDismissed(false);
-    localStorage.removeItem(GUIDE_DISMISSED_KEY);
+    removeUiPreference(GUIDE_DISMISSED_KEY);
     setHomeTab('forum');
     setView('home');
   };
 
   const resetGuideDismissed = () => {
     setGuideDismissed(false);
-    localStorage.removeItem(GUIDE_DISMISSED_KEY);
+    removeUiPreference(GUIDE_DISMISSED_KEY);
   };
 
   const clearNotices = () => {
@@ -2592,11 +2633,35 @@ export default function App() {
           hasToast={Boolean(toast || otherTabWarning)} />
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div className="toast" role="status">{toast}</div>}
+      {corruptKeys.length > 0 && !otherTabWarning && (
+        <section className="storage-recovery" role="alert" aria-label="本地数据恢复">
+          <strong>有 {corruptKeys.length} 项本地数据无法读取</strong>
+          <p>为防止覆盖，已停止自动写入这些损坏条目。建议先下载原始备份，再决定是否丢弃；当前页的修改可能无法保存。</p>
+          <p className="storage-recovery-keys">{corruptKeys.join('、')}</p>
+          <p className="storage-recovery-hint">原始备份可能包含私人内容或本机 API Key，请勿公开分享。</p>
+          <div className="storage-recovery-actions">
+            <button type="button" onClick={doExportCorrupt}>下载原始数据备份</button>
+            <button type="button" onClick={doDiscardCorrupt}>丢弃损坏条目并刷新</button>
+          </div>
+        </section>
+      )}
+      {storageFailed && !otherTabWarning && (
+        <section className="storage-recovery storage-recovery-write" role="alert" aria-label="本地保存失败">
+          <strong>本地保存受到限制</strong>
+          <p>可能是空间不足或浏览器隐私模式。本次修改可能只在当前页面有效，请立即导出当前存档并妥善保存。</p>
+          <div className="storage-recovery-actions">
+            <button type="button" onClick={doExport}>导出当前存档</button>
+          </div>
+        </section>
+      )}
       {otherTabWarning && (
-        <div className="toast" role="alert" style={{ bottom: 86 }}>
-          检测到其他标签页改动了 StartNow 数据；当前页已停止后台生成，以免覆盖新内容。请关闭其他标签页后
-          <button type="button" onClick={() => window.location.reload()}>刷新本页</button>。
+        <div className="storage-conflict-backdrop" role="alertdialog" aria-modal="true" aria-label="其他标签页修改了数据">
+          <div className="storage-conflict-panel">
+            <strong>另一标签页更新了 StartNow 数据</strong>
+            <p>此页面已停止所有本地数据写入和后台生成，避免旧状态覆盖新内容。请先关闭其他 StartNow 标签页，再刷新这里。</p>
+            <button type="button" autoFocus onClick={() => window.location.reload()}>刷新本页并读取最新数据</button>
+          </div>
         </div>
       )}
 
@@ -2727,7 +2792,7 @@ export default function App() {
         <Onboarding
           onClose={(skipped) => {
             setOnboardOpen(false);
-            if (!skipped && localStorage.getItem('startnow.modeChosen') !== '1') {
+            if (!skipped && readUiPreference('startnow.modeChosen') !== '1') {
               setModeChoiceOpen(true);
             }
           }}

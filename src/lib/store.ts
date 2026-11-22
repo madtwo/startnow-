@@ -52,12 +52,62 @@ const UI_KEYS = ['startnow.onboarded', 'startnow.modeChosen', 'startnow.mode', '
 // Independent room.html stores, same origin; a user's full reset should include these.
 const ROOM_KEYS = ['shudong.room.v1', 'shudong.archives.v1', 'shudong.roomsettings.v1'];
 
+// Corrupt JSON must never be silently replaced by an empty default on mount.
+// Keep the ORIGINAL bytes only in memory, so the owner can download a rescue
+// copy before explicitly discarding that particular entry. No logs or network.
+const corruptEntries = new Map<string, string>();
+const failedStorageKeys = new Set<string>();
+let storageReadOnly = false;
+const ARRAY_KEYS = new Set([
+  KEYS.cards, KEYS.personas, KEYS.todos, KEYS.archives, KEYS.goals,
+  KEYS.schedule, KEYS.summaries, ...LEGACY_CARD_KEYS,
+]);
+const OBJECT_KEYS = new Set([
+  KEYS.config, KEYS.world, KEYS.settings, KEYS.identity,
+  KEYS.identityLegacy, KEYS.room, KEYS.roomSettings,
+]);
+
+/** A second tab has newer data: block writes from this stale React tree. */
+export const setStorageReadOnly = (value: boolean): void => { storageReadOnly = value; };
+export const listCorruptStorageKeys = (): string[] => [...corruptEntries.keys()];
+export const listFailedStorageKeys = (): string[] => [...failedStorageKeys];
+
+/** This backup can contain PRIVATE content or an API key; download locally only. */
+export const exportCorruptStorage = (): string => JSON.stringify({
+  format: 'startnow-corrupt-local-storage-v1',
+  exportedAt: Date.now(),
+  entries: [...corruptEntries].map(([key, raw]) => ({ key, raw })),
+}, null, 2);
+
+/** Explicit, surgical recovery: never delete a key changed by another tab. */
+export function discardCorruptStorage(): { removed: string[]; failed: string[] } {
+  if (storageReadOnly) return { removed: [], failed: listCorruptStorageKeys() };
+  const removed: string[] = [];
+  const failed: string[] = [];
+  for (const [key, raw] of corruptEntries) {
+    try {
+      if (localStorage.getItem(key) !== raw) { failed.push(key); continue; }
+      localStorage.removeItem(key);
+      corruptEntries.delete(key);
+      failedStorageKeys.delete(key);
+      removed.push(key);
+    } catch { failed.push(key); }
+  }
+  return { removed, failed };
+}
+
+const safeGetItem = (key: string): string | null => {
+  try { return localStorage.getItem(key); }
+  catch { failedStorageKeys.add(key); return null; }
+};
+
 /** 旧 posts 格式不兼容：不在用户不知情的情况下静默迁移或丢弃。 */
 export const listLegacyPostKeys = (): string[] => {
   try { return LEGACY_POST_KEYS.filter((key) => localStorage.getItem(key) !== null); }
   catch { return []; }
 };
 export const deleteLegacyPosts = (): void => {
+  if (storageReadOnly) return;
   LEGACY_POST_KEYS.forEach((key) => { try { localStorage.removeItem(key); } catch { /* 存储受限 */ } });
 };
 
@@ -69,10 +119,21 @@ export const cleanStoredMemory = (rows: unknown): Persona['memory'] =>
 const DAY = 86_400_000;
 
 const read = (key: string): unknown => {
+  const raw = safeGetItem(key);
+  if (raw === null) return null;
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
+    const parsed: unknown = JSON.parse(raw);
+    // JSON can be syntactically valid but impossible for this storage domain.
+    // Quarantine only unequivocal shape errors; the normal loaders still
+    // validate/migrate finer details of legitimate legacy objects.
+    if ((ARRAY_KEYS.has(key) && !Array.isArray(parsed)) ||
+        (OBJECT_KEYS.has(key) && (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)))) {
+      throw new SyntaxError('unexpected storage root shape');
+    }
+    return parsed;
   } catch {
+    // Do not retain in console or analytics; an archive can include private data.
+    if (!corruptEntries.has(key)) corruptEntries.set(key, raw);
     return null;
   }
 };
@@ -86,9 +147,12 @@ export const setStorageErrorHandler = (handler: StorageErrorHandler | null): voi
 };
 
 const write = (key: string, value: unknown) => {
+  // In both cases, a write would irreversibly overwrite data we did not load.
+  if (storageReadOnly || corruptEntries.has(key)) return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
+    failedStorageKeys.add(key);
     try { storageErrorHandler?.(key); } catch { /* the warning handler must stay non-fatal */ }
   }
 };
@@ -138,14 +202,14 @@ export function loadConfig(): LlmConfig {
 export const saveConfig = (config: LlmConfig) => write(KEYS.config, config);
 
 const hasLegacyCards = () =>
-  LEGACY_CARD_KEYS.some((key) => localStorage.getItem(key) !== null);
+  LEGACY_CARD_KEYS.some((key) => safeGetItem(key) !== null);
 
 // `posts.v*` 是很早版本的帖子格式，当前没有兼容迁移；它不应挡住新版开场种子。
 export const isFirstRun = () =>
-  localStorage.getItem(KEYS.cards) === null && !hasLegacyCards();
+  safeGetItem(KEYS.cards) === null && !hasLegacyCards();
 
 export const needsUpgrade = () =>
-  localStorage.getItem(KEYS.cards) === null && hasLegacyCards();
+  safeGetItem(KEYS.cards) === null && hasLegacyCards();
 
 const retention = (cards: Card[], now = Date.now()) =>
   cards
@@ -702,9 +766,12 @@ export function importBundle(raw: string): Bundle | null {
 }
 
 export function clearAll() {
+  if (storageReadOnly) return;
   [...Object.values(KEYS), ...LEGACY_POST_KEYS, ...LEGACY_CARD_KEYS, ...UI_KEYS, ...ROOM_KEYS].forEach((key) => {
     try {
       localStorage.removeItem(key);
+      corruptEntries.delete(key);
+      failedStorageKeys.delete(key);
     } catch {
       // 忽略
     }

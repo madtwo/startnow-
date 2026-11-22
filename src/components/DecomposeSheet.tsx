@@ -348,7 +348,9 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     try {
       onSave({title:plan.title,detail:[goal,plan.assumptions.length?'【拆解假设（非事实）】'+plan.assumptions.join('；'):''].filter(Boolean).join('\n'),source,
         steps:plan.steps.filter((_,i)=>checked.includes(i)), dueAt:parseLocalDate(deadline)},schedule);
-      localStorage.removeItem(DECOMPOSE_DRAFT_KEY);
+      // A blocked preference cleanup must not make a successfully saved goal
+      // look like a failure and tempt the player to create it twice.
+      try { localStorage.removeItem(DECOMPOSE_DRAFT_KEY); } catch { /* storage disabled */ }
       reportJob({status:'idle'});
       setPlan(null);setChecked([]);setGoal('');setAnswers({});setGrillRounds([]);setGrillAnswers({});
       setPhase('entry');setDeadline('');setVisionText('');onClose();

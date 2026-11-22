@@ -1,0 +1,73 @@
+/* Storage diagnostics are intentionally persistent: transient toasts are unsafe
+   for lost writes or an unreadable local archive. */
+.storage-recovery {
+  position: fixed;
+  z-index: 260;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: min(620px, calc(100vw - 28px));
+  max-height: calc(100dvh - 36px);
+  overflow: auto;
+  padding: 17px 20px;
+  border: 1px solid #b4a0e8;
+  border-radius: 16px;
+  color: #2b2837;
+  background: #fcfaff;
+  box-shadow: 0 14px 38px rgb(37 27 74 / 20%);
+  font: 14px/1.55 system-ui, sans-serif;
+}
+.storage-recovery strong, .storage-conflict-panel strong { font-size: 16px; }
+.storage-recovery p, .storage-conflict-panel p { margin: 9px 0; }
+.storage-recovery-keys {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: #544676;
+}
+.storage-recovery-hint { font-size: 12px; }
+.storage-recovery-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.storage-recovery-actions button, .storage-conflict-panel button {
+  cursor: pointer;
+  border: 1px solid #a78bfa;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: #efeaff;
+  color: #302456;
+  font: inherit;
+  font-weight: 600;
+}
+.storage-recovery-actions button:focus-visible, .storage-conflict-panel button:focus-visible {
+  outline: 3px solid #6c5ce7;
+  outline-offset: 3px;
+}
+.storage-recovery-write {
+  top: auto;
+  bottom: max(88px, calc(70px + env(safe-area-inset-bottom)));
+  border-color: #cba884;
+  background: #fffbf4;
+}
+.storage-conflict-backdrop {
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 16px;
+  background: rgb(30 23 46 / 52%);
+}
+.storage-conflict-panel {
+  box-sizing: border-box;
+  width: min(480px, 100%);
+  padding: 24px;
+  border-radius: 16px;
+  background: #fff;
+  color: #2b2837;
+  box-shadow: 0 18px 56px rgb(30 23 46 / 25%);
+  font: 14px/1.6 system-ui, sans-serif;
+}
+@media (max-width: 440px) {
+  .storage-recovery { padding: 14px; }
+  .storage-recovery-actions button { flex: 1 1 100%; }
+}
