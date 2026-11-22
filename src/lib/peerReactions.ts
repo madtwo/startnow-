@@ -32,7 +32,15 @@ export function resultCardDetail(card: Card): string {
   const match = preferred.exec(card.text)?.[1]?.trim();
   const details = resultDetails(card);
   const part = match && details.includes(match) ? match : details[0];
-  return part ? [...part].slice(0, 16).join('') : '';
+  if (!part) return '';
+  const chars = [...part];
+  if (chars.length <= 16) return part;
+  const head = chars.slice(0, 16).join('');
+  const boundary = Math.max(
+    head.lastIndexOf('，'), head.lastIndexOf(','), head.lastIndexOf('；'),
+    head.lastIndexOf(';'), head.lastIndexOf('：'), head.lastIndexOf(':'), head.lastIndexOf(' '),
+  );
+  return `${boundary >= 4 ? head.slice(0, boundary) : head}…`;
 }
 
 export function hasResultCardAnchor(card: Card, text: string): boolean {
