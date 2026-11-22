@@ -48,7 +48,7 @@ const KEYS = {
 
 const LEGACY_POST_KEYS = ['shudong.posts.v3', 'shudong.posts.v2', 'shudong.posts.v1'];
 const LEGACY_CARD_KEYS = ['shudong.cards.v5', 'shudong.cards.v4', 'shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'];
-const UI_KEYS = ['startnow.onboarded', 'startnow.mode', 'startnow.homeTab', 'startnow.calendarView', 'shudong.decomposeDraft.v1', 'shudong.decomposeUsage.v1', 'startnow.lastCrisisAt', OPENING_GATE_KEY];
+const UI_KEYS = ['startnow.onboarded', 'startnow.modeChosen', 'startnow.mode', 'startnow.homeTab', 'startnow.calendarView', 'shudong.decomposeDraft.v1', 'shudong.decomposeUsage.v1', 'startnow.lastCrisisAt', OPENING_GATE_KEY];
 // Independent room.html stores, same origin; a user's full reset should include these.
 const ROOM_KEYS = ['shudong.room.v1', 'shudong.archives.v1', 'shudong.roomsettings.v1'];
 

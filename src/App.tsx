@@ -26,6 +26,7 @@ import { recordDecomposeAttempt } from './lib/decomposeUsage';
 import { DECOMPOSE_DRAFT_KEY } from './lib/decomposeDraft';
 import GoalDetail from './components/GoalDetail';
 import Onboarding from './components/Onboarding';
+import StartModeDialog from './components/StartModeDialog';
 import CrisisCard from './components/CrisisCard';
 import { defaultConfig, isMock, isReady } from './config/providers';
 import { HOTLINE, HOTLINE_SCOPE } from './lib/crisis';
@@ -270,6 +271,7 @@ export default function App() {
   const [onboardOpen, setOnboardOpen] = useState(
     () => localStorage.getItem('startnow.onboarded') !== '1',
   );
+  const [modeChoiceOpen, setModeChoiceOpen] = useState(false);
   const [guideDismissed, setGuideDismissed] = useState(
     () => localStorage.getItem(GUIDE_DISMISSED_KEY) === '1',
   );
@@ -1153,6 +1155,21 @@ export default function App() {
   const openSettings = (notice = '') => {
     setSettingsNotice(notice);
     setSettingsOpen(true);
+  };
+
+  const chooseDemo = () => {
+    const next = { ...defaultConfig };
+    setConfig(next);
+    saveConfig(next);
+    localStorage.setItem('startnow.modeChosen', '1');
+    setModeChoiceOpen(false);
+    setToast('演示模式：不用 Key，也能体验完整流程');
+  };
+
+  const chooseApi = () => {
+    localStorage.setItem('startnow.modeChosen', '1');
+    setModeChoiceOpen(false);
+    openSettings('选择服务商并填入 Key；不想接也可以先用演示模式。');
   };
 
   const bumpBrand = () => {
@@ -2645,10 +2662,17 @@ export default function App() {
 
       {onboardOpen && (
         <Onboarding
-          onClose={() => {
+          onClose={(skipped) => {
             setOnboardOpen(false);
+            if (!skipped && localStorage.getItem('startnow.modeChosen') !== '1') {
+              setModeChoiceOpen(true);
+            }
           }}
         />
+      )}
+
+      {modeChoiceOpen && (
+        <StartModeDialog onDemo={chooseDemo} onApi={chooseApi} />
       )}
 
       <footer className="foot">
