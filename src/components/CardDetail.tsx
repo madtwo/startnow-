@@ -525,7 +525,7 @@ export default function CardDetail({
         </div>
       )}
 
-      {mine && !card.advice && (card.arrivals.length > 0 || card.materialCaptureStep) && !closed && (
+      {mine && nextStepAllowed && !card.advice && (card.arrivals.length > 0 || card.materialCaptureStep) && !closed && (
         <div className="card-actions">
           <button className="btn btn-ghost" onClick={() => onAdvice(targetId || undefined)} disabled={busy}>
             直接要一个下一步

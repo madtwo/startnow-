@@ -7,7 +7,7 @@ const { lib } = require('./_ts-loader.cjs');
 const { adoptCommentAdvice, acceptAdvice, completeCard, tickCards } = lib('cards');
 const { canUseNextStep, isActionableStepText } = lib('cardPolicy');
 const { completedActionAnchor } = lib('completionReaction');
-const { forumReplyModeProblem } = lib('forumReplyPolicy');
+const { forumReplyFallback, forumReplyModeProblem } = lib('forumReplyPolicy');
 const { defaultPersonas } = lib('personas');
 const { defaultSettings } = lib('store');
 
@@ -103,6 +103,13 @@ test('mock life replies stay on the small moment instead of asking for context',
   const reply = out.cards[0].comments.find((row) => row.authorId === 'shenmo');
   assert.ok(reply);
   assert.doesNotMatch(reply.text, /我也刚来|不太会接|你想从哪讲起|最近的状态/);
+});
+
+test('brag fallbacks are persona-specific instead of the same sentence', () => {
+  const brag = card('brag', { text: '今天把实验报告的第一段写完了，虽然只有三百字。' });
+  const lines = ['shenmo', 'weini', 'miaoze', 'yanggao'].map((id) =>
+    forumReplyFallback(brag, people.find((p) => p.id === id)));
+  assert.equal(new Set(lines).size, lines.length, JSON.stringify(lines));
 });
 
 test('step board, card detail and note drawer share the same card-type/actionability gates', () => {

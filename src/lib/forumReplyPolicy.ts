@@ -6,7 +6,7 @@ import { adviceContextText, playerFollowups } from './adviceContext';
 import { matchActionIntent } from './actions';
 import { inferSocialIntent, isDependencySignal } from './dialogue';
 import { wantsDirectAdvice } from './directAdvice';
-import { hasResultCardAnchor, isGoalResultCard, resultCardDetail } from './peerReactions';
+import { hasResultCardAnchor, isGoalResultCard, peerReactionFallback, resultCardDetail } from './peerReactions';
 
 /** The shared vulnerability check is mostly about a persona asking the user
  * not to leave. The forum also needs the reverse direction: a persona may
@@ -100,8 +100,7 @@ export function forumReplyFallback(card: Card, persona: Persona, careFocus = fal
       : '我还没想好怎么讲清楚，先不随口编一段经历。';
   }
   if (card.intro || card.playerIntro) return '你好呀，看到你来打招呼了。';
-  if (card.kind === 'brag') return detail ? `“${detail}”，这个具体的进展我看到了，挺替你开心。`
-    : '看到你分享这次的进展了，挺替你开心。';
+  if (card.kind === 'brag') return peerReactionFallback(card, persona);
   if (card.kind === 'life') return detail ? `“${detail}”，听见你分享这件小事了。`
     : '听见你分享这件小事了，我在听。';
   return detail ? `你说的“${detail}”，我看到了，先听你讲。`
