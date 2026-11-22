@@ -560,7 +560,7 @@ const topicGroup = (trouble: TroubleKind): MockTopic =>
   trouble === 'study' || trouble === 'future' ? trouble : trouble === 'self' ? 'self' : 'people';
 
 const TOPIC_WORD: Record<MockTopic, string> = {
-  study: '考试',
+  study: '学习',
   future: '找工作',
   people: '跟人有关',
   self: '最近的状态',
