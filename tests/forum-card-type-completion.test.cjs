@@ -1,6 +1,8 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { lib } = require('./_ts-loader.cjs');
 const { adoptCommentAdvice, acceptAdvice, completeCard, tickCards } = lib('cards');
 const { canUseNextStep, isActionableStepText } = lib('cardPolicy');
@@ -90,4 +92,29 @@ test('mock brag replies congratulate instead of using the tentative first-meetin
   assert.ok(reply);
   assert.match(reply.text, /跟下来|跟完|不容易|有始有终|结果|进展|恭喜|祝贺/);
   assert.doesNotMatch(reply.text, /我也刚来|不太会接|你想从哪讲起/);
+});
+
+test('mock life replies stay on the small moment instead of asking for context', async () => {
+  const life = card('life', {
+    text: '食堂鸡腿饭今天很好吃。',
+    pending: [{ personaId: 'shenmo', at: NOW - 1, phase: 'reply' }],
+  });
+  const out = await tickCards({ cards: [life], personas: people, settings, config: mock, now: NOW });
+  const reply = out.cards[0].comments.find((row) => row.authorId === 'shenmo');
+  assert.ok(reply);
+  assert.doesNotMatch(reply.text, /我也刚来|不太会接|你想从哪讲起|最近的状态/);
+});
+
+test('step board, card detail and note drawer share the same card-type/actionability gates', () => {
+  const read = (name) => fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
+  const step = read('src/components/StepBoard.tsx');
+  const detail = read('src/components/CardDetail.tsx');
+  const drawer = read('src/components/NoteDrawer.tsx');
+  assert.match(step, /canUseNextStep\(c\)/);
+  assert.match(step, /noteActionable/);
+  assert.match(step, /adviceActionable/);
+  assert.match(detail, /nextStepAllowed/);
+  assert.match(detail, /adviceActionable/);
+  assert.match(drawer, /canUseNextStep\(c\)/);
+  assert.match(drawer, /usableNote/);
 });

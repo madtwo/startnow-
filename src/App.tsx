@@ -340,6 +340,7 @@ export default function App() {
   // leaving the site from a detail/goal/schedule page.
   const historyReady = useRef(false);
   const historySuppress = useRef(false);
+  const historyReplaceNext = useRef(false);
   useEffect(() => {
     const state = { __app: true, view, homeTab, detailId, goalId };
     if (!historyReady.current) {
@@ -349,6 +350,11 @@ export default function App() {
     }
     if (historySuppress.current) {
       historySuppress.current = false;
+      return;
+    }
+    if (historyReplaceNext.current) {
+      historyReplaceNext.current = false;
+      window.history.replaceState(state, '', window.location.href);
       return;
     }
     window.history.pushState(state, '', window.location.href);
@@ -372,6 +378,17 @@ export default function App() {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [view, homeTab]);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDrawerOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawerOpen]);
   useEffect(() => {
     // Derived from actual card flags; reading a card, rather than scrolling, advances the gate.
     if (openingGateFlag !== openingPhase) setOpeningGateFlag(openingPhase);
@@ -837,6 +854,7 @@ export default function App() {
     setDraftKind('worry');
     setDraftTitle('');
     setImage('');
+    historyReplaceNext.current = true;
     setView('home');
     setToast(image ? '卡已发出，正在识别图片里的可见信息' : '卡放出去了，等一会儿有人来');
     if (card.image) void scanMaterial(card.id,card.image);

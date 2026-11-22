@@ -68,6 +68,9 @@ export default function CardDetail({
 }: Props) {
   const defaultTarget = card.authorKind === 'persona' ? card.authorId : '';
   const nextStepAllowed = canUseNextStep(card);
+  const adviceActionable = Boolean(card.advice && (
+    card.advice.actionId || card.advice.origin === 'material' || isActionableStepText(card.advice.text)
+  ));
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<'comment' | 'advice'>('comment');
   const [targetId, setTargetId] = useState(initialPeer || defaultTarget);
@@ -421,7 +424,7 @@ export default function CardDetail({
         {card.vulnerability.kind==='missed'?'今天没做到':'这次卡住了'}。回应完全自愿，不会因没有回复而追问。
       </p>}
 
-      {!isGuide && card.advice && !closed && (
+      {!isGuide && nextStepAllowed && card.advice && !closed && (
         <div className="advice">
           <div className="advice-head">
             <span className="advice-from">
@@ -432,7 +435,9 @@ export default function CardDetail({
                   : '今天的一步'}
             </span>
             <span className="advice-hint">
-              {card.advice.actionId || card.advice.origin==='material' ? '做不到就再小一级' : '原话采用 · 可请求更小一步'}
+              {adviceActionable
+                ? (card.advice.actionId || card.advice.origin==='material' ? '做不到就再小一级' : '原话采用 · 可请求更小一步')
+                : '这条更像回应 · 先换一条具体建议'}
             </span>
           </div>
           <p className="advice-label">{card.advice.text}</p>
@@ -460,9 +465,9 @@ export default function CardDetail({
                   ? setSmallerChoices(true) : onShrink()}>
                 做不到
               </button>
-              <button className="btn btn-primary" onClick={onAccept}>
-                贴到便签
-              </button>
+              {adviceActionable
+                ? <button className="btn btn-primary" onClick={onAccept}>贴到便签</button>
+                : <button className="btn btn-primary" disabled title="这条更像回应，不是可执行的下一步">暂不能贴便签</button>}
             </div>
           )}
           {mine && !card.advice.accepted && !card.advice.actionId && (

@@ -583,6 +583,14 @@ const BRAG_MOCK: Record<string, string[]> = {
   default: ['这次有了具体进展，挺替你高兴。', '能坚持下来，先把这个结果记着。'],
 };
 
+const LIFE_MOCK: Record<string, string[]> = {
+  shenmo: ['能记住这顿饭的味道，今天算有个小落点。', '这种小事能说出来，就挺好。'],
+  weini: ['嗯，听起来是个不错的瞬间。', '能因为一顿饭好一点，也挺好。'],
+  miaoze: ['一顿好吃的，确实能把一天拉回来一点。', '这个细节挺具体，先记着。'],
+  yanggao: ['听着不错啊，今天这顿值了。', '这种小开心，先别让它跑掉。'],
+  default: ['这件小事我看到了，先记着这个瞬间。', '能有一点小开心，就挺好。'],
+};
+
 const MOCK_LINES: Record<MockTopic, Record<string, { arrival: string[]; reply: string[] }>> = {
   study: {
     shenmo: {
@@ -1050,6 +1058,13 @@ async function generateComment(
       const used = new Set(card.comments.filter((c) => c.authorId === persona.id).map((c) => c.text.trim()));
       const fresh = rows.filter((line) => !used.has(line));
       ctx.logs.push('brag 卡使用祝贺回复，不追问细节');
+      return { kind: 'reply', text: pick(fresh.length ? fresh : rows), origin: 'demo' };
+    }
+    if (card.kind === 'life') {
+      const rows = LIFE_MOCK[persona.id] ?? LIFE_MOCK.default;
+      const used = new Set(card.comments.filter((c) => c.authorId === persona.id).map((c) => c.text.trim()));
+      const fresh = rows.filter((line) => !used.has(line));
+      ctx.logs.push('life 卡回应具体小事，不追问身份细节');
       return { kind: 'reply', text: pick(fresh.length ? fresh : rows), origin: 'demo' };
     }
     const isShort = shortContact;
