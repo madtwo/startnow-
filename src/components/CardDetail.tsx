@@ -310,7 +310,7 @@ export default function CardDetail({
             ) : isHelper ? (
               <Avatar avatarKey="lamp" color="#c96442" size="xs" />
             ) : (
-              <Avatar avatarKey={me.avatarKey} className="me" size="xs" />
+              <Avatar avatarKey={me.avatarKey} src={me.avatarUrl} className="me" size="xs" />
             )}
             <span className="forum-comment-name">
               {isMe ? '你' : isHelper ? '论坛小助手' : persona?.name ?? '同伴'}
@@ -359,7 +359,7 @@ export default function CardDetail({
           ) : isGuide ? (
             <Avatar avatarKey="lamp" color="#c96442" size="sm" />
           ) : (
-            <Avatar avatarKey={me.avatarKey} className="me" size="sm" />
+            <Avatar avatarKey={me.avatarKey} src={me.avatarUrl} className="me" size="sm" />
           )}
           <div>
             <p className="page-author">

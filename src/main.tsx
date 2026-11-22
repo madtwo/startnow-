@@ -4,6 +4,7 @@ import App from './App';
 import './styles.css';
 import './theme.css';
 import './theme-v2.css';
+import './schedule.css';
 import './room.css';
 import './onboarding.css';
 

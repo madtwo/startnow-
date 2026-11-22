@@ -1743,38 +1743,6 @@ body {
   font-size: 13px;
 }
 
-.avatar-picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.avatar-option {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 1.5px solid var(--line-2);
-  border-radius: 50%;
-  background: #faf7f2;
-}
-
-.avatar-option .avatar {
-  width: 30px;
-  height: 30px;
-}
-
-.avatar-option:hover {
-  border-color: var(--coral);
-}
-
-.avatar-option.on {
-  border: 2px solid var(--coral);
-  background: var(--coral-soft);
-}
-
 .profile-stats {
   display: flex;
   gap: 28px;

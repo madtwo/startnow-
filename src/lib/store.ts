@@ -508,6 +508,9 @@ export function loadTodos(): Todo[] {
 
 export const saveTodos = (todos: Todo[]) => write(KEYS.todos, todos.filter((t) => !findCrisis(t.text)).slice(0, 60));
 
+const cleanAvatarUrl = (raw: unknown): string | undefined =>
+  typeof raw === 'string' && raw.startsWith('data:image/') && raw.length <= 400_000 ? raw : undefined;
+
 export function loadIdentity(): Identity {
   const saved = read(KEYS.identity) as Partial<Identity> | null;
   if (saved && typeof saved.id === 'string' && typeof saved.name === 'string') {
@@ -515,6 +518,7 @@ export function loadIdentity(): Identity {
       id: saved.id,
       name: saved.name,
       avatarKey: typeof saved.avatarKey === 'string' ? saved.avatarKey : 'petal',
+      avatarUrl: cleanAvatarUrl(saved.avatarUrl),
       bio: typeof saved.bio === 'string' ? saved.bio : '',
     };
   }
@@ -644,6 +648,7 @@ const cleanIdentity = (raw: unknown): Identity | null => {
     id: row.id,
     name: row.name.slice(0, 40),
     avatarKey: typeof row.avatarKey === 'string' && row.avatarKey.length <= 40 ? row.avatarKey : 'petal',
+    avatarUrl: cleanAvatarUrl(row.avatarUrl),
     bio: typeof row.bio === 'string' && !findCrisis(row.bio) ? row.bio.slice(0, 200) : '',
   };
 };

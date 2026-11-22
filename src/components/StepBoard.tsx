@@ -139,32 +139,6 @@ export default function StepBoard({
 
   return (
     <div className="step-board">
-      {!competitionMode && <section className="card section-card meeting-goal-entry">
-        <div className="section-head"><h3>拆解一个目标</h3></div>
-        <p>目标大一点也没关系。自己写步骤，或先问清楚再拆。</p>
-        <button className="btn btn-primary" onClick={onDecompose}>拆解一个目标</button>
-        {goals.some((g) => g.ownerId === 'me' && g.status === 'active') && (
-          <div className="meeting-goal-list">
-            <p className="meeting-label">进行中的目标</p>
-            {goals.filter((g) => g.ownerId === 'me' && g.status === 'active').slice(0, 5).map((g) => (
-              <div key={g.id} className="meeting-goal-list-row">
-                <button type="button" className="meeting-goal-link" onClick={() => onOpenGoal(g.id)}>
-                  <b>{g.title}</b>
-                  <span>{goalProgress(g).done}/{g.steps.length} 步 · 查看详情</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={Boolean(g.sharedAt && Date.now() - g.sharedAt < 86_400_000)}
-                  onClick={() => onShareGoal(g.id)}
-                >
-                  {g.sharedAt && Date.now() - g.sharedAt < 86_400_000 ? '已分享' : '分享到论坛'}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>}
       <section
         className={`step-hero hero-card ${
           focus ? '' : active ? 'is-waiting' : lastDone ? 'is-done' : 'is-empty'
@@ -353,6 +327,33 @@ export default function StepBoard({
           </div>
         </div>
       </section>
+
+      {!competitionMode && <section className="card section-card meeting-goal-entry">
+        <div className="section-head"><h3>拆解一个目标</h3></div>
+        <p>目标大一点也没关系。自己写步骤，或先问清楚再拆。</p>
+        <button className="btn btn-primary" onClick={onDecompose}>拆解一个目标</button>
+        {goals.some((g) => g.ownerId === 'me' && g.status === 'active') && (
+          <div className="meeting-goal-list">
+            <p className="meeting-label">进行中的目标</p>
+            {goals.filter((g) => g.ownerId === 'me' && g.status === 'active').slice(0, 5).map((g) => (
+              <div key={g.id} className="meeting-goal-list-row">
+                <button type="button" className="meeting-goal-link" onClick={() => onOpenGoal(g.id)}>
+                  <b>{g.title}</b>
+                  <span>{goalProgress(g).done}/{g.steps.length} 步 · 查看详情</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={Boolean(g.sharedAt && Date.now() - g.sharedAt < 86_400_000)}
+                  onClick={() => onShareGoal(g.id)}
+                >
+                  {g.sharedAt && Date.now() - g.sharedAt < 86_400_000 ? '已分享' : '分享到论坛'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>}
 
       <section className="home-cards">
         <article className="info-card">
