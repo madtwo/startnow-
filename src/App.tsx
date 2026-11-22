@@ -670,6 +670,12 @@ export default function App() {
   const patch = (id: string, fn: (card: Card) => Card) =>
     setCards((prev) => prev.map((c) => (c.id === id ? fn(c) : c)));
 
+  const switchTo = (next: View, tab?: 'step' | 'forum') => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    if (tab) setHomeTab(tab);
+    setView(next);
+  };
+
   /** One user-upload event -> one vision extraction, never called by ticks. */
   const scanMaterial = async (cardId:string, imageDataUrl:string) => {
     if (!imageDataUrl || materialInFlight.current.has(cardId) ||
@@ -1656,8 +1662,7 @@ export default function App() {
               className={view === 'home' && homeTab === 'step' ? 'active' : ''}
               aria-current={view === 'home' && homeTab === 'step' ? 'page' : undefined}
               onClick={() => {
-                setHomeTab('step');
-                setView('home');
+                switchTo('home', 'step');
               }}
             >
               试试
@@ -1671,8 +1676,7 @@ export default function App() {
                 (view === 'home' && homeTab === 'forum') || view === 'detail' ? 'page' : undefined
               }
               onClick={() => {
-                setHomeTab('forum');
-                setView('home');
+                switchTo('home', 'forum');
               }}
             >
               论坛
@@ -1681,7 +1685,7 @@ export default function App() {
               type="button"
               className={view === 'room' ? 'active' : ''}
               aria-current={view === 'room' ? 'page' : undefined}
-              onClick={() => setView('room')}
+              onClick={() => switchTo('room')}
             >
               群聊
             </button>
@@ -1697,7 +1701,7 @@ export default function App() {
                   ? 'page'
                   : undefined
               }
-              onClick={() => setView(COMPETITION_MODE ? 'profile' : 'schedule')}
+              onClick={() => switchTo(COMPETITION_MODE ? 'profile' : 'schedule')}
             >
               {COMPETITION_MODE ? '我的' : '日程'}
             </button>
@@ -2625,15 +2629,9 @@ export default function App() {
                   : ''
               }`}
               onClick={() => {
-                if (id === 'step') {
-                  setHomeTab('step');
-                  setView('home');
-                } else if (id === 'forum') {
-                  setHomeTab('forum');
-                  setView('home');
-                } else {
-                  setView(id as View);
-                }
+                if (id === 'step') switchTo('home', 'step');
+                else if (id === 'forum') switchTo('home', 'forum');
+                else switchTo(id as View);
               }}
             >
               {label}

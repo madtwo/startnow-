@@ -6,7 +6,7 @@ const read=(name)=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');
 test('group chat is visible in regular and competition navigation, menu, and route',()=>{
  const app=read('src/App.tsx');
  const nav=app.split('<nav className="top-nav"')[1].split('</nav>')[0];
- assert.match(nav,/onClick=\{\(\) => setView\('room'\)\}/);
+ assert.match(nav,/onClick=\{\(\) => (?:setView|switchTo)\('room'\)\}/);
  assert.match(nav,/>\s*群聊\s*<\/button>/);
  assert.doesNotMatch(nav,/!COMPETITION_MODE/);
  const menu=app.split('<b>群聊</b>')[0].slice(-600);
