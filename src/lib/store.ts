@@ -77,11 +77,19 @@ const read = (key: string): unknown => {
   }
 };
 
+type StorageErrorHandler = (key: string) => void;
+let storageErrorHandler: StorageErrorHandler | null = null;
+
+/** Surface quota/private-mode failures instead of silently losing local data. */
+export const setStorageErrorHandler = (handler: StorageErrorHandler | null): void => {
+  storageErrorHandler = handler;
+};
+
 const write = (key: string, value: unknown) => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // 隐私模式或空间不足时静默失败，不影响本次会话
+    try { storageErrorHandler?.(key); } catch { /* the warning handler must stay non-fatal */ }
   }
 };
 

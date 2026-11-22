@@ -111,6 +111,7 @@ import {
   saveGoals,
   saveSchedule,
   saveSummaries,
+  setStorageErrorHandler,
 } from './lib/store';
 import type {
   Card,
@@ -630,6 +631,17 @@ export default function App() {
     tickAfterCommit.current = null;
     void tick(pending === 'brag', true);
   }, [cards, tick]);
+
+  useEffect(() => {
+    let lastWarning = 0;
+    setStorageErrorHandler(() => {
+      const now = Date.now();
+      if (now - lastWarning < 5000) return;
+      lastWarning = now;
+      setToast('本地保存失败：可能是空间不足或隐私模式。先导出备份，再清理空间。');
+    });
+    return () => setStorageErrorHandler(null);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;

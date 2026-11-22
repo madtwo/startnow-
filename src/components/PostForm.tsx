@@ -55,6 +55,16 @@ export default function PostForm({
 }: Props) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
+  const submitLock = useRef(false);
+
+  const submit = () => {
+    // React state cannot disable the button between two synchronous clicks.
+    if (submitLock.current) return;
+    submitLock.current = true;
+    try { onSubmit(); } finally {
+      window.setTimeout(() => { submitLock.current = false; }, 600);
+    }
+  };
 
   const pick = async (file?: File) => {
     if (!file) return;
@@ -176,7 +186,7 @@ export default function PostForm({
               选材料图片
             </button>
             {ready ? (
-              <button className="btn btn-primary" disabled={busy || (!value.trim() && !image)} onClick={onSubmit}>
+              <button className="btn btn-primary" disabled={busy || (!value.trim() && !image)} onClick={submit}>
                 放出去
               </button>
             ) : (

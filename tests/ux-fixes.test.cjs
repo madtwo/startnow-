@@ -25,6 +25,12 @@ const mock = { providerId: 'mock', baseUrl: '', model: 'demo', apiKey: '' };
 const now = 1_800_000_000_000;
 const HOUR = 3_600_000;
 let seq = 0;
+
+test('发卡按钮阻止同步双击重复建卡', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'PostForm.tsx'), 'utf8');
+  assert.match(source, /submitLock/);
+  assert.match(source, /if \(submitLock\.current\) return;/);
+});
 const cardBase = (over = {}) => ({
   id: `c${++seq}`, authorId: 'me', authorName: '你', authorKind: 'player', kind: 'worry',
   text: '论文写不出来', createdAt: now - 60_000, status: 'talking',
