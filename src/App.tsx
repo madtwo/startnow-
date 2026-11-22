@@ -135,15 +135,6 @@ const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const SettingsDialog = lazy(() => import('./components/SettingsDialog'));
 const RoomView = lazy(() => import('./components/RoomView'));
 
-const AVATAR_COLORS: Record<string, string> = {
-  moon: '#7BA3C9',
-  leaf: '#8FB78E',
-  petal: '#E8634A',
-  waves: '#A78BC4',
-  window: '#E8A87C',
-  pebble: '#8C847A',
-};
-
 type View = 'home' | 'post' | 'mine' | 'profile' | 'detail' | 'room' | 'schedule' | 'goal';
 
 const FORUM_FILTERS = ['全部', '学习', '情绪', '生活', '成功', '失败'] as const;
@@ -237,6 +228,33 @@ export default function App() {
   const setSettings: Dispatch<SetStateAction<WorldSettings>> = (next) => { touch(); rawSetSettings(next); };
   // 身份和便签不参与后台 tick，修改它们不该让正在进行的 tick 结果作废。
   const setIdentity = rawSetIdentity;
+  const [avatarError, setAvatarError] = useState('');
+
+  const uploadAvatar = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('请选择一张图片');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError('图片不要超过 5MB');
+      return;
+    }
+    try {
+      const bitmap = await createImageBitmap(file);
+      const side = Math.min(bitmap.width, bitmap.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = 160;
+      canvas.height = 160;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('no canvas');
+      ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 160, 160);
+      bitmap.close();
+      setIdentity({ ...identity, avatarUrl: canvas.toDataURL('image/jpeg', 0.86) });
+      setAvatarError('');
+    } catch {
+      setAvatarError('这张图片读不出来，换一张试试');
+    }
+  };
   const [draft, setDraft] = useState('');
   const [draftKind, setDraftKind] = useState<'worry'|'brag'|'life'|'goal'>('worry');
   const [draftTitle, setDraftTitle] = useState('');
@@ -1602,7 +1620,7 @@ export default function App() {
     <div
       className={`shell ${view === 'home' && homeTab === 'step' ? 'is-home-step' : ''} ${
         view === 'room' ? 'is-room' : ''
-      }`}
+      } ${view === 'schedule' ? 'is-schedule' : ''}`}
     >
       <header className="top">
         <div className="top-inner">
@@ -1654,11 +1672,19 @@ export default function App() {
             </button>
             <button
               type="button"
-              className={view === 'profile' || view === 'mine' ? 'active' : ''}
-              aria-current={view === 'profile' || view === 'mine' ? 'page' : undefined}
-              onClick={() => setView('profile')}
+              className={
+                (COMPETITION_MODE ? view === 'profile' || view === 'mine' : view === 'schedule')
+                  ? 'active'
+                  : ''
+              }
+              aria-current={
+                (COMPETITION_MODE ? view === 'profile' || view === 'mine' : view === 'schedule')
+                  ? 'page'
+                  : undefined
+              }
+              onClick={() => setView(COMPETITION_MODE ? 'profile' : 'schedule')}
             >
-              我的
+              {COMPETITION_MODE ? '我的' : '日程'}
             </button>
           </nav>
           <div className="top-actions">
@@ -1756,7 +1782,13 @@ export default function App() {
             )}
           </div>
           <button className="avatar-btn" onClick={() => setView('profile')} aria-label="我的">
-            <Avatar avatarKey={identity.avatarKey} name={identity.name} className="me" size="sm" />
+            <Avatar
+              avatarKey={identity.avatarKey}
+              src={identity.avatarUrl}
+              name={identity.name}
+              className="me"
+              size="sm"
+            />
           </button>
         </div>
         </div>
@@ -1850,7 +1882,7 @@ export default function App() {
 
             <div className="side-section">
               <button type="button" className="user-chip" onClick={() => setView('profile')}>
-                <Avatar avatarKey={identity.avatarKey} className="me" size="sm" />
+                <Avatar avatarKey={identity.avatarKey} src={identity.avatarUrl} className="me" size="sm" />
                 <span className="user-chip-text">
                   <b>{identity.name}</b>
                   <small>今日已完成 {doneToday} 件</small>
@@ -1969,6 +2001,7 @@ export default function App() {
                       key={card.id}
                       card={card}
                       personas={personas}
+                      myAvatarUrl={identity.avatarUrl}
                       onClick={() => openCard(card)}
                       onLike={() => like(card)}
                       onCheer={() => cheer(card)}
@@ -2124,6 +2157,7 @@ export default function App() {
                   key={card.id}
                   card={card}
                   personas={personas}
+                  myAvatarUrl={identity.avatarUrl}
                   onClick={() => openCard(card)}
                   onLike={() => like(card)}
                   onCheer={() => cheer(card)}
@@ -2143,7 +2177,12 @@ export default function App() {
           </div>
 
           <section className="profile-head">
-            <Avatar avatarKey={identity.avatarKey} className="me profile-avatar" size="lg" />
+            <Avatar
+              avatarKey={identity.avatarKey}
+              src={identity.avatarUrl}
+              className="me profile-avatar"
+              size="lg"
+            />
             <div className="profile-info">
               <input
                 className="profile-name"
@@ -2152,19 +2191,33 @@ export default function App() {
                 onChange={(e) => setIdentity({ ...identity, name: e.target.value })}
               />
               <p className="profile-hint">这个名字会出现在你的卡上</p>
-              <div className="avatar-picker">
-                {['moon', 'leaf', 'petal', 'waves', 'window', 'pebble'].map((key) => (
+              <div className="avatar-upload">
+                <label className="avatar-upload-btn">
+                  {identity.avatarUrl ? '更换头像' : '上传头像'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (file) void uploadAvatar(file);
+                    }}
+                  />
+                </label>
+                {identity.avatarUrl && (
                   <button
-                    key={key}
                     type="button"
-                    className={`avatar-option ${identity.avatarKey === key ? 'on' : ''}`}
-                    aria-label={`切换头像 ${key}`}
-                    onClick={() => setIdentity({ ...identity, avatarKey: key })}
+                    className="avatar-reset"
+                    onClick={() => {
+                      setIdentity({ ...identity, avatarUrl: undefined });
+                      setAvatarError('');
+                    }}
                   >
-                    <Avatar avatarKey={key} color={AVATAR_COLORS[key]} size="sm" />
+                    恢复默认
                   </button>
-                ))}
+                )}
               </div>
+              {avatarError && <p className="avatar-error" role="alert">{avatarError}</p>}
             </div>
             <div className="profile-stats">
               <div className="stat">

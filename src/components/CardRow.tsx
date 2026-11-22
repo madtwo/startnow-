@@ -18,9 +18,10 @@ interface Props {
   onClick: () => void;
   onLike: () => void;
   onCheer?: () => void;
+  myAvatarUrl?: string;
 }
 
-export default function CardRow({ card, personas, onClick, onLike, onCheer }: Props) {
+export default function CardRow({ card, personas, onClick, onLike, onCheer, myAvatarUrl }: Props) {
   const author = personas.find((p) => p.id === card.authorId);
   const mine = card.authorId === 'me';
   const unseen = !card.seenAt;
@@ -64,7 +65,7 @@ export default function CardRow({ card, personas, onClick, onLike, onCheer }: Pr
           {author ? (
             <Avatar avatarKey={author.avatarKey} name={author.name} color={author.color} size="xs" />
           ) : (
-            <Avatar avatarKey="petal" className="me" size="xs" />
+            <Avatar avatarKey="petal" src={myAvatarUrl} className="me" size="xs" />
           )}
           <span className="tc-author-name">{card.authorName}</span>
           {mine && <span className="tc-tag">你</span>}

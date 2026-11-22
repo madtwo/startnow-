@@ -130,6 +130,8 @@ export interface Identity {
   id: string;
   name: string;
   avatarKey: string;
+  /** 上传的头像（data URL）；为空时用 avatarKey 图案。 */
+  avatarUrl?: string;
   bio: string;
 }
 
