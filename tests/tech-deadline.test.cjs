@@ -3,7 +3,7 @@ const {parseMaterialDeadline,confirmedDeadline,deadlineInputValue}=require('../s
 const now=new Date('2026-11-19T12:00:00').getTime();
 test('explicit absolute date and time, no invented year',()=>{
   const result=parseMaterialDeadline('2026-11-21 23:59',now);
-  assert.equal(result.ambiguous,false);assert.match(result.iso,/2026-11-21/);
+  assert.equal(result.ambiguous,false);assert.equal(deadlineInputValue(result).slice(0,10),'2026-11-21');
   assert.equal(parseMaterialDeadline('11月21日 23:59',now).ambiguous,true);
 });
 test('today tomorrow and weekday with time',()=>{
