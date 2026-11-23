@@ -44,11 +44,11 @@ const examples = [
   ['self','最近总焦虑不想动','self'],
 ];
 
-test('Go 新配置使用 DeepSeek V4.1 Flash 主模型、GLM 作异名备用；按量付费预设未改变', () => {
+test('Go 新配置使用 GLM-5.3-Flash 主模型、DeepSeek 作备用；按量付费预设未改变', () => {
   const go = PRESETS.find((row) => row.id === 'opencode-go');
   const pay = PRESETS.find((row) => row.id === 'opencode');
-  assert.equal(go.model, 'deepseek-v4.1-flash');
-  assert.equal(go.fallbackModel, 'glm-5.3-flash');
+  assert.equal(go.model, 'glm-5.3-flash');
+  assert.equal(go.fallbackModel, 'deepseek-v4.1-flash');
   assert.notEqual(go.model, go.fallbackModel);
   assert.equal(pay.model, 'glm-5.3-flash');
 });
@@ -174,7 +174,7 @@ test('本机完成回应指标以完成事件为单位，分清模型、兜底�
 test('预设默认不修改当前用户设置：加载方只能在用户选中预设时应用', () => {
   const persisted = { providerId:'opencode-go',model:'hy4-flash-free',fallbackModel:'deepseek-v4.1-flash',apiKey:'test' };
   assert.equal(persisted.model,'hy4-flash-free');
-  assert.equal(PRESETS.find((p)=>p.id==='opencode-go').model,'deepseek-v4.1-flash');
+  assert.equal(PRESETS.find((p)=>p.id==='opencode-go').model,'glm-5.3-flash');
 });
 
 test('60 次合成预置下一步抽样：分别统计贴题建议覆盖率与安全弃选，24 小时不重复', async () => {
