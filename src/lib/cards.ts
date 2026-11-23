@@ -594,7 +594,7 @@ const lifeMockLine = (personaId: string, detail: string): string => {
   switch (personaId) {
     case 'shenmo': return `${quote}能说出来，今天就算有个小落点。`;
     case 'weini': return `嗯，${quote}听着是个不错的瞬间。`;
-    case 'miaoze': return `这种小事能记住，挺具体的。`;
+    case 'miaoze': return `${quote}这个细节挺具体，先记着。`;
     case 'yanggao': return `听着不错啊，${quote}这个得记一下。`;
     default: return `${quote}我看到了，先记着这个瞬间。`;
   }
