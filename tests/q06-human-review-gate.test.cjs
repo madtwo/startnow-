@@ -56,6 +56,17 @@ test('Q06-01 frozen synthetic fixture is exact: 9 accepted aliases, C04 rejected
   assert.equal(rows.filter(r => r.id === 'C04')[0].expected, 'reject');
   assert.equal(rows.filter(r => r.id === 'C10')[0].expected, 'accept');
 });
+test('Q06-01b pinned fixture permits LF/CRLF transport but refuses changed labels or text', () => {
+  const raw = fs.readFileSync(path.resolve(__dirname, 'fixtures/q06-advice-alias.v1.json'));
+  const lf = Buffer.from(raw.toString('utf8').replace(/\r\n/g, '\n'));
+  const crlf = Buffer.from(lf.toString('utf8').replace(/\n/g, '\r\n'));
+  assert.equal(gate.frozenFixtureSha(lf), gate.FIXTURE_SHA);
+  assert.equal(gate.frozenFixtureSha(crlf), gate.FIXTURE_SHA);
+  assert.notEqual(gate.frozenFixtureSha(Buffer.from(lf.toString('utf8').replace('"accept"', '"reject"'))), gate.FIXTURE_SHA);
+  assert.notEqual(gate.frozenFixtureSha(Buffer.from(lf.toString('utf8').replace('社团答应', '社团已经答应'))), gate.FIXTURE_SHA);
+  assert.notEqual(gate.frozenFixtureSha(Buffer.concat([crlf, Buffer.from(' ')])), gate.FIXTURE_SHA);
+  assert.notEqual(gate.frozenFixtureSha(Buffer.from(lf.toString('utf8').replace(/\n/g, '\r'))), gate.FIXTURE_SHA);
+});
 test('Q06-02 prepared blind packets have no case IDs or expected labels and differ in tokenization', () => {
   const { root, run, manifest } = setup();
   try {

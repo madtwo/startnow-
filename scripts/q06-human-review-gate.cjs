@@ -17,6 +17,9 @@ const RUNTIME_FILES = Object.freeze({
   'src/lib/actions.ts': 'a1380a3a459ab20ecbf4b6e6f23c6f8cdc22455aa77f908d52a32f29be09b68e',
 });
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+// Accept only the two normal text-file newline conventions.  The pin remains
+// the original LF snapshot; any semantic/sample change still fails closed.
+const frozenFixtureSha = bytes => hash(Buffer.from(bytes.toString('utf8').replace(/\r\n/g, '\n'), 'utf8'));
 const fail = msg => { throw new Error(msg); };
 const exactKeys = (obj, keys) => Boolean(obj) && typeof obj === 'object' && !Array.isArray(obj) &&
   Object.keys(obj).sort().join('|') === [...keys].sort().join('|');
@@ -45,7 +48,7 @@ function parseOptions(argv) {
 
 function loadFrozen() {
   const buf = fs.readFileSync(FIXTURE_PATH);
-  if (hash(buf) !== FIXTURE_SHA) fail('Q06 source fixture SHA changed: rebaseline with human coordinator');
+  if (frozenFixtureSha(buf) !== FIXTURE_SHA) fail('Q06 source fixture SHA changed: rebaseline with human coordinator');
   for (const [filename, expected] of Object.entries(RUNTIME_FILES)) {
     if (hash(fs.readFileSync(path.resolve(__dirname, '..', filename))) !== expected) {
       fail(`Q06 runtime SHA changed: ${filename}; a new human review baseline is required`);
@@ -213,4 +216,4 @@ if (require.main === module) {
   try { main(process.argv.slice(2)); }
   catch (err) { process.stderr.write(`Q06 review gate: ${err instanceof Error ? err.message : 'invalid input'}\n`); process.exitCode = 2; }
 }
-module.exports = { main, loadFrozen, inspectPacket, check, parseOptions, FIXTURE_SHA, RUNTIME_FILES };
+module.exports = { main, loadFrozen, inspectPacket, check, parseOptions, FIXTURE_SHA, RUNTIME_FILES, frozenFixtureSha };

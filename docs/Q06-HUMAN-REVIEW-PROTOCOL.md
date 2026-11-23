@@ -57,6 +57,8 @@ node scripts/q06-human-review-gate.cjs check \
 
 校验器要求 10/10 完整作答；两人标注代号不同、自行声明独立、时间晚于发包；先验证另外留存的 manifest SHA，再验证原始样本文字和匿名 token 与清单完全一致；`unsure`、任意冲突、与冻结结论冲突均 BLOCKED（exit 1）；元数据错误、篡改或文件损坏 exit 2。`--report` 只能写不存在的新路径。输出统计不包含样本原文或评审备注。
 
+冻结样本 SHA 只容忍 Git/ZIP 传输中的 LF ↔ CRLF 换行差异（归一化为最初冻结的 LF 内容）；任何样本文字、标签、空格、附加内容更改仍拒绝。运行时代码的 SHA 仍按源文件字节精确校验，不做归一化或自动重新冻结。
+
 它还会检查 `src/lib/adviceLine.ts`、`src/lib/actions.ts` 和冻结样本的 SHA；源码改变必须重新冻结评审版本，不能混用旧回执。`ALxx` 是本协议私有协调编号，不保证对应历史审查中的原编号。
 
 ## 即便工具返回 READY，发布仍然 NO-GO

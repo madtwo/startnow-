@@ -17,6 +17,10 @@ const FIXTURES = [
   ['completion-attribution-q01.extension-candidate.json', '24924f912b9a6ad5a343eff069175757fafebb4403e8f510eb66277d2c481b9b', 58],
 ];
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
+// These three Q01 pins were created from CRLF fixture snapshots.
+// Normalize only line endings before comparing against those unchanged pins;
+// this is not permission to alter a label, text, whitespace or the runtime SHA.
+const pinnedFixtureSha = bytes => sha(Buffer.from(bytes.toString('utf8').replace(/\r\n/g, '\n').replace(/\n/g, '\r\n'), 'utf8'));
 const jsonBytes = value => Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
 const die = msg => { throw new Error(msg); };
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -41,7 +45,7 @@ function loadFixtures(dir) {
   const seen = new Set();
   for (const [filename, expectedSha, expectedCount] of FIXTURES) {
     const bytes = fs.readFileSync(path.join(dir, filename));
-    const digest = sha(bytes);
+    const digest = pinnedFixtureSha(bytes);
     if (digest !== expectedSha) die(`Fixture SHA mismatch: ${filename}`);
     const parsed = JSON.parse(bytes.toString('utf8'));
     if (!Array.isArray(parsed.cases) || parsed.cases.length !== expectedCount) die(`Fixture count mismatch: ${filename}`);
@@ -208,4 +212,4 @@ if (require.main === module) {
   try { main(process.argv.slice(2)); }
   catch (e) { process.stderr.write(`Q01 review gate: ${e.message}\n`); process.exitCode = 2; }
 }
-module.exports = { main, loadFixtures, inspectPacket, FIXTURES };
+module.exports = { main, loadFixtures, inspectPacket, FIXTURES, pinnedFixtureSha };
