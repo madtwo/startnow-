@@ -1371,6 +1371,72 @@ const cardLevelReplyContext = (card: Card): Card => ({
   ...card, comments: card.comments.filter(row => row.authorKind !== 'player'),
 });
 
+/** Generate independent due replies in parallel, then apply them in a stable order.
+ * Only reply-phase jobs with distinct personas use this path; decide/reaction jobs
+ * still run one at a time because they mutate the card's action state. */
+async function drainParallelReplyJobs(
+  ctx: Ctx, cardIn: Card, personasIn: Persona[], jobs: readonly PendingReply[], now: number,
+): Promise<{ card: Card; personas: Persona[] }> {
+  let card = cardIn;
+  let personas = personasIn;
+  card.pending = card.pending.filter((item) => !jobs.includes(item));
+  const prepared = await Promise.all(jobs.map(async (job) => {
+    const persona = personas.find((p) => p.id === job.personaId);
+    if (!persona) return { job, persona: undefined, generated: undefined, skipped: 'missing' as const };
+    if (addressedToOther(card, job, persona.id)) return { job, persona, generated: undefined, skipped: 'other' as const };
+    const replyContext = job.sourceCommentId ? card : cardLevelReplyContext(card);
+    const generated = await generateComment(ctx, persona, replyContext, 'reply', job.sourceCommentId);
+    return { job, persona, generated, skipped: '' as const };
+  }));
+  for (const row of prepared) {
+    const { job, persona, generated, skipped } = row;
+    if (!persona) continue;
+    if (skipped === 'other') {
+      ctx.logs.push(`${persona.name} 跳过：这条是卡主回给另一个同伴的`);
+      continue;
+    }
+    if (!generated) {
+      ctx.logs.push(`${persona.name} 并行回复失败，等待重试`);
+      continue;
+    }
+    if (generated.kind === 'crisis') {
+      appendCrisisNotice(card, now);
+      continue;
+    }
+    if (generated.kind === 'unavailable') {
+      const retry = retryLater(job, now);
+      if (retry) card.pending.push(retry);
+      card.comments.push({
+        id: uid(), authorId: 'helper', authorKind: 'helper',
+        text: errorNotice(persona.name, Boolean(retry)), at: now, origin: 'system',
+      });
+      continue;
+    }
+    const said = generated.text;
+    if (generated.corrected) card.vulnerability = { kind: 'misread', personaId: persona.id, at: now };
+    if (generated.growthReferenced) ctx.growthReferencesThisTick?.add(persona.id);
+    card.comments.push({
+      id: uid(), authorId: persona.id, authorKind: 'persona',
+      text: said, at: now, origin: generated.origin,
+      ...(generated.actionId ? { actionId: generated.actionId } : {}),
+      ...(generated.growthReferenced ? { growthReference: true } : {}),
+      replyTo: job.sourceCommentId,
+    });
+    if (!card.noMemory) personas = setMind(personas, persona.id, mindAfterReply(persona, safeName(card.authorName), now));
+    if (card.authorId === 'me') {
+      personas = rememberOnCard(personas, card, persona.id, '你', card.text, now);
+    } else if (card.authorKind === 'persona' && card.authorId !== persona.id) {
+      const author = personas.find((p) => p.id === card.authorId);
+      if (author) {
+        if (!card.noMemory) personas = setMind(personas, author.id, mindAfterPeer(author, persona.name, said, now));
+        personas = rememberOnCard(personas, card, author.id, persona.name, said, now);
+      }
+      personas = rememberOnCard(personas, card, persona.id, safeName(card.authorName), card.text, now);
+    }
+  }
+  return { card, personas };
+}
+
 export async function tickCards(input: TickInput): Promise<TickOutput> {
   const now = input.now ?? Date.now();
   if (input.settings.paused) {
@@ -1669,7 +1735,23 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
       if (batch.length === 0) break;
     }
 
-    const ready = input.bragOnly ? undefined : card.pending.filter((p) => p.at <= now).sort((a, b) => a.at - b.at)[0];
+    const dueJobs = input.bragOnly ? [] : card.pending.filter((p) => p.at <= now).sort((a, b) => a.at - b.at);
+    const parallelJobs = dueJobs.length > 1 && ctx.calls < limit &&
+      dueJobs.every((p) => p.phase === 'reply') &&
+      new Set(dueJobs.map((p) => p.personaId)).size === dueJobs.length
+      ? dueJobs.slice(0, Math.min(dueJobs.length, Math.max(0, limit - ctx.calls)))
+      : [];
+    let parallelDrained = false;
+    if (parallelJobs.length > 1) {
+      const drained = await drainParallelReplyJobs(ctx, card, personas, parallelJobs, now);
+      card = drained.card;
+      personas = drained.personas;
+      parallelDrained = true;
+      ctx.logs.push(`并行回复 ${parallelJobs.length} 条 · ${card.id}`);
+    }
+    const ready = input.bragOnly || parallelDrained
+      ? undefined
+      : card.pending.filter((p) => p.at <= now).sort((a, b) => a.at - b.at)[0];
     if (ready && ctx.calls < limit) {
       const persona = personas.find((p) => p.id === ready.personaId);
       card.pending = card.pending.filter((p) => p !== ready);

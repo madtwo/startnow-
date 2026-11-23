@@ -105,6 +105,22 @@ test('short result clauses without punctuation are quoted whole, not cut mid-wor
   assert.doesNotMatch(reply.text, /标题列…/);
 });
 
+test('two due peer replies on one card are generated in the same tick', async () => {
+  const c = card('worry', {
+    text: '论文开题的研究意义写不出来。',
+    pending: [
+      { personaId: 'weini', at: NOW - 1, phase: 'reply' },
+      { personaId: 'miaoze', at: NOW - 1, phase: 'reply' },
+    ],
+  });
+  const out = await tickCards({ cards: [c], personas: people, settings, config: mock, now: NOW });
+  const peers = out.cards[0].comments.filter((row) => row.authorKind === 'persona');
+  assert.equal(peers.length, 2);
+  assert.equal(new Set(peers.map((row) => row.authorId)).size, 2);
+  assert.equal(out.cards[0].pending.length, 0);
+  assert.ok(out.logs.some((line) => line.includes('并行回复')));
+});
+
 test('mock short acknowledgements stay short and life questions do not become a moment', async () => {
   const ack = comment('嗯嗯', 'me', { authorKind: 'player' });
   const shortCard = card('worry', {
@@ -198,6 +214,7 @@ test('comment rules scope 在的, memory attribution and invitations', () => {
   const { COMMENT_RULES } = lib('prompts');
   assert.match(COMMENT_RULES, /只有对方在打招呼.*在的/u);
   assert.match(COMMENT_RULES, /属于玩家/u);
+  assert.match(COMMENT_RULES, /你之前说/u);
   assert.match(COMMENT_RULES, /邀请或提问/u);
   assert.match(COMMENT_RULES, /没去过你们食堂/u);
 });
