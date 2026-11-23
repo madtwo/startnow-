@@ -11,7 +11,9 @@ const { emotionalSignal } = lib('tone');
 const room = lib('room');
 const { roomPrompt } = lib('prompts');
 
-const NOW = new Date('2026-11-19T15:30:00+08:00').getTime();
+// The scheduling test models a local afternoon. A fixed +08:00 instant becomes
+// early morning in other timezones and can legitimately suppress peer replies.
+const NOW = new Date(2026, 10, 19, 15, 30, 0).getTime();
 const ME = { id: 'me', name: '我', avatarKey: 'petal', bio: '' };
 const SETTINGS = { liveliness: 0.5, timeFlow: false, dailyMessages: 400 };
 const MOCK = { providerId: 'mock', baseUrl: '', model: 'demo', apiKey: '' };

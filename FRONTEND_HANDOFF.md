@@ -1,3 +1,14 @@
+# 最新增量交接（2026-11-23 · Q06 人类验收工具补丁）
+
+> **本段优先于下文历史版本说明。** 下文仍保留 2026-11-22 的 UI 历史交接记录，其中 `main`、628 项等信息已过时；当前源码来自用户提供的 `380cc64` 跟踪快照（无 `.git`），本轮**没有 Git 提交、推送或部署**。
+
+- **本轮改动**：增加 `scripts/q06-human-review-gate.cjs`、冻结的 10 条合成 alias 样本、`docs/Q06-HUMAN-REVIEW-PROTOCOL.md`、11 项回归测试；`tests/room.test.cjs` 的下午时间改为本地时间构造，解决跨时区测试假失败。`room/*` 目录与产品运行时代码保持不变。
+- **Q06 工具**：离线随机生成独立 packet A/B，协调员私存 manifest 和输出的 SHA；验证签署代号、独立声明、原始数据未被修改、10/10 标签、一致性以及 C04 拒绝、C10 批准。只给 `READY_FOR_EXTERNAL_SIGNOFF`，**永不**自行签署或产生发布 GO。命令见 `docs/Q06-HUMAN-REVIEW-PROTOCOL.md`。
+- **当前复测（环境补丁后）**：UTC 下 `npm run test:baseline` 785 项（784 通过、1 按旧约定跳过）、`npm run test:v4` 127/127；`room.test.cjs` 在 UTC/Los Angeles/Shanghai 各 22/22。执行环境 npm 仓库不可达，`npm ci` 未完成，`npm run build` 由于缺 `vite/client` 类型不能成功执行；这不等于构建通过或源码构建失败。原包报告的 build pass 属于之前的环境与版本，不当作本轮重新验收。
+- **当前阻塞**：Q01/Q06 仍需要真实双人盲评及外部签名；50 条真实模型扩展探针需要用户凭据、受控浏览器与真实调用；公开站人工复验未在本环境执行（DNS 无法访问）；短确认句池、旧数据迁移和浮层 history 产品决策仍待确认。**整体继续 NO-GO**。
+
+---
+
 # StartNow 前端交接包
 
 > 每次 push 前更新本文件的「交付状态」「本次变更」「已知问题」，与代码放在同一个提交里。
