@@ -566,10 +566,13 @@ const TOPIC_WORD: Record<MockTopic, string> = {
   self: '最近的状态',
 };
 
+// First contact is honest about being unfamiliar, but never asks the player to
+// re-explain a card they already wrote out. Echo the topic instead of
+// "你想从哪讲起？".
 const TENTATIVE: Record<string, (word: string) => string> = {
-  shenmo: (word) => `呃……${word}的事啊。我也刚来，不太会接，但我在听。`,
-  weini: (word) => `嗯……${word}，我可能也说不好。你想从哪讲起？`,
-  miaoze: (word) => `我也刚来，不太会回。${word}的话，先说是哪一件？`,
+  shenmo: (word) => `呃……${word}的事，我也刚来，但我在听。`,
+  weini: (word) => `嗯……${word}的事，我可能也说不好，先听你讲。`,
+  miaoze: (word) => `我也刚来，${word}这种事，我先听着。`,
   yanggao: (word) => `哎，${word}啊。我其实也不太懂，不过你说，我听着。`,
 };
 

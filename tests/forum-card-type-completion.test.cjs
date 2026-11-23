@@ -7,7 +7,7 @@ const { lib } = require('./_ts-loader.cjs');
 const { adoptCommentAdvice, acceptAdvice, completeCard, tickCards } = lib('cards');
 const { canUseNextStep, isActionableStepText } = lib('cardPolicy');
 const { completedActionAnchor } = lib('completionReaction');
-const { forumReplyFallback, forumReplyModeProblem } = lib('forumReplyPolicy');
+const { forumReplyFallback, forumReplyModeProblem, distinctForumShortAck } = lib('forumReplyPolicy');
 const { resultCardDetail } = lib('peerReactions');
 const { defaultPersonas } = lib('personas');
 const { defaultSettings } = lib('store');
@@ -83,6 +83,18 @@ test('brag model text must affirm the result, not ask for more context', () => {
   assert.equal(forumReplyModeProblem(brag, '这一整天都跟下来了，挺不容易的。', false), null);
 });
 
+test('mock first replies echo the topic instead of asking the player to re-explain', async () => {
+  const worry = card('worry', {
+    text: '明天材料物理小测，书才背到第三章。',
+    pending: [{ personaId: 'weini', at: NOW - 1, phase: 'reply' }],
+  });
+  const out = await tickCards({ cards: [worry], personas: people, settings, config: mock, now: NOW });
+  const reply = out.cards[0].comments.find((row) => row.authorId === 'weini');
+  assert.ok(reply);
+  assert.doesNotMatch(reply.text, /你想从哪讲起|先说是哪一件|先说说是哪一件/);
+  assert.match(reply.text, /学习/);
+});
+
 test('mock brag replies congratulate instead of using the tentative first-meeting line', async () => {
   const brag = card('brag', {
     text: '虽然干的活很闲，但是一整天都跟下来了。',
@@ -116,6 +128,14 @@ test('brag fallbacks are persona-specific instead of the same sentence', () => {
   const lines = ['shenmo', 'weini', 'miaoze', 'yanggao'].map((id) =>
     forumReplyFallback(brag, people.find((p) => p.id === id)));
   assert.equal(new Set(lines).size, lines.length, JSON.stringify(lines));
+});
+
+test('short acknowledgements cycle through four lines before repeating the last one', () => {
+  const lines = [];
+  for (let i = 0; i < 6; i += 1) lines.push(distinctForumShortAck(new Set(lines)));
+  assert.equal(new Set(lines.slice(0, 4)).size, 4, JSON.stringify(lines));
+  assert.equal(lines[4], lines[3]);
+  assert.equal(lines[5], lines[3]);
 });
 
 test('step board, card detail and note drawer share the same card-type/actionability gates', () => {
