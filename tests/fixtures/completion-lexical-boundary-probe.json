@@ -1,0 +1,86 @@
+[
+  {
+    "id": "pos-curiosity-after-written",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个没想明白的问题写下来了。我心里还有一点好奇。",
+    "expected": true,
+    "why": "问题已写下；第二句是角色的情绪，不是角色执行了动作"
+  },
+  {
+    "id": "pos-curiosity-in-same-sentence",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个没想明白的问题写下来了，说真的，我心里还留着一点好奇。",
+    "expected": true,
+    "why": "一句话包含已完成动作与一点好奇，不能把点好当动作"
+  },
+  {
+    "id": "pos-curiosity-after-problem",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个问题写下来了。心里反倒多了一点好奇。",
+    "expected": true,
+    "why": "不应误识别一点好奇中的点好"
+  },
+  {
+    "id": "pos-resume-open-and-curious",
+    "anchor": "打开简历",
+    "text": "简历打开了。我倒是有一点好奇，接下来会改哪部分。",
+    "expected": true,
+    "why": "简历动作已完成；第二句只是角色反应"
+  },
+  {
+    "id": "pos-lab-record-and-curious",
+    "anchor": "写一行实验记录",
+    "text": "实验记录写好一行了，我现在还有一点好奇。",
+    "expected": true,
+    "why": "记录完成，与角色的一点好奇不冲突"
+  },
+  {
+    "id": "pos-with-you-control",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "你把那个没想清楚的问题写下来了。还挺好，我也有一点好奇。",
+    "expected": true,
+    "why": "对照：明确指向玩家的完成归属"
+  },
+  {
+    "id": "neg-persona-owns-written",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "我刚刚把那个问题写下来了。",
+    "expected": false,
+    "why": "AI 角色自述完成，不能当玩家完成"
+  },
+  {
+    "id": "neg-persona-owns-opened",
+    "anchor": "打开简历",
+    "text": "我把简历打开了。",
+    "expected": false,
+    "why": "AI 角色主语的动作不能被承认"
+  },
+  {
+    "id": "neg-problem-not-written",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个问题还没写下来。",
+    "expected": false,
+    "why": "明确未完成"
+  },
+  {
+    "id": "neg-problem-only-curiosity",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "我心里还有一点好奇，但那个问题没有写下来。",
+    "expected": false,
+    "why": "一点好奇不能冒充完成动作"
+  },
+  {
+    "id": "neg-problem-question",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个问题写下来了吗？",
+    "expected": false,
+    "why": "问句不是已完成断言"
+  },
+  {
+    "id": "neg-resume-hypothetical",
+    "anchor": "打开简历",
+    "text": "等你打开简历，再看看第一行。",
+    "expected": false,
+    "why": "未来建议不是确认"
+  }
+]

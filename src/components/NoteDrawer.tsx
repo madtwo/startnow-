@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Card, Persona, Todo } from '../types';
+import { canUseNextStep, isActionableStepText } from '../lib/cardPolicy';
 
 interface Props {
   todos: Todo[];
@@ -25,12 +26,14 @@ export default function NoteDrawer({
   onClose,
 }: Props) {
   const [draft, setDraft] = useState('');
+  const usableNote = (card: Card) => Boolean(card.note &&
+    (card.note.actionId || isActionableStepText(card.note.text)));
   const notes = cards
-    .filter((c) => c.note && c.status === 'noted')
+    .filter((c) => c.note && c.status === 'noted' && canUseNextStep(c) && usableNote(c))
     .sort((a, b) => b.createdAt - a.createdAt);
   const open = todos.filter((t) => !t.doneAt);
   const doneNotes = cards
-    .filter((c) => c.note && c.status === 'done' && c.kind !== 'guide' && c.kind !== 'brag')
+    .filter((c) => c.note && c.status === 'done' && c.kind !== 'guide' && c.kind !== 'brag' && canUseNextStep(c) && usableNote(c))
     .sort((a, b) => (b.doneAt ?? b.createdAt) - (a.doneAt ?? a.createdAt));
   const completed = [
     ...doneNotes.map((card) => {

@@ -1,0 +1,86 @@
+{
+  "schema": "startnow-q06-alias-fixture-v1",
+  "source": "tests/advice-alias.test.cjs synthetic samples (8 accepted + C04 reject + C10 accept)",
+  "cases": [
+    {
+      "id": "AL01",
+      "actionId": "peer-boundary-2",
+      "actionLabel": "写一句自己不想答应的事",
+      "context": "社团答应的活动很疲惫，想推掉，又怕被误解",
+      "candidateLine": "先把那句「这次我不去了」写下来，不用发给谁，写完看看它有多难说出口。",
+      "expected": "accept"
+    },
+    {
+      "id": "AL02",
+      "actionId": "peer-clarify-2",
+      "actionLabel": "拟一句不带责备的澄清话",
+      "context": "室友半夜打游戏很吵，说过两次还是这样。",
+      "candidateLine": "要不先别只说“吵”，把具体一点的话摆出来：十二点后戴耳机，我明早还得早起。不带火气，但说到点上。",
+      "expected": "accept"
+    },
+    {
+      "id": "AL03",
+      "actionId": "peer-clarify-2",
+      "actionLabel": "拟一句不带责备的澄清话",
+      "context": "室友半夜打游戏很吵，说过两次还是这样。",
+      "candidateLine": "要不先把话说明白点：几点到几点、你第二天要几点起，只讲影响不翻旧账，比“吵”这个字好用。",
+      "expected": "accept"
+    },
+    {
+      "id": "AL04",
+      "actionId": "peer-clarify-2",
+      "actionLabel": "拟一句不带责备的澄清话",
+      "context": "室友半夜打游戏很吵，说过两次还是这样。",
+      "candidateLine": "要不先拟一句：“不是要你戒游戏，十二点后戴个耳机行吗”，把要求说小一点，别带火气。",
+      "expected": "accept"
+    },
+    {
+      "id": "AL05",
+      "actionId": "peer-clarify-2",
+      "actionLabel": "拟一句不带责备的澄清话",
+      "context": "室友半夜打游戏很吵，说过两次还是这样。",
+      "candidateLine": "说两次没变，可能是「吵」太笼统。要不把具体影响说明白一点，比如「我十二点后得睡，键盘声我睡不着」，不带火气。",
+      "expected": "accept"
+    },
+    {
+      "id": "AL06",
+      "actionId": "peer-clarify-2",
+      "actionLabel": "拟一句不带责备的澄清话",
+      "context": "同事把锅甩给我，我想澄清但不想撕破脸。",
+      "candidateLine": "先拟一句只讲事实、不带情绪的澄清话，把时间线摆清楚就行。不用解释动机，也别加“我不是针对你”。",
+      "expected": "accept"
+    },
+    {
+      "id": "AL07",
+      "actionId": "peer-clarify-2",
+      "actionLabel": "拟一句不带责备的澄清话",
+      "context": "室友半夜打游戏很吵，说过两次还是这样。",
+      "candidateLine": "要不先把想说的那句写下来，比如“我明早有课，十二点后能不能戴耳机”，不带情绪反而好开口。",
+      "expected": "accept"
+    },
+    {
+      "id": "AL08",
+      "actionId": "peer-clarify-2",
+      "actionLabel": "拟一句不带责备的澄清话",
+      "context": "室友半夜打游戏很吵，说过两次还是这样。",
+      "candidateLine": "先把想说的那句话写下来，只说“我十二点后睡不着”，别带“你总是”这种开场。",
+      "expected": "accept"
+    },
+    {
+      "id": "C04",
+      "actionId": "peer-clarify-2",
+      "actionLabel": "拟一句不带责备的澄清话",
+      "context": "小组作业有人一直不干活，我想说清楚又怕吵起来。",
+      "candidateLine": "先把想说的那句写下来，别带“你总是”这类词，只讲分工和进度，读一遍顺不顺再发。",
+      "expected": "reject"
+    },
+    {
+      "id": "C10",
+      "actionId": "love-draft-2",
+      "actionLabel": "拟一句想说的话但先不发送",
+      "context": "朋友借钱没还，我想问又怕伤感情。",
+      "candidateLine": "先把想催的话写下来别发，写完再看要不要改软一点——钱的事开口前，先看清自己最怕哪句。",
+      "expected": "accept"
+    }
+  ]
+}

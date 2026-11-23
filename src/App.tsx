@@ -26,6 +26,7 @@ import { recordDecomposeAttempt } from './lib/decomposeUsage';
 import { DECOMPOSE_DRAFT_KEY } from './lib/decomposeDraft';
 import GoalDetail from './components/GoalDetail';
 import Onboarding from './components/Onboarding';
+import StartModeDialog from './components/StartModeDialog';
 import CrisisCard from './components/CrisisCard';
 import { defaultConfig, isMock, isReady } from './config/providers';
 import { HOTLINE, HOTLINE_SCOPE } from './lib/crisis';
@@ -35,6 +36,7 @@ import { auditCriticalContent, auditSocial, auditTone } from './lib/baseline';
 import { containsCrisis, hasCrisisInArchive } from './lib/submissionGuard';
 import { createOperationGate } from './lib/operationGate';
 import { adviceContextCheck, type AdviceContextReason, type AdviceStart } from './lib/adviceContext';
+import { sanitizeCardLineSources } from './lib/adviceLine';
 import { advanceBragMinutes, cancelBragsForNewWorry, cancelBragsForPersona, triggerNextBrag } from './lib/brag';
 import { forgetAll, forgetOne, forgetRole } from './lib/memoryControl';
 import { modelFailureNotice } from './lib/modelStatus';
@@ -87,8 +89,12 @@ import {
   defaultSettings,
   emptyWorld,
   exportBundle,
+  exportCorruptStorage,
+  discardCorruptStorage,
   importBundle,
   isFirstRun,
+  listCorruptStorageKeys,
+  listFailedStorageKeys,
   loadCards,
   loadConfig,
   loadIdentity,
@@ -110,6 +116,8 @@ import {
   saveGoals,
   saveSchedule,
   saveSummaries,
+  setStorageErrorHandler,
+  setStorageReadOnly,
 } from './lib/store';
 import type {
   Card,
@@ -130,6 +138,18 @@ import type {
 const TICK_MS = 4000;
 const MODEL_BACKOFF_MS = 60_000;
 const GUIDE_DISMISSED_KEY = 'startnow.guideDismissed';
+
+// UI preferences are best-effort metadata, not a reason to crash the app when
+// the browser blocks storage (private mode, enterprise policies, quota).
+const readUiPreference = (key: string): string | null => {
+  try { return localStorage.getItem(key); } catch { return null; }
+};
+const writeUiPreference = (key: string, value: string): void => {
+  try { localStorage.setItem(key, value); } catch { /* persistence banner handles main data */ }
+};
+const removeUiPreference = (key: string): void => {
+  try { localStorage.removeItem(key); } catch { /* best effort */ }
+};
 
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const SettingsDialog = lazy(() => import('./components/SettingsDialog'));
@@ -196,9 +216,9 @@ export default function App() {
       const seeded = personas.every((p) => p.memory.length === 0)
         ? seedMemories(personas)
         : personas;
-      return { cards: withGuide(loadCards()), personas: ensureMinds(seeded) };
+      return { cards: withGuide(loadCards().map(sanitizeCardLineSources)), personas: ensureMinds(seeded) };
     }
-    return { cards: withGuide(loadCards()), personas: ensureMinds(loadPersonas()) };
+    return { cards: withGuide(loadCards().map(sanitizeCardLineSources)), personas: ensureMinds(loadPersonas()) };
   });
   // 同步变更时立即推进版本号，不依赖 React 下一次 render 的时间。
   const gate = useRef(createOperationGate());
@@ -266,16 +286,17 @@ export default function App() {
   const adviceBypassed = useRef(new Set<string>());
   const [toast, setToast] = useState('');
   const [onboardOpen, setOnboardOpen] = useState(
-    () => localStorage.getItem('startnow.onboarded') !== '1',
+    () => readUiPreference('startnow.onboarded') !== '1',
   );
+  const [modeChoiceOpen, setModeChoiceOpen] = useState(false);
   const [guideDismissed, setGuideDismissed] = useState(
-    () => localStorage.getItem(GUIDE_DISMISSED_KEY) === '1',
+    () => readUiPreference(GUIDE_DISMISSED_KEY) === '1',
   );
   const [view, setView] = useState<View>(() =>
     new URLSearchParams(window.location.search).has('room') ? 'room' : 'home',
   );
   const [homeTab, setHomeTab] = useState<'step' | 'forum'>(
-    () => (isFirstRun() || localStorage.getItem('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
+    () => (isFirstRun() || readUiPreference('startnow.homeTab') === 'forum' ? 'forum' : 'step'),
   );
   const [forumQuery, setForumQuery] = useState('');
   const [forumFilter, setForumFilter] = useState<ForumFilter>('全部');
@@ -298,6 +319,9 @@ export default function App() {
   const setGoals: Dispatch<SetStateAction<Goal[]>> = (next) => { touch(); rawSetGoals(next); };
   const [schedule, setSchedule] = useState<ScheduleItem[]>(() => loadSchedule());
   const [summaries, setSummaries] = useState<DailySummary[]>(() => loadSummaries());
+  // Capture startup read/parse failures after every local data domain is loaded.
+  const [corruptKeys, setCorruptKeys] = useState(() => listCorruptStorageKeys());
+  const [storageFailed, setStorageFailed] = useState(() => listFailedStorageKeys().length > 0);
   const summaryLatest = useRef(summaries);
   summaryLatest.current = summaries;
   const [summaryBusy, setSummaryBusy] = useState(false);
@@ -332,6 +356,59 @@ export default function App() {
   const [, refreshClock] = useState(0);
 
   useEffect(() => saveCards(cards), [cards]);
+  // Keep browser back/forward aligned with the app's own view state instead of
+  // leaving the site from a detail/goal/schedule page.
+  const historyReady = useRef(false);
+  const historySuppress = useRef(false);
+  const historyReplaceNext = useRef(false);
+  useEffect(() => {
+    const state = { __app: true, view, homeTab, detailId, goalId };
+    if (!historyReady.current) {
+      window.history.replaceState(state, '', window.location.href);
+      historyReady.current = true;
+      return;
+    }
+    if (historySuppress.current) {
+      historySuppress.current = false;
+      return;
+    }
+    if (historyReplaceNext.current) {
+      historyReplaceNext.current = false;
+      window.history.replaceState(state, '', window.location.href);
+      return;
+    }
+    window.history.pushState(state, '', window.location.href);
+  }, [view, homeTab, detailId, goalId]);
+  useEffect(() => {
+    const onPop = (event: PopStateEvent) => {
+      const state = event.state as {
+        __app?: boolean; view?: View; homeTab?: 'step' | 'forum'; detailId?: string; goalId?: string;
+      } | null;
+      if (!state?.__app || !state.view) return;
+      historySuppress.current = true;
+      setView(state.view);
+      setHomeTab(state.homeTab === 'forum' ? 'forum' : 'step');
+      setDetailId(typeof state.detailId === 'string' ? state.detailId : '');
+      setGoalId(typeof state.goalId === 'string' ? state.goalId : '');
+      setSettingsOpen(false);
+      setAdminOpen(false);
+      setDrawerOpen(false);
+      setDecomposeOpen(false);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [view, homeTab]);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDrawerOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawerOpen]);
   useEffect(() => {
     // Derived from actual card flags; reading a card, rather than scrolling, advances the gate.
     if (openingGateFlag !== openingPhase) setOpeningGateFlag(openingPhase);
@@ -347,9 +424,9 @@ export default function App() {
   useEffect(() => saveSummaries(summaries), [summaries]);
   // Do not launch a new API tick against refs from before a local goal/card commit.
   useEffect(() => { localPersonaWritePending.current = false; }, [cards, goals]);
-  useEffect(() => localStorage.setItem('startnow.homeTab', homeTab), [homeTab]);
+  useEffect(() => writeUiPreference('startnow.homeTab', homeTab), [homeTab]);
   useEffect(() => {
-    if (onboardOpen) localStorage.setItem('startnow.onboarded', '1');
+    if (onboardOpen) writeUiPreference('startnow.onboarded', '1');
   }, [onboardOpen]);
 
   useEffect(() => {
@@ -382,7 +459,9 @@ export default function App() {
     const onOtherTabChange = (event: StorageEvent) => {
       if (event.storageArea !== localStorage) return;
       const key = event.key;
-      if (key !== null && !/^shudong\.(cards|personas|world|settings|todos|identity|goals|schedule|summaries)\./.test(key)) return;
+      if (key !== null && !/^shudong\.(cards|personas|world|settings|todos|identity|goals|schedule|summaries|room|archives|roomsettings|config)\./.test(key)) return;
+      // Must be synchronous: React may still commit async work from this tab.
+      setStorageReadOnly(true);
       externalTabChanged.current = true;
       materialInFlight.current.forEach(controller=>controller.abort());
       materialInFlight.current.clear();
@@ -649,6 +728,15 @@ export default function App() {
   }, [cards, tick]);
 
   useEffect(() => {
+    setStorageErrorHandler(() => {
+      // Do not hide a data-loss warning after the normal toast timeout.
+      setStorageFailed(true);
+    });
+    if (listFailedStorageKeys().length > 0) setStorageFailed(true);
+    return () => setStorageErrorHandler(null);
+  }, []);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(''), 3600);
     return () => window.clearTimeout(timer);
@@ -656,6 +744,21 @@ export default function App() {
 
   const patch = (id: string, fn: (card: Card) => Card) =>
     setCards((prev) => prev.map((c) => (c.id === id ? fn(c) : c)));
+
+  const completeCardSafely = (card: Card) => {
+    const next = completeCard(card, Date.now(), settings.speed);
+    if (next === card) {
+      setToast('这条更像回应，不是可完成的下一步；先换一条具体建议。');
+      return;
+    }
+    patch(card.id, () => next);
+  };
+
+  const switchTo = (next: View, tab?: 'step' | 'forum') => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    if (tab) setHomeTab(tab);
+    setView(next);
+  };
 
   /** One user-upload event -> one vision extraction, never called by ticks. */
   const scanMaterial = async (cardId:string, imageDataUrl:string) => {
@@ -771,6 +874,7 @@ export default function App() {
     setDraftKind('worry');
     setDraftTitle('');
     setImage('');
+    historyReplaceNext.current = true;
     setView('home');
     setToast(image ? '卡已发出，正在识别图片里的可见信息' : '卡放出去了，等一会儿有人来');
     if (card.image) void scanMaterial(card.id,card.image);
@@ -1136,6 +1240,21 @@ export default function App() {
     setSettingsOpen(true);
   };
 
+  const chooseDemo = () => {
+    const next = { ...defaultConfig };
+    setConfig(next);
+    saveConfig(next);
+    writeUiPreference('startnow.modeChosen', '1');
+    setModeChoiceOpen(false);
+    setToast('演示模式：不用 Key，也能体验完整流程');
+  };
+
+  const chooseApi = () => {
+    writeUiPreference('startnow.modeChosen', '1');
+    setModeChoiceOpen(false);
+    openSettings('选择服务商并填入 Key；不想接也可以先用演示模式。');
+  };
+
   const bumpBrand = () => {
     const now = Date.now();
     brandClicks.current = brandClicks.current.filter((t) => now - t < 6000);
@@ -1406,21 +1525,42 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const doExportCorrupt = () => {
+    const raw = exportCorruptStorage();
+    const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `startnow-corrupt-backup-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const doDiscardCorrupt = () => {
+    if (!window.confirm('仅丢弃上方列出的损坏条目并刷新页面。此操作不可撤销；请先下载原始数据备份。确认继续？')) return;
+    const result = discardCorruptStorage();
+    if (result.failed.length) {
+      setCorruptKeys(listCorruptStorageKeys());
+      setToast('有条目已被其他页面修改或无法移除，请先关闭其他标签页并刷新。');
+      return;
+    }
+    window.location.reload();
+  };
+
   const dismissGuide = () => {
     setGuideDismissed(true);
-    localStorage.setItem(GUIDE_DISMISSED_KEY, '1');
+    writeUiPreference(GUIDE_DISMISSED_KEY, '1');
   };
 
   const showRules = () => {
     setGuideDismissed(false);
-    localStorage.removeItem(GUIDE_DISMISSED_KEY);
+    removeUiPreference(GUIDE_DISMISSED_KEY);
     setHomeTab('forum');
     setView('home');
   };
 
   const resetGuideDismissed = () => {
     setGuideDismissed(false);
-    localStorage.removeItem(GUIDE_DISMISSED_KEY);
+    removeUiPreference(GUIDE_DISMISSED_KEY);
   };
 
   const clearNotices = () => {
@@ -1458,7 +1598,9 @@ export default function App() {
     clearOpeningStage();
     setOpeningGateFlag(null);
     setCards(
-      bundle.cards.some((c) => c.kind === 'guide') ? bundle.cards : [buildGuideCard(), ...bundle.cards],
+      bundle.cards.some((c) => c.kind === 'guide')
+        ? bundle.cards.map(sanitizeCardLineSources)
+        : [buildGuideCard(), ...bundle.cards.map(sanitizeCardLineSources)],
     );
     setPersonas(ensureMinds(bundle.personas));
     setWorld(bundle.world);
@@ -1641,8 +1783,7 @@ export default function App() {
               className={view === 'home' && homeTab === 'step' ? 'active' : ''}
               aria-current={view === 'home' && homeTab === 'step' ? 'page' : undefined}
               onClick={() => {
-                setHomeTab('step');
-                setView('home');
+                switchTo('home', 'step');
               }}
             >
               试试
@@ -1656,8 +1797,7 @@ export default function App() {
                 (view === 'home' && homeTab === 'forum') || view === 'detail' ? 'page' : undefined
               }
               onClick={() => {
-                setHomeTab('forum');
-                setView('home');
+                switchTo('home', 'forum');
               }}
             >
               论坛
@@ -1666,7 +1806,7 @@ export default function App() {
               type="button"
               className={view === 'room' ? 'active' : ''}
               aria-current={view === 'room' ? 'page' : undefined}
-              onClick={() => setView('room')}
+              onClick={() => switchTo('room')}
             >
               群聊
             </button>
@@ -1682,7 +1822,7 @@ export default function App() {
                   ? 'page'
                   : undefined
               }
-              onClick={() => setView(COMPETITION_MODE ? 'profile' : 'schedule')}
+              onClick={() => switchTo(COMPETITION_MODE ? 'profile' : 'schedule')}
             >
               {COMPETITION_MODE ? '我的' : '日程'}
             </button>
@@ -1923,7 +2063,7 @@ export default function App() {
               onAccept={(card) => patch(card.id, (c) => acceptAdvice(c))}
               onShrink={(card) => patch(card.id, (c) => shrinkAdvice(c))}
               onRequestSmaller={(card) => void requestSmaller(card)}
-              onDone={(card) => patch(card.id, (c) => completeCard(c, Date.now(), settings.speed))}
+              onDone={(card) => completeCardSafely(card)}
               onAdvice={(card) => requestAdvice(card)}
               onWrite={() => setView('post')}
               onForum={() => setHomeTab('forum')}
@@ -2122,9 +2262,9 @@ export default function App() {
             onShrink={() => patch(detailCard.id, (c) => shrinkAdvice(c))}
             onRequestSmaller={() => void requestSmaller(detailCard)}
             onAccept={() => patch(detailCard.id, (c) => acceptAdvice(c))}
-            onDone={() => patch(detailCard.id, (c) => completeCard(c, Date.now(), settings.speed))}
+            onDone={() => completeCardSafely(detailCard)}
             onCloseCard={() => patch(detailCard.id, (c) => closeCard(c))}
-            onBack={() => setView('home')}
+            onBack={() => window.history.back()}
             onLike={() => like(detailCard)}
             onCheer={() => cheer(detailCard)}
             onReidentify={detailCard.image ? ()=>void scanMaterial(detailCard.id,detailCard.image!) : undefined}
@@ -2493,11 +2633,35 @@ export default function App() {
           hasToast={Boolean(toast || otherTabWarning)} />
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div className="toast" role="status">{toast}</div>}
+      {corruptKeys.length > 0 && !otherTabWarning && (
+        <section className="storage-recovery" role="alert" aria-label="本地数据恢复">
+          <strong>有 {corruptKeys.length} 项本地数据无法读取</strong>
+          <p>为防止覆盖，已停止自动写入这些损坏条目。建议先下载原始备份，再决定是否丢弃；当前页的修改可能无法保存。</p>
+          <p className="storage-recovery-keys">{corruptKeys.join('、')}</p>
+          <p className="storage-recovery-hint">原始备份可能包含私人内容或本机 API Key，请勿公开分享。</p>
+          <div className="storage-recovery-actions">
+            <button type="button" onClick={doExportCorrupt}>下载原始数据备份</button>
+            <button type="button" onClick={doDiscardCorrupt}>丢弃损坏条目并刷新</button>
+          </div>
+        </section>
+      )}
+      {storageFailed && !otherTabWarning && (
+        <section className="storage-recovery storage-recovery-write" role="alert" aria-label="本地保存失败">
+          <strong>本地保存受到限制</strong>
+          <p>可能是空间不足或浏览器隐私模式。本次修改可能只在当前页面有效，请立即导出当前存档并妥善保存。</p>
+          <div className="storage-recovery-actions">
+            <button type="button" onClick={doExport}>导出当前存档</button>
+          </div>
+        </section>
+      )}
       {otherTabWarning && (
-        <div className="toast" role="alert" style={{ bottom: 86 }}>
-          检测到其他标签页改动了 StartNow 数据；当前页已停止后台生成，以免覆盖新内容。请关闭其他标签页后
-          <button type="button" onClick={() => window.location.reload()}>刷新本页</button>。
+        <div className="storage-conflict-backdrop" role="alertdialog" aria-modal="true" aria-label="其他标签页修改了数据">
+          <div className="storage-conflict-panel">
+            <strong>另一标签页更新了 StartNow 数据</strong>
+            <p>此页面已停止所有本地数据写入和后台生成，避免旧状态覆盖新内容。请先关闭其他 StartNow 标签页，再刷新这里。</p>
+            <button type="button" autoFocus onClick={() => window.location.reload()}>刷新本页并读取最新数据</button>
+          </div>
         </div>
       )}
 
@@ -2579,7 +2743,7 @@ export default function App() {
       {!COMPETITION_MODE && view === 'goal' && activeGoal && (
         <GoalDetail
           goal={activeGoal}
-          onBack={() => setView('home')}
+          onBack={() => window.history.back()}
           onToggle={toggleGoalStep}
           onShare={() => shareMyGoal(activeGoal)}
           onDelete={(remove) => dropGoal(activeGoal.id, remove)}
@@ -2610,15 +2774,9 @@ export default function App() {
                   : ''
               }`}
               onClick={() => {
-                if (id === 'step') {
-                  setHomeTab('step');
-                  setView('home');
-                } else if (id === 'forum') {
-                  setHomeTab('forum');
-                  setView('home');
-                } else {
-                  setView(id as View);
-                }
+                if (id === 'step') switchTo('home', 'step');
+                else if (id === 'forum') switchTo('home', 'forum');
+                else switchTo(id as View);
               }}
             >
               {label}
@@ -2632,10 +2790,17 @@ export default function App() {
 
       {onboardOpen && (
         <Onboarding
-          onClose={() => {
+          onClose={(skipped) => {
             setOnboardOpen(false);
+            if (!skipped && readUiPreference('startnow.modeChosen') !== '1') {
+              setModeChoiceOpen(true);
+            }
           }}
         />
+      )}
+
+      {modeChoiceOpen && (
+        <StartModeDialog onDemo={chooseDemo} onApi={chooseApi} />
       )}
 
       <footer className="foot">

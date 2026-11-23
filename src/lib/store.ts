@@ -27,6 +27,7 @@ import { validateMaterialStep } from './materialAdvice';
 import { isManipulative } from './agentVulnerability';
 import { stripAiProvenance } from './displayText';
 import { OPENING_GATE_KEY, validPlayerIntroText } from './openingGate';
+import { repairForumComments, repairForumPending, repairForumPlan } from './forumArchive';
 
 const KEYS = {
   config: 'shudong.config.v1',
@@ -47,9 +48,58 @@ const KEYS = {
 
 const LEGACY_POST_KEYS = ['shudong.posts.v3', 'shudong.posts.v2', 'shudong.posts.v1'];
 const LEGACY_CARD_KEYS = ['shudong.cards.v5', 'shudong.cards.v4', 'shudong.cards.v3', 'shudong.cards.v2', 'shudong.cards.v1'];
-const UI_KEYS = ['startnow.onboarded', 'startnow.mode', 'startnow.homeTab', 'startnow.calendarView', 'shudong.decomposeDraft.v1', 'shudong.decomposeUsage.v1', 'startnow.lastCrisisAt', OPENING_GATE_KEY];
+const UI_KEYS = ['startnow.onboarded', 'startnow.modeChosen', 'startnow.mode', 'startnow.homeTab', 'startnow.calendarView', 'shudong.decomposeDraft.v1', 'shudong.decomposeUsage.v1', 'startnow.lastCrisisAt', OPENING_GATE_KEY];
 // Independent room.html stores, same origin; a user's full reset should include these.
 const ROOM_KEYS = ['shudong.room.v1', 'shudong.archives.v1', 'shudong.roomsettings.v1'];
+
+// Corrupt JSON must never be silently replaced by an empty default on mount.
+// Keep the ORIGINAL bytes only in memory, so the owner can download a rescue
+// copy before explicitly discarding that particular entry. No logs or network.
+const corruptEntries = new Map<string, string>();
+const failedStorageKeys = new Set<string>();
+let storageReadOnly = false;
+const ARRAY_KEYS = new Set([
+  KEYS.cards, KEYS.personas, KEYS.todos, KEYS.archives, KEYS.goals,
+  KEYS.schedule, KEYS.summaries, ...LEGACY_CARD_KEYS,
+]);
+const OBJECT_KEYS = new Set([
+  KEYS.config, KEYS.world, KEYS.settings, KEYS.identity,
+  KEYS.identityLegacy, KEYS.room, KEYS.roomSettings,
+]);
+
+/** A second tab has newer data: block writes from this stale React tree. */
+export const setStorageReadOnly = (value: boolean): void => { storageReadOnly = value; };
+export const listCorruptStorageKeys = (): string[] => [...corruptEntries.keys()];
+export const listFailedStorageKeys = (): string[] => [...failedStorageKeys];
+
+/** This backup can contain PRIVATE content or an API key; download locally only. */
+export const exportCorruptStorage = (): string => JSON.stringify({
+  format: 'startnow-corrupt-local-storage-v1',
+  exportedAt: Date.now(),
+  entries: [...corruptEntries].map(([key, raw]) => ({ key, raw })),
+}, null, 2);
+
+/** Explicit, surgical recovery: never delete a key changed by another tab. */
+export function discardCorruptStorage(): { removed: string[]; failed: string[] } {
+  if (storageReadOnly) return { removed: [], failed: listCorruptStorageKeys() };
+  const removed: string[] = [];
+  const failed: string[] = [];
+  for (const [key, raw] of corruptEntries) {
+    try {
+      if (localStorage.getItem(key) !== raw) { failed.push(key); continue; }
+      localStorage.removeItem(key);
+      corruptEntries.delete(key);
+      failedStorageKeys.delete(key);
+      removed.push(key);
+    } catch { failed.push(key); }
+  }
+  return { removed, failed };
+}
+
+const safeGetItem = (key: string): string | null => {
+  try { return localStorage.getItem(key); }
+  catch { failedStorageKeys.add(key); return null; }
+};
 
 /** 旧 posts 格式不兼容：不在用户不知情的情况下静默迁移或丢弃。 */
 export const listLegacyPostKeys = (): string[] => {
@@ -57,6 +107,7 @@ export const listLegacyPostKeys = (): string[] => {
   catch { return []; }
 };
 export const deleteLegacyPosts = (): void => {
+  if (storageReadOnly) return;
   LEGACY_POST_KEYS.forEach((key) => { try { localStorage.removeItem(key); } catch { /* 存储受限 */ } });
 };
 
@@ -68,19 +119,41 @@ export const cleanStoredMemory = (rows: unknown): Persona['memory'] =>
 const DAY = 86_400_000;
 
 const read = (key: string): unknown => {
+  const raw = safeGetItem(key);
+  if (raw === null) return null;
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
+    const parsed: unknown = JSON.parse(raw);
+    // JSON can be syntactically valid but impossible for this storage domain.
+    // Quarantine only unequivocal shape errors; the normal loaders still
+    // validate/migrate finer details of legitimate legacy objects.
+    if ((ARRAY_KEYS.has(key) && !Array.isArray(parsed)) ||
+        (OBJECT_KEYS.has(key) && (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)))) {
+      throw new SyntaxError('unexpected storage root shape');
+    }
+    return parsed;
   } catch {
+    // Do not retain in console or analytics; an archive can include private data.
+    if (!corruptEntries.has(key)) corruptEntries.set(key, raw);
     return null;
   }
 };
 
+type StorageErrorHandler = (key: string) => void;
+let storageErrorHandler: StorageErrorHandler | null = null;
+
+/** Surface quota/private-mode failures instead of silently losing local data. */
+export const setStorageErrorHandler = (handler: StorageErrorHandler | null): void => {
+  storageErrorHandler = handler;
+};
+
 const write = (key: string, value: unknown) => {
+  // In both cases, a write would irreversibly overwrite data we did not load.
+  if (storageReadOnly || corruptEntries.has(key)) return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // 隐私模式或空间不足时静默失败，不影响本次会话
+    failedStorageKeys.add(key);
+    try { storageErrorHandler?.(key); } catch { /* the warning handler must stay non-fatal */ }
   }
 };
 
@@ -129,14 +202,14 @@ export function loadConfig(): LlmConfig {
 export const saveConfig = (config: LlmConfig) => write(KEYS.config, config);
 
 const hasLegacyCards = () =>
-  LEGACY_CARD_KEYS.some((key) => localStorage.getItem(key) !== null);
+  LEGACY_CARD_KEYS.some((key) => safeGetItem(key) !== null);
 
 // `posts.v*` 是很早版本的帖子格式，当前没有兼容迁移；它不应挡住新版开场种子。
 export const isFirstRun = () =>
-  localStorage.getItem(KEYS.cards) === null && !hasLegacyCards();
+  safeGetItem(KEYS.cards) === null && !hasLegacyCards();
 
 export const needsUpgrade = () =>
-  localStorage.getItem(KEYS.cards) === null && hasLegacyCards();
+  safeGetItem(KEYS.cards) === null && hasLegacyCards();
 
 const retention = (cards: Card[], now = Date.now()) =>
   cards
@@ -144,11 +217,7 @@ const retention = (cards: Card[], now = Date.now()) =>
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 200);
 
-const isTimedPersonaRow = (row: unknown): row is { personaId: string; at: number } =>
-  Boolean(row) && typeof (row as { personaId?: unknown }).personaId === 'string' &&
-  Number.isFinite((row as { at?: unknown }).at);
-
-const normalizeCard = (raw: Partial<Card>): Card | null => {
+const normalizeCard = (raw: Partial<Card>, allowedPersonas?: ReadonlySet<string>): Card | null => {
   if (!raw || typeof raw.text !== 'string' || hasPlayerCrisis(raw) ||
       (raw.authorKind==='persona' && isManipulative(raw.text))) return null;
   const validImage = typeof raw.image==='string' &&
@@ -184,13 +253,21 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     const checked = validateMaterialStep(rawAdvice.text, material);
     return checked.ok && checked.anchorId === rawAdvice.materialAnchorId;
   })();
-  const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : Date.now();
+  const createdAt = typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt) && raw.createdAt >= 0 ? raw.createdAt : Date.now();
   const text = stripAiProvenance(raw.text);
+  const validComments = Array.isArray(raw.comments)
+    ? raw.comments.filter((row) => row && typeof row.text === 'string' &&
+        typeof row.authorId === 'string' &&
+        ['player', 'persona', 'helper'].includes(row.authorKind) &&
+        !(row.authorKind === 'persona' && isManipulative(row.text)))
+      .map((row) => ({ ...row, growthReference: row.authorKind === 'persona' && row.growthReference === true }))
+    : [];
+  const { comments, ambiguousIds } = repairForumComments(validComments, createdAt);
   const playerIntro = raw.playerIntro === true && raw.authorKind === 'player' && raw.authorId === 'me' &&
     (raw.kind === 'worry' || raw.kind === undefined) && !raw.goalId && !raw.image &&
     !raw.material && !raw.intro && validPlayerIntroText(text);
   return {
-    id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
+    id: typeof raw.id === 'string' && raw.id.trim() && raw.id.length <= 128 ? raw.id : crypto.randomUUID(),
     authorId: typeof raw.authorId === 'string' ? raw.authorId : 'me',
     authorName: typeof raw.authorName === 'string' ? raw.authorName : '我',
     authorKind:
@@ -227,19 +304,21 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
     likedByMe: Boolean(raw.likedByMe),
     text,
     createdAt,
+    // Preserve only plausible local activity markers backed by a real player
+    // comment at the same timestamp; legacy imports without a marker expire
+    // from creation time, even if a comment timestamp looks recent.
+    lastPlayerActivityAt: Number.isFinite(raw.lastPlayerActivityAt) &&
+      (raw.lastPlayerActivityAt as number) >= createdAt &&
+      (raw.lastPlayerActivityAt as number) <= Date.now() &&
+      comments.some(row => row.authorKind === 'player' && row.at === raw.lastPlayerActivityAt)
+      ? raw.lastPlayerActivityAt : undefined,
     status: raw.status ?? 'stuck',
-    arrivals: playerIntro ? [] : Array.isArray(raw.arrivals) ? raw.arrivals.filter((id): id is string => typeof id === 'string') : [],
-    plan: playerIntro ? [] :
-      Array.isArray(raw.plan) ? raw.plan.filter(isTimedPersonaRow) : [],
-    pending: playerIntro ? [] :
-      Array.isArray(raw.pending) ? raw.pending.filter(isTimedPersonaRow) : [],
-    comments: Array.isArray(raw.comments)
-      ? raw.comments.filter((row) => row && typeof row.text === 'string' &&
-          typeof row.authorId === 'string' &&
-          ['player', 'persona', 'helper'].includes(row.authorKind) &&
-          !(row.authorKind==='persona' && isManipulative(row.text)))
-        .map((row) => ({...row,growthReference:row.authorKind==='persona' && row.growthReference===true}))
-      : [],
+    arrivals: playerIntro ? [] : Array.isArray(raw.arrivals)
+      ? [...new Set(raw.arrivals.filter((id): id is string => typeof id === 'string' &&
+          id.length > 0 && id.length <= 128 && (!allowedPersonas || allowedPersonas.has(id))))] : [],
+    plan: playerIntro ? [] : repairForumPlan(raw.plan, allowedPersonas),
+    pending: playerIntro ? [] : repairForumPending(raw.pending, comments, ambiguousIds, allowedPersonas),
+    comments,
     advice: rawAdvice && importMaterialAdviceValid
       ? { ...rawAdvice, text: typeof rawAdvice.text === 'string' ? rawAdvice.text : '一个办法' }
       : undefined,
@@ -263,8 +342,23 @@ const normalizeCard = (raw: Partial<Card>): Card | null => {
 };
 
 /** Only the earliest valid introduction is authoritative, even for an imported archive. */
-export function normalizeCardRows(rows: readonly Partial<Card>[]): Card[] {
-  const parsed = rows.map(normalizeCard).filter((card): card is Card => Boolean(card));
+export function normalizeCardRows(rows: readonly Partial<Card>[], personaIds?: readonly string[]): Card[] {
+  const allowedPersonas = personaIds ? new Set(personaIds) : undefined;
+  const parsed = rows.map(row => normalizeCard(row, allowedPersonas)).filter((card): card is Card => Boolean(card));
+  const counts = new Map<string, number>();
+  for (const card of parsed) counts.set(card.id, (counts.get(card.id) ?? 0) + 1);
+  const ambiguous = new Set([...counts].filter(([, count]) => count > 1).map(([id]) => id));
+  const used = new Set(counts.keys());
+  for (const card of parsed) {
+    // Keep both conversations; an ambiguous card id must not route UI updates
+    // into the first match or give a brag a fabricated source relationship.
+    if (ambiguous.has(card.id)) {
+      do { card.id = crypto.randomUUID(); } while (used.has(card.id));
+      used.add(card.id);
+    }
+    if (card.sourceCardId && ambiguous.has(card.sourceCardId)) card.sourceCardId = undefined;
+    if (card.bragCardId && ambiguous.has(card.bragCardId)) card.bragCardId = undefined;
+  }
   const firstIntro = parsed.filter(card => card.playerIntro).sort((a, b) => a.createdAt - b.createdAt)[0];
   let found = false;
   return parsed.map(card => {
@@ -277,7 +371,7 @@ export function normalizeCardRows(rows: readonly Partial<Card>[]): Card[] {
 export function loadCards(): Card[] {
   const saved = read(KEYS.cards);
   if (Array.isArray(saved)) {
-    return retention(normalizeCardRows(saved));
+    return retention(normalizeCardRows(saved, loadPersonas().map(persona => persona.id)));
   }
   // 旧版卡片：保留你自己开的卡，AI 的卡换成新种子
   const legacy =
@@ -287,7 +381,7 @@ export function loadCards(): Card[] {
     read('shudong.cards.v2') ??
     read('shudong.cards.v1');
   if (Array.isArray(legacy)) {
-    const mine = normalizeCardRows(legacy)
+    const mine = normalizeCardRows(legacy, loadPersonas().map(persona => persona.id))
       .filter((c) => c.authorId === 'me');
     return retention([...mine, ...buildSeedCards()]);
   }
@@ -395,10 +489,17 @@ export function mergeImportedPersonaHistory(rows: unknown): Persona[] {
 }
 
 const markPersonaSchema = () => {
+  // Never stamp a successful migration when the persona record is quarantined,
+  // nor bypass the stale-tab write lock via a metadata-only localStorage call.
+  if (storageReadOnly || corruptEntries.has(KEYS.personas) ||
+      corruptEntries.has(PERSONA_SCHEMA_KEY)) return;
   try {
     localStorage.setItem(PERSONA_SCHEMA_KEY, String(PERSONA_SCHEMA_VERSION));
   } catch {
-    // 隐私模式：本次会话仍用迁移后的内存数据。
+    // A schema-marker write is still a failed persistence operation. Surface it
+    // to the same persistent banner as all other local-storage failures.
+    failedStorageKeys.add(PERSONA_SCHEMA_KEY);
+    try { storageErrorHandler?.(PERSONA_SCHEMA_KEY); } catch { /* non-fatal warning */ }
   }
 };
 
@@ -643,11 +744,12 @@ export function importBundle(raw: string): Bundle | null {
       return true;
     });
     if (!valid) return null;
+    const personas = mergeImportedPersonaHistory(data.personas);
     return {
       version: 3,
       exportedAt: typeof data.exportedAt === 'number' ? data.exportedAt : Date.now(),
-      cards: retention(normalizeCardRows(data.cards as Partial<Card>[])),
-      personas: mergeImportedPersonaHistory(data.personas),
+      cards: retention(normalizeCardRows(data.cards as Partial<Card>[], personas.map(persona => persona.id))),
+      personas,
       // 调用计数属于本设备的当日预算，导入存档不能把它清零或改写。
       world: { ...cleanWorld(data.world), dayKey: loadWorld().dayKey, callsToday: loadWorld().callsToday },
       settings: {
@@ -671,9 +773,12 @@ export function importBundle(raw: string): Bundle | null {
 }
 
 export function clearAll() {
+  if (storageReadOnly) return;
   [...Object.values(KEYS), ...LEGACY_POST_KEYS, ...LEGACY_CARD_KEYS, ...UI_KEYS, ...ROOM_KEYS].forEach((key) => {
     try {
       localStorage.removeItem(key);
+      corruptEntries.delete(key);
+      failedStorageKeys.delete(key);
     } catch {
       // 忽略
     }

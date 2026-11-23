@@ -154,7 +154,10 @@ function CheckGlyph() {
 
 export default function ScheduleView({ items, goals, onToggle, onAdd, onOpenGoal, onDecompose }: Props) {
   const today = dateKeyLocal(Date.now());
-  const [mode, setMode] = useState<Mode>(() => (localStorage.getItem(MODE_KEY) === 'list' ? 'list' : 'calendar'));
+  const [mode, setMode] = useState<Mode>(() => {
+    try { return localStorage.getItem(MODE_KEY) === 'list' ? 'list' : 'calendar'; }
+    catch { return 'calendar'; }
+  });
   const [selected, setSelected] = useState(today);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(today);
@@ -219,7 +222,7 @@ export default function ScheduleView({ items, goals, onToggle, onAdd, onOpenGoal
 
   const chooseMode = (next: Mode) => {
     setMode(next);
-    localStorage.setItem(MODE_KEY, next);
+    try { localStorage.setItem(MODE_KEY, next); } catch { /* view preference only */ }
   };
 
   const quickAdd = () => {

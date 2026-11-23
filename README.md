@@ -43,3 +43,7 @@ npm run test:all
 ## 开发交接
 
 见 `AGENTS.md`。
+
+## 离线人类评审准备（Q06，仍未真人签核）
+
+建议/动作别名的双评盲包生成和只读校验，使用 `scripts/q06-human-review-gate.cjs`；完整步骤见 [Q06 人类评审协议](docs/Q06-HUMAN-REVIEW-PROTOCOL.md)。运行 `npm run test:q06-human-gate` 仅测试工具逻辑，**不是**真人评审或发布批准。

@@ -109,6 +109,25 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     setError('');
     reportJob({status:'idle'});
   };
+  // Closing keeps the draft by design. This is the explicit way to start over:
+  // clear answers always; optionally clear the goal/deadline/manual steps too.
+  const resetDecompose = (clearAll: boolean) => {
+    operationId.current++;
+    activeController.current?.abort();
+    activeController.current = null;
+    lastRequest.current = null;
+    setBusy(false); setVisionBusy(false);
+    setPlan(null); setChecked([]); setPhase('entry');
+    setQuestionIndex(0); setAnswer(''); setSkipped(false); setAnswers({});
+    setGrillRounds([]); setGrillAnswers({}); setFollowupRounds(0); setGrillNotice('');
+    setLocalOffer(false); setError('');
+    setVisionText(''); setVisionResult(null); setVisionNotice('');
+    if (clearAll) {
+      setGoal(''); setManualSteps(''); setDeadline(''); setMode('ai');
+    }
+    try { localStorage.removeItem(DECOMPOSE_DRAFT_KEY); } catch { /* storage may be blocked */ }
+    reportJob({status:'idle'});
+  };
   // Hiding is NOT cancellation. React keeps the component (and request) mounted.
   const closeSheet = () => { openRef.current = false; onClose(); };
   const useLocalPlan = () => {
@@ -329,7 +348,9 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     try {
       onSave({title:plan.title,detail:[goal,plan.assumptions.length?'【拆解假设（非事实）】'+plan.assumptions.join('；'):''].filter(Boolean).join('\n'),source,
         steps:plan.steps.filter((_,i)=>checked.includes(i)), dueAt:parseLocalDate(deadline)},schedule);
-      localStorage.removeItem(DECOMPOSE_DRAFT_KEY);
+      // A blocked preference cleanup must not make a successfully saved goal
+      // look like a failure and tempt the player to create it twice.
+      try { localStorage.removeItem(DECOMPOSE_DRAFT_KEY); } catch { /* storage disabled */ }
       reportJob({status:'idle'});
       setPlan(null);setChecked([]);setGoal('');setAnswers({});setGrillRounds([]);setGrillAnswers({});
       setPhase('entry');setDeadline('');setVisionText('');onClose();
@@ -382,8 +403,13 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
           <textarea rows={5} value={manualSteps} onChange={(e)=>setManualSteps(e.target.value)}
             placeholder={'列出异常数据\n写方法段 200 字\n核对参考文献'} /></label>}
         {localOffer && <button type="button" className="btn btn-ghost" onClick={useLocalPlan}>使用本地示例步骤（非模型）</button>}
-        <div className="sheet-actions"><button className="btn btn-ghost" onClick={closeSheet}>关闭（保留草稿）</button>
-          <button className="btn btn-primary" disabled={busy||!goal.trim()} onClick={start}>{busy?'处理中…':'开始拆解'}</button></div>
+        <div className="sheet-actions">
+          {(goal || manualSteps || deadline || Object.values(answers).some(Boolean)) && (
+            <button type="button" className="btn btn-ghost" onClick={() => resetDecompose(true)}>清空草稿</button>
+          )}
+          <button className="btn btn-ghost" onClick={closeSheet}>关闭（保留草稿）</button>
+          <button className="btn btn-primary" disabled={busy||!goal.trim()} onClick={start}>{busy?'处理中…':'开始拆解'}</button>
+        </div>
       </>}
       {phase==='requesting' && <>
         <p role="status" aria-live="polite" className="meeting-label">{elapsed < 8 ? '正在理解目标…' : elapsed < 20 ? '正在拆步骤…' : '正在整理日期…'}</p>
@@ -398,6 +424,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
         <div className="sheet-actions">
           <button className="btn btn-primary" onClick={retryFailed}>重试拆解</button>
           {localOffer && <button className="btn btn-ghost" onClick={useLocalPlan}>使用本地示例步骤（非模型）</button>}
+          <button className="btn btn-ghost" onClick={() => resetDecompose(false)}>重新拆解</button>
           <button className="btn btn-ghost" onClick={()=>{setPhase('entry');setError('');setLocalOffer(false);}}>返回修改</button>
         </div>
       </>}
@@ -430,6 +457,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
           {grillRounds.slice(0,-1).flat().map((q)=><p key={q.id}>{q.question}：{grillAnswers[q.id]?.trim() || '未回答'}</p>)}
         </details>}
         <div className="sheet-actions">
+          <button type="button" className="btn btn-ghost" onClick={() => resetDecompose(false)}>重新拆解</button>
           <button type="button" className="btn btn-ghost" onClick={immediatelyDecompose}>立刻拆解</button>
           <button type="button" className="btn btn-primary" disabled={busy} onClick={()=>void decidePersonalized()}>继续</button>
         </div>
@@ -439,6 +467,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
         <p>{questions[0]?.text}</p>
         <input aria-label="回答关键问题" value={answer} onChange={(e)=>setAnswer(e.target.value)} maxLength={180}/>
         <div className="sheet-actions">
+          <button className="btn btn-ghost" onClick={() => resetDecompose(false)}>重新拆解</button>
           <button className="btn btn-ghost" onClick={skipQuestions}>跳过追问</button>
           <button className="btn btn-primary" disabled={busy||!answer.trim()} onClick={submitAnswer}>继续</button>
         </div>
@@ -468,6 +497,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
           </div>
         </div>)}
         <div className="sheet-actions meeting-actions">
+          <button className="btn btn-ghost" onClick={() => resetDecompose(false)}>重新拆解（清空答案）</button>
           <button className="btn btn-ghost" onClick={()=>{setPlan(null);setChecked([]);setPhase('entry');reportJob({status:'idle'});}}>放弃方案（保留草稿）</button>
           <button className="btn btn-ghost" onClick={()=>{setPhase('entry');setError('');reportJob({status:'idle'});}}>返回修改</button>
           <button className="btn btn-ghost" onClick={()=>save(false)}>只保存不排日程</button>

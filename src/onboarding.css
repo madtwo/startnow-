@@ -1020,3 +1020,80 @@
     transition: none;
   }
 }
+
+/* 新手引导后的启动方式选择 */
+.mode-choice {
+  position: fixed;
+  inset: 0;
+  z-index: 230;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(27, 24, 39, 0.38);
+  backdrop-filter: blur(12px);
+}
+
+.mode-choice-card {
+  width: min(520px, 100%);
+  padding: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(250, 248, 255, 0.94));
+  box-shadow: 0 28px 80px rgba(51, 40, 92, 0.2);
+  animation: ob-rise 0.32s cubic-bezier(0.22, 0.8, 0.3, 1) both;
+}
+
+.mode-choice-eyebrow {
+  margin: 0 0 10px;
+  color: #6b5bd6;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.mode-choice-card h2 {
+  margin: 0;
+  color: #232130;
+  font-size: 24px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.mode-choice-lead {
+  margin: 14px 0 0;
+  color: #706b80;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.mode-choice-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.mode-choice-actions .ob-primary,
+.mode-choice-actions .ob-secondary {
+  width: 100%;
+}
+
+.mode-choice-hint {
+  margin: 14px 0 0;
+  color: #8c879a;
+  font-size: 12px;
+}
+
+@media (max-width: 520px) {
+  .mode-choice {
+    padding: 16px;
+  }
+
+  .mode-choice-card {
+    padding: 24px 20px;
+    border-radius: 22px;
+  }
+
+  .mode-choice-card h2 {
+    font-size: 21px;
+  }
+}

@@ -25,6 +25,21 @@ const mock = { providerId: 'mock', baseUrl: '', model: 'demo', apiKey: '' };
 const now = 1_800_000_000_000;
 const HOUR = 3_600_000;
 let seq = 0;
+
+test('发卡按钮阻止同步双击重复建卡', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'PostForm.tsx'), 'utf8');
+  assert.match(source, /submitLock/);
+  assert.match(source, /if \(submitLock\.current\) return;/);
+});
+
+test('新手引导结束后提供演示模式/API 选择', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.tsx'), 'utf8');
+  const dialog = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'StartModeDialog.tsx'), 'utf8');
+  assert.match(app, /modeChoiceOpen/);
+  assert.match(app, /startnow\.modeChosen/);
+  assert.match(dialog, /使用演示模式/);
+  assert.match(dialog, /接入我的 API/);
+});
 const cardBase = (over = {}) => ({
   id: `c${++seq}`, authorId: 'me', authorName: '你', authorKind: 'player', kind: 'worry',
   text: '论文写不出来', createdAt: now - 60_000, status: 'talking',

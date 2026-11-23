@@ -13,6 +13,7 @@ import { canRequestSmallerComment } from '../lib/freeTextShrink';
 import { latestCommentId, orderThreadComments } from '../lib/threading';
 import { isCommentInView, keyboardLift, scrollDeltaForComment } from '../lib/threadViewport';
 import { parseMaterialDeadline, confirmedDeadline, deadlineInputValue } from '../lib/deadline';
+import { canUseNextStep, isActionableStepText } from '../lib/cardPolicy';
 
 interface Props {
   card: Card;
@@ -66,6 +67,10 @@ export default function CardDetail({
   initialPeer,
 }: Props) {
   const defaultTarget = card.authorKind === 'persona' ? card.authorId : '';
+  const nextStepAllowed = canUseNextStep(card);
+  const adviceActionable = Boolean(card.advice && (
+    card.advice.actionId || card.advice.origin === 'material' || isActionableStepText(card.advice.text)
+  ));
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<'comment' | 'advice'>('comment');
   const [targetId, setTargetId] = useState(initialPeer || defaultTarget);
@@ -282,9 +287,10 @@ export default function CardDetail({
       ? parent.authorKind === 'player' ? '你' : peerName(parent.authorId)
       : comment.peer && comment.peer !== card.authorId ? peerName(comment.peer) : '';
     const pc = persona?.color ?? (isMe ? '#c96442' : 'var(--warm-silver)');
-    const adoptable = mine && !isGuide && !closed && card.status !== 'noted' &&
+    const adoptable = mine && !isGuide && !closed && nextStepAllowed && card.status !== 'noted' &&
       !card.advice?.accepted && comment.authorKind === 'persona' &&
-      comment.origin !== 'boundary' && comment.origin !== 'system' && Boolean(persona);
+      comment.origin !== 'boundary' && comment.origin !== 'system' && Boolean(persona) &&
+      (Boolean(comment.actionId) || isActionableStepText(comment.text));
     return (
       <div className={`forum-thread forum-depth-${visualDepth}`} key={comment.id} data-depth={visualDepth}>
         <div
@@ -418,7 +424,7 @@ export default function CardDetail({
         {card.vulnerability.kind==='missed'?'今天没做到':'这次卡住了'}。回应完全自愿，不会因没有回复而追问。
       </p>}
 
-      {!isGuide && card.advice && !closed && (
+      {!isGuide && nextStepAllowed && card.advice && !closed && (
         <div className="advice">
           <div className="advice-head">
             <span className="advice-from">
@@ -429,7 +435,9 @@ export default function CardDetail({
                   : '今天的一步'}
             </span>
             <span className="advice-hint">
-              {card.advice.actionId || card.advice.origin==='material' ? '做不到就再小一级' : '原话采用 · 可请求更小一步'}
+              {adviceActionable
+                ? (card.advice.actionId || card.advice.origin==='material' ? '做不到就再小一级' : '原话采用 · 可请求更小一步')
+                : '这条更像回应 · 先换一条具体建议'}
             </span>
           </div>
           <p className="advice-label">{card.advice.text}</p>
@@ -457,9 +465,9 @@ export default function CardDetail({
                   ? setSmallerChoices(true) : onShrink()}>
                 做不到
               </button>
-              <button className="btn btn-primary" onClick={onAccept}>
-                贴到便签
-              </button>
+              {adviceActionable
+                ? <button className="btn btn-primary" onClick={onAccept}>贴到便签</button>
+                : <button className="btn btn-primary" disabled title="这条更像回应，不是可执行的下一步">暂不能贴便签</button>}
             </div>
           )}
           {mine && !card.advice.accepted && !card.advice.actionId && (
@@ -494,7 +502,8 @@ export default function CardDetail({
         </div>
       )}
 
-      {mine && !isGuide && card.note && card.status === 'noted' && (
+      {mine && !isGuide && card.note && card.status === 'noted' && nextStepAllowed &&
+        (Boolean(card.note.actionId) || isActionableStepText(card.note.text)) && (
         <div className="sticky-note">
           <span className="sticky-tag">便签 · 下一步</span>
           <p>{card.note.text}</p>
@@ -516,7 +525,7 @@ export default function CardDetail({
         </div>
       )}
 
-      {mine && !card.advice && (card.arrivals.length > 0 || card.materialCaptureStep) && !closed && (
+      {mine && nextStepAllowed && !card.advice && (card.arrivals.length > 0 || card.materialCaptureStep) && !closed && (
         <div className="card-actions">
           <button className="btn btn-ghost" onClick={() => onAdvice(targetId || undefined)} disabled={busy}>
             直接要一个下一步
@@ -561,12 +570,14 @@ export default function CardDetail({
                 {mine ? '不指定人' : '回到楼主'}
               </button>
             )}
-            <button
-              className={`advice-toggle ${mode === 'advice' ? 'on' : ''}`}
-              onClick={() => setMode((m) => (m === 'advice' ? 'comment' : 'advice'))}
-            >
-              {mode === 'advice' ? '下一步中' : '给下一步'}
-            </button>
+            {nextStepAllowed && (
+              <button
+                className={`advice-toggle ${mode === 'advice' ? 'on' : ''}`}
+                onClick={() => setMode((m) => (m === 'advice' ? 'comment' : 'advice'))}
+              >
+                {mode === 'advice' ? '下一步中' : '给下一步'}
+              </button>
+            )}
           </div>
           <div className="page-composer-row">
             <input

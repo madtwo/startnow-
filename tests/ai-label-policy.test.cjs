@@ -27,7 +27,10 @@ test('app no longer appends AI-fiction to toasts or footer demo lines',()=>{
   assert.doesNotMatch(app,/AI 虚构剧情|AI 剧情模拟|演示模式：同伴回复由本地脚本生成/);
   assert.match(app,/发了今天的结果/);
 });
-const {stripAiProvenance}=require(path.join(__dirname,'..','src','lib','displayText.ts'));
+// Node 22 does not natively require TypeScript files. Use the same loader as
+// the other CommonJS tests instead of relying on the runtime's TS support.
+const { lib } = require('./_ts-loader.cjs');
+const {stripAiProvenance}=lib('displayText');
 test('old archived fictional prefixes are stripped without touching user words',()=>{
   assert.equal(stripAiProvenance('【AI 虚构剧情】病理第三章只背一页'),'病理第三章只背一页');
   assert.equal(stripAiProvenance('【AI 虚构剧情·模拟结果】今天没做完原来的计划。'),'今天没做完原来的计划。');

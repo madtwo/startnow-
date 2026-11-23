@@ -9,8 +9,8 @@ test('photo posts invoke vision only on user action, never in persona tick',()=>
 test('competition keeps room visible in both top navigation and settings',()=>{
   const app=read('src/App.tsx');
   assert.match(app, /has\('room'\) \? 'room' : 'home'/);
-  assert.doesNotMatch(app,/!COMPETITION_MODE\s*&&\s*<button[\s\S]{0,220}setView\('room'\)/);
-  assert.equal((app.match(/setView\('room'\)/g)||[]).length,2);
+  assert.doesNotMatch(app,/!COMPETITION_MODE\s*&&\s*<button[\s\S]{0,220}(?:setView|switchTo)\('room'\)/);
+  assert.equal((app.match(/(?:setView|switchTo)\('room'\)/g)||[]).length,2);
   assert.match(app, /if \(COMPETITION_MODE\) \{setToast\(competitionSummary\(\)\);return;\}/);
 });
 test('material attribution and confirmed due date are explicit, no unsolicited goal creation',()=>{

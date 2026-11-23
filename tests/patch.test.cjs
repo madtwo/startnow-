@@ -246,3 +246,18 @@ test('模型底层失败日志会转换成可见的 429 / 断流 / 预置动作�
   assert.match(modelFailureNotice(['模型挑选下一步失败，使用本地动作：timeout']), /预置动作/);
   assert.equal(modelFailureNotice(['正常生成了两句回复']), null);
 });
+
+test('本地写入失败会通知界面，不再静默丢失', () => {
+  const failing = makeStore();
+  failing.setItem = () => { throw new Error('quota exceeded'); };
+  global.localStorage = failing;
+  const { setStorageErrorHandler, saveCards } = load('store');
+  let seen = '';
+  setStorageErrorHandler((key) => { seen = key; });
+  try {
+    saveCards([safeCard()]);
+    assert.equal(seen, 'shudong.cards.v6');
+  } finally {
+    setStorageErrorHandler(null);
+  }
+});

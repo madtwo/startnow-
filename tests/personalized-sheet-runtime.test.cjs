@@ -263,3 +263,16 @@ test('Orb wiring runtime: crisis aborts normal plan and leaves idle state',async
  assert.equal(h.crisis,1);assert.equal(h.events.at(-1).status,'idle');
  assert.equal(pending,null);
 });
+
+test('runtime: restart clears answers, keeps the goal, and starts from question one again',async()=>{
+ const h=setup();h.click('开始拆解');await flush();
+ h.input('2300米');await flush();
+ h.click('重新拆解');await flush();
+ const entry=textOf(h.render());
+ assert.match(entry,/开始拆解/);
+ const goal=h.find(node=>node.type==='textarea'&&node.props?.maxLength===2000);
+ assert.equal(goal.props.value,'十二分钟跑满分');
+ h.click('开始拆解');await flush();
+ const field=h.find(node=>node.type==='input'&&node.props?.id==='grill-progress');
+ assert.equal(field.props.value,'');
+});

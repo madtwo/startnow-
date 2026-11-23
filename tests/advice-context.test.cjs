@@ -109,6 +109,23 @@ const fakeModules = {
     recentActionUses:()=>[], selectActionLine:()=>defaultAction.line,
   },
   './curatedUsage': {chooseCuratedActionLine:()=>({text:defaultAction.line,useAlternate:false,priorCards:0})},
+  './adviceLine': {
+    parseAdviceChoice:(raw,ids)=>{
+      const text=String(raw??'').trim();
+      if(/^(?:none|null)$/i.test(text))return {kind:'none'};
+      if(ids?.includes(text))return {kind:'choice',actionId:text,line:null,legacy:true};
+      try{
+        const value=JSON.parse(text);
+        if(value&&typeof value.actionId==='string'&&ids?.includes(value.actionId))
+          return {kind:'choice',actionId:value.actionId,line:typeof value.line==='string'?value.line:null,legacy:false};
+      }catch{}
+      return {kind:'invalid',reason:'json_invalid'};
+    },
+    validateAdviceLine:()=>({ok:false,reason:'missing'}),
+    chooseAdviceCopy:(action,_cards,_now,_id,modelLine)=>modelLine
+      ?{text:modelLine,lineSource:'model',useAlternate:false,priorCards:0}
+      :{text:action.line,lineSource:'curated',useAlternate:false,priorCards:0},
+  },
   './mind': {mindAfterReply:(persona)=>persona.mind},
   './memory': {addMemory:(records)=>records,sanitizeMemoryText:(text)=>text,inferWeight:()=>1},
   './prompts': {systemFor:()=> '只选候选动作',withUntrustedHistory:(text)=>text},
@@ -171,7 +188,7 @@ test('legacy no-comment advice prompt remains unchanged; mock has zero network c
   const original=mkCard({text:'只有原帖，没有补充'});
   const {requests}=await fakeFetch(()=>defaultAction.id,()=>askForAdvice(adviceInput(original)));
   assert.equal(requests.length,1);
-  assert.match(requests[0].messages[1].content,/^卡片：只有原帖，没有补充\n\nlab-unit/);
+  assert.match(requests[0].messages[1].content,/^卡片：只有原帖，没有补充\n\n候选动作：\nlab-unit/);
   assert.doesNotMatch(requests[0].messages[1].content,/楼主后续补充/);
   const offline=await fakeFetch(()=>{throw Error('mock must not fetch');},()=>askForAdvice(adviceInput(original,{providerId:'mock'})));
   assert.equal(offline.requests.length,0);

@@ -1,0 +1,156 @@
+[
+  {
+    "id": "pos-resume-opened",
+    "anchor": "打开简历",
+    "text": "简历打开了。你刚才卡着没想碰的就是这一步，我病理那章也还停着。",
+    "expected": true,
+    "why": "控制组：对象 + 已完成动作"
+  },
+  {
+    "id": "pos-problem-unresolved-no-comma",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个没想明白的问题写下来了。",
+    "expected": true,
+    "why": "「没想明白」修饰问题，不是否定写下来；当前实现误判"
+  },
+  {
+    "id": "pos-problem-unresolved-soak-1",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个没想明白的问题写下来了。说真的，比我预想的利落——我自己碰上这种说不清的事，通常先搁着，最后才硬着头皮动笔。",
+    "expected": true,
+    "why": "16 链 soak 中第一次被 invalid_action 拒绝的候选；语义是已完成"
+  },
+  {
+    "id": "pos-problem-unresolved-soak-2",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个没想明白的问题写下来了，一句话，答案先空着。",
+    "expected": true,
+    "why": "16 链 soak 中第二次被 invalid_action 拒绝的候选；语义是已完成"
+  },
+  {
+    "id": "pos-problem-unclear-no-comma",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个没想清楚的问题写下来了。",
+    "expected": true,
+    "why": "与上一条同类；当前实现把「没想清楚」当成否定动作"
+  },
+  {
+    "id": "pos-problem-unresolved-comma",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个没想明白的问题，写下来了。",
+    "expected": true,
+    "why": "逗号分句后当前实现可通过，用于对照标点敏感性"
+  },
+  {
+    "id": "pos-problem-not-yet-clear",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个还没想清楚的问题，写下来了。",
+    "expected": true,
+    "why": "控制组：现有 regression 已覆盖"
+  },
+  {
+    "id": "pos-problem-uncertain",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个不确定的问题写下来了。",
+    "expected": true,
+    "why": "控制组：对象词不含否定前缀"
+  },
+  {
+    "id": "pos-lab-record",
+    "anchor": "写一行实验记录",
+    "text": "实验记录写好一行了，手心松了一点。",
+    "expected": true,
+    "why": "控制组：记录类对象"
+  },
+  {
+    "id": "pos-draft-page",
+    "anchor": "打开草稿页",
+    "text": "草稿页打开了，先写了两行。",
+    "expected": true,
+    "why": "控制组：打开类动作"
+  },
+  {
+    "id": "pos-phone-moved",
+    "anchor": "先把手机放到够不着的地方",
+    "text": "手机放到另一张桌子上了。",
+    "expected": true,
+    "why": "控制组：自然改写、非字面复述"
+  },
+  {
+    "id": "pos-draft-sent",
+    "anchor": "拟一句想说的话但先不发送",
+    "text": "那句想说的话打出来了，没发出去。",
+    "expected": true,
+    "why": "控制组：草稿动作、明确未发送"
+  },
+  {
+    "id": "neg-resume-not-opened",
+    "anchor": "打开简历",
+    "text": "简历还没打开，我知道你不好受。",
+    "expected": false,
+    "why": "明确否定玩家动作"
+  },
+  {
+    "id": "neg-resume-question",
+    "anchor": "打开简历",
+    "text": "简历打开了吗？你想说说么。",
+    "expected": false,
+    "why": "问句"
+  },
+  {
+    "id": "neg-resume-directive",
+    "anchor": "打开简历",
+    "text": "你可以先打开简历，别给自己压力。",
+    "expected": false,
+    "why": "建议/指令，不是确认"
+  },
+  {
+    "id": "neg-weather",
+    "anchor": "打开草稿页",
+    "text": "今天天气不错。",
+    "expected": false,
+    "why": "跑题"
+  },
+  {
+    "id": "neg-problem-not-written",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个没想明白的问题还没写下来。",
+    "expected": false,
+    "why": "明确未完成"
+  },
+  {
+    "id": "neg-problem-i-did-not-write",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个问题我没写下来。",
+    "expected": false,
+    "why": "玩家否定"
+  },
+  {
+    "id": "neg-draft-hypothetical",
+    "anchor": "打开草稿页",
+    "text": "如果打开草稿页，就能开始写了。",
+    "expected": false,
+    "why": "假设句"
+  },
+  {
+    "id": "neg-persona-own-action",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "我刚刚把那个问题写下来了。",
+    "expected": false,
+    "why": "角色自述，不是确认玩家完成"
+  },
+  {
+    "id": "neg-problem-question",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个问题写下来了吗？",
+    "expected": false,
+    "why": "问句"
+  },
+  {
+    "id": "neg-problem-dont-write",
+    "anchor": "写出一个尚未确定的问题",
+    "text": "那个没想好的问题，先不写。",
+    "expected": false,
+    "why": "明确不做"
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "version": "q01-synthetic-20-v1",
+  "provenance": "assistant-authored-synthetic-no-player-content",
+  "status": "characterization-only-not-human-review",
+  "cases": [
+    { "id": "P01", "kind": "explicit_player", "anchor": "写出一个尚未确定的问题", "text": "那个问题，你已经写下来了。", "expected": true },
+    { "id": "P02", "kind": "explicit_player", "anchor": "写出一个尚未确定的问题", "text": "你已经把那个问题写下来了。", "expected": true },
+    { "id": "P03", "kind": "explicit_player", "anchor": "写出一个尚未确定的问题", "text": "那个问题是你刚刚写下来的。", "expected": true },
+    { "id": "P04", "kind": "explicit_player", "anchor": "打开简历", "text": "你的简历已经打开了。", "expected": true },
+    { "id": "P05", "kind": "explicit_player", "anchor": "打开简历", "text": "简历，你已经打开了。", "expected": true },
+    { "id": "P06", "kind": "implicit_player", "anchor": "写出一个尚未确定的问题", "text": "那个问题已经写下来了。", "expected": true },
+    { "id": "P07", "kind": "implicit_player", "anchor": "写出一个尚未确定的问题", "text": "那个没想明白的问题写下来了。", "expected": true },
+    { "id": "P08", "kind": "implicit_player", "anchor": "打开简历", "text": "简历刚刚打开了。", "expected": true },
+    { "id": "P09", "kind": "implicit_player", "anchor": "写出一个尚未确定的问题", "text": "那个尚未确定的问题，写下来了。我心里还有一点好奇。", "expected": true },
+    { "id": "P10", "kind": "implicit_player", "anchor": "写一行实验记录", "text": "实验记录写好一行了，我心里还有一点好奇。", "expected": true },
+    { "id": "N01", "kind": "third_party", "anchor": "写出一个尚未确定的问题", "text": "那个问题，他写下来了。", "expected": false },
+    { "id": "N02", "kind": "third_party", "anchor": "写出一个尚未确定的问题", "text": "那个问题，她已经写下来了。", "expected": false },
+    { "id": "N03", "kind": "third_party", "anchor": "写出一个尚未确定的问题", "text": "那个问题，他们写下来了。", "expected": false },
+    { "id": "N04", "kind": "third_party", "anchor": "打开简历", "text": "简历是他打开的。", "expected": false },
+    { "id": "N05", "kind": "third_party", "anchor": "打开简历", "text": "他已经把简历打开了。", "expected": false },
+    { "id": "N06", "kind": "third_party", "anchor": "写出一个尚未确定的问题", "text": "那个问题，你的室友已经写下来了。", "expected": false },
+    { "id": "N07", "kind": "persona_self", "anchor": "写出一个尚未确定的问题", "text": "那个问题我已经写下来了。", "expected": false },
+    { "id": "N08", "kind": "persona_self", "anchor": "写出一个尚未确定的问题", "text": "那个问题，我写下来了。", "expected": false },
+    { "id": "N09", "kind": "persona_self", "anchor": "写出一个尚未确定的问题", "text": "那个问题我一点一点写下来了。", "expected": false },
+    { "id": "N10", "kind": "persona_self", "anchor": "打开简历", "text": "我刚刚把简历打开了。", "expected": false }
+  ]
+}

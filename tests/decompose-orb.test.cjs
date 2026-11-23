@@ -121,7 +121,7 @@ test('R3/A3: App has one job status, retained sheet, route-independent orb and g
   assert.match(app,/<DecomposeOrb job=\{decomposeJob\}/);
   assert.match(app,/onOpen=\{openDecompose\}/);
   assert.match(app,/onClose=\{\(\) => setDecomposeOpen\(false\)\}/);
-  assert.match(app,/onClick=\{\(\) => setView\('room'\)\}/);
+  assert.match(app,/onClick=\{\(\) => (?:setView|switchTo)\('room'\)\}/);
   const sheet=fs.readFileSync(path.join(root,'components/DecomposeSheet.tsx'),'utf8');
   assert.match(sheet,/if \(!open\) return null/);
   assert.match(sheet,/const closeSheet = \(\) => \{ openRef\.current = false; onClose\(\); \}/);

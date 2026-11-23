@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { Card, Goal, Persona, Todo } from '../types';
 import { isHelpSeekingAction } from '../lib/support';
 import { canRequestSmallerComment } from '../lib/freeTextShrink';
+import { canUseNextStep, isActionableStepText } from '../lib/cardPolicy';
 import { goalProgress } from '../lib/goals';
 
 interface Props {
@@ -65,11 +66,18 @@ export default function StepBoard({
     .filter((c) => c.authorId === 'me')
     .sort((a, b) => b.createdAt - a.createdAt);
   const open = mine.filter((c) => c.status !== 'done' && c.status !== 'handled');
-  const noted = mine.find((c) => c.note && c.status === 'noted');
+  const noted = mine.find((c) => c.note && c.status === 'noted' && canUseNextStep(c));
   const advised = mine.find(
-    (c) => c.advice && !c.advice.accepted && c.status !== 'done' && c.status !== 'handled',
+    (c) => c.advice && !c.advice.accepted && c.status !== 'done' && c.status !== 'handled' && canUseNextStep(c),
   );
   const canShrinkAdopted = Boolean(advised && canRequestSmallerComment(advised));
+  const adviceActionable = Boolean(advised && (
+    advised.advice?.actionId || advised.advice?.origin === 'material' ||
+    isActionableStepText(advised.advice?.text ?? '')
+  ));
+  const noteActionable = Boolean(noted && (
+    noted.note?.actionId || isActionableStepText(noted.note?.text ?? '')
+  ));
   const active = open[0];
   const focus = noted ?? advised;
   const waiting = open.filter(
@@ -167,9 +175,9 @@ export default function StepBoard({
               </p>
               <div className="step-actions">
                 {noted ? (
-                  <button className="btn btn-primary" onClick={() => onDone(noted)}>
-                    我做到了
-                  </button>
+                  noteActionable
+                    ? <button className="btn btn-primary" onClick={() => onDone(noted)}>我做到了</button>
+                    : <p className="step-ai-note" role="note">这条更像回应，不是可完成的下一步；先换一条具体建议。</p>
                 ) : advised ? (
                   <>
                     <button
@@ -179,9 +187,9 @@ export default function StepBoard({
                     >
                       做不到
                     </button>
-                    <button className="btn btn-primary" onClick={() => onAccept(advised)}>
-                      贴到便签
-                    </button>
+                    {adviceActionable
+                      ? <button className="btn btn-primary" onClick={() => onAccept(advised)}>贴到便签</button>
+                      : <p className="step-ai-note" role="note">这条更像回应，先请同伴给一个具体动作。</p>}
                   </>
                 ) : null}
                 <button className="btn btn-ghost" onClick={() => onOpenCard(focus)}>

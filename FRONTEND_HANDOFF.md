@@ -1,3 +1,24 @@
+# Patch 4 增量交接（基于 2026-11-23 的 `20de4cb` 源码快照）
+
+> 本节是本次交付状态；后面的 Patch 3、2026-11-22 条目属于历史说明，不代表当前 HEAD 或最新测试结果。本次工作未在用户 Git 仓库创建提交，也未推送或部署。
+
+- **修复范围**：仅双人盲评工具对跨平台文本换行的严格冻结 SHA 校验；`scripts/q06-human-review-gate.cjs` 在对照不变的 LF SHA 前只折叠 CRLF，`scripts/q01-human-review-gate.cjs` 在对照不变的 CRLF SHA 前只统一换行。样本正文、期望标签、冻结值、运行时 SHA、评审仲裁规则均未修改；新增独立格式和篡改回归。
+- **原因**：当前 ZIP 的 Q06 fixture 为 CRLF；原工具持有上一版 LF 原文字节 SHA，导致 Q06 全部 11 项工具测试假失败，而原始文本完全一致。运行时 `src/lib/adviceLine.ts`、`src/lib/actions.ts` 的 SHA 与原 pin 精确相同。
+- **Q01 仍是硬阻塞**：当前 `src/lib/completionReaction.ts` 的 SHA 是 `7d589bf946e937089e355aa1ef1416d576c5c5896c068ce9378080de4d717d18`，不同于 Q01 v1.8 锁定的 `21db764e500e077a486e310450c5bc146ee54b0171e4636bf45e9f2710d6e7f8`。Q01 `prepare` 按设计退出 2；需要协调员先审查/重新冻结**当前运行时代码**，本补丁不自动更新 pin，更不生成真人评审结果。
+- **数据与验收**：新需求包记录真实模型 50 条为 49 pass / 0 fail / 1 blocked（历史证据，不是本补丁重新调用）；Q01/Q06 真人独立双评和人工最终走查仍未完成，整体仍 NO-GO。详见随包 `PATCH4-EXECUTION-REPORT.md`。
+- **作用边界**：`src/*` 产品运行时代码、`room/*`、冻结 fixtures、API Key、用户历史数据均未改动。不能用自动测试替代真人签核。
+
+# 最新增量交接（2026-11-23 · Q06 人类验收工具补丁）
+
+> **本段优先于下文历史版本说明。** 下文仍保留 2026-11-22 的 UI 历史交接记录，其中 `main`、628 项等信息已过时；当前源码来自用户提供的 `380cc64` 跟踪快照（无 `.git`），本轮**没有 Git 提交、推送或部署**。
+
+- **本轮改动**：增加 `scripts/q06-human-review-gate.cjs`、冻结的 10 条合成 alias 样本、`docs/Q06-HUMAN-REVIEW-PROTOCOL.md`、11 项回归测试；`tests/room.test.cjs` 的下午时间改为本地时间构造，解决跨时区测试假失败。`room/*` 目录与产品运行时代码保持不变。
+- **Q06 工具**：离线随机生成独立 packet A/B，协调员私存 manifest 和输出的 SHA；验证签署代号、独立声明、原始数据未被修改、10/10 标签、一致性以及 C04 拒绝、C10 批准。只给 `READY_FOR_EXTERNAL_SIGNOFF`，**永不**自行签署或产生发布 GO。命令见 `docs/Q06-HUMAN-REVIEW-PROTOCOL.md`。
+- **当前复测（环境补丁后）**：UTC 下 `npm run test:baseline` 785 项（784 通过、1 按旧约定跳过）、`npm run test:v4` 127/127；`room.test.cjs` 在 UTC/Los Angeles/Shanghai 各 22/22。执行环境 npm 仓库不可达，`npm ci` 未完成，`npm run build` 由于缺 `vite/client` 类型不能成功执行；这不等于构建通过或源码构建失败。原包报告的 build pass 属于之前的环境与版本，不当作本轮重新验收。
+- **当前阻塞**：Q01/Q06 仍需要真实双人盲评及外部签名；50 条真实模型扩展探针需要用户凭据、受控浏览器与真实调用；公开站人工复验未在本环境执行（DNS 无法访问）；短确认句池、旧数据迁移和浮层 history 产品决策仍待确认。**整体继续 NO-GO**。
+
+---
+
 # StartNow 前端交接包
 
 > 每次 push 前更新本文件的「交付状态」「本次变更」「已知问题」，与代码放在同一个提交里。
@@ -171,3 +192,13 @@ push 前逐项确认：
 - [x] 本文件「交付状态」「本轮变更」「已知问题」已更新
 - [x] 已 `git fetch`，与远端 `main` 一致
 - [x] `git status` 无截图、压缩包、API Key、真实姓名/学校
+
+## Patch5 本地补丁（2026-11-23，非上游提交）
+
+此交付基于用户新上传的需求包 HEAD `eeee5cf`，仅在完整 ZIP 中增加源码变更及证据；没有 Git push、线上发布或真实模型调用。
+
+- `src/lib/store.ts`：角色存档损坏/跨标签只读状态下不再绕过防覆盖锁写入 persona schema 标记；元数据写失败纳入持久存储警告。
+- `scripts/q01-coordinator-preflight.cjs`：仅生成控制方用的 SHA/冻结样本数量诊断；当前冻结运行时 SHA 过期，明确 BLOCKED/NO-GO；不自动重冻结、发盲包、改标签或模拟真人签核。
+- Q01 固定运行时 pin 与 98 条样本标签、Q06 固定样本完全不变。`room/*` 全部未改。
+- 本地 baseline 804 项：803 通过、1 项原有跳过；V4 127/127；npm 依赖安装异常，本环境 `vite/client` 缺失无法重新 build。交接包先前的构建通过记录不代表本次构建通过。
+- 详见 ZIP 根目录 `PATCH5-EXECUTION-REPORT.md`、`PATCH5-READ-ME.md`、`EVIDENCE/PATCH5/` 与 `docs/Q01-COORDINATOR-PREFLIGHT.md`。

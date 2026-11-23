@@ -4,7 +4,7 @@ import deskArt from '../assets/onboarding/desk.png';
 import monitorArt from '../assets/onboarding/monitor.png';
 
 interface Props {
-  onClose: () => void;
+  onClose: (skipped?: boolean) => void;
 }
 
 interface Slide {
@@ -323,7 +323,7 @@ export default function Onboarding({ onClose }: Props) {
                 {slide.primary}
               </button>
               {slide.secondary && (
-                <button className="ob-secondary" onClick={onClose}>
+                <button className="ob-secondary" onClick={() => onClose(true)}>
                   {slide.secondary}
                 </button>
               )}
