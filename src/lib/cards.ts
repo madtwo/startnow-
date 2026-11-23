@@ -1380,13 +1380,19 @@ async function drainParallelReplyJobs(
   let card = cardIn;
   let personas = personasIn;
   card.pending = card.pending.filter((item) => !jobs.includes(item));
-  const prepared = await Promise.all(jobs.map(async (job) => {
+  type Prepared = {
+    job: PendingReply;
+    persona?: Persona;
+    generated?: Awaited<ReturnType<typeof generateComment>>;
+    skipped: '' | 'missing' | 'other';
+  };
+  const prepared: Prepared[] = await Promise.all(jobs.map(async (job): Promise<Prepared> => {
     const persona = personas.find((p) => p.id === job.personaId);
-    if (!persona) return { job, persona: undefined, generated: undefined, skipped: 'missing' as const };
-    if (addressedToOther(card, job, persona.id)) return { job, persona, generated: undefined, skipped: 'other' as const };
+    if (!persona) return { job, persona: undefined, generated: undefined, skipped: 'missing' };
+    if (addressedToOther(card, job, persona.id)) return { job, persona, generated: undefined, skipped: 'other' };
     const replyContext = job.sourceCommentId ? card : cardLevelReplyContext(card);
     const generated = await generateComment(ctx, persona, replyContext, 'reply', job.sourceCommentId);
-    return { job, persona, generated, skipped: '' as const };
+    return { job, persona, generated, skipped: '' };
   }));
   for (const row of prepared) {
     const { job, persona, generated, skipped } = row;
