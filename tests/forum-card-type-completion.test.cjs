@@ -95,6 +95,28 @@ test('mock first replies echo the topic instead of asking the player to re-expla
   assert.match(reply.text, /学习/);
 });
 
+test('mock brag/life replies quote the card instead of borrowing another topic', async () => {
+  const bragCard = card('brag', {
+    text: '今天把实验报告的第一段写完了，虽然只有三百字。',
+    pending: [{ personaId: 'weini', at: NOW - 1, phase: 'reply' }],
+  });
+  const bragOut = await tickCards({ cards: [bragCard], personas: people, settings, config: mock, now: NOW });
+  const bragReply = bragOut.cards[0].comments.find((row) => row.authorId === 'weini');
+  assert.ok(bragReply);
+  assert.match(bragReply.text, /实验报告/);
+  assert.doesNotMatch(bragReply.text, /跟完整天|一整天都跟下来/);
+
+  const lifeCard = card('life', {
+    text: '周末打了场球，赢了。',
+    pending: [{ personaId: 'weini', at: NOW - 1, phase: 'reply' }],
+  });
+  const lifeOut = await tickCards({ cards: [lifeCard], personas: people, settings, config: mock, now: NOW });
+  const lifeReply = lifeOut.cards[0].comments.find((row) => row.authorId === 'weini');
+  assert.ok(lifeReply);
+  assert.match(lifeReply.text, /打球|球|赢了/);
+  assert.doesNotMatch(lifeReply.text, /饭|食堂|顿/);
+});
+
 test('mock brag replies congratulate instead of using the tentative first-meeting line', async () => {
   const brag = card('brag', {
     text: '虽然干的活很闲，但是一整天都跟下来了。',

@@ -21,7 +21,7 @@ import { findCrisis, isHeavyShare } from './safety';
 import { wantsDirectAdvice } from './directAdvice';
 import { clarificationFor } from './clarify';
 import { hasPlayerCrisis } from './submissionGuard';
-import { existingPeerCount, hasResultCardAnchor, isGoalResultCard, isSafePeerReaction, peerReactionFallback, validPeerPlans } from './peerReactions';
+import { existingPeerCount, hasResultCardAnchor, isGoalResultCard, isSafePeerReaction, peerReactionFallback, resultCardDetail, validPeerPlans } from './peerReactions';
 import { addMemory, inferWeight, sanitizeMemoryText } from './memory';
 import { describeError, LlmError, streamChat, scopedOpenCodeSessionId } from './llm';
 import type { ChatTelemetry } from './llm';
@@ -576,22 +576,28 @@ const TENTATIVE: Record<string, (word: string) => string> = {
   yanggao: (word) => `哎，${word}啊。我其实也不太懂，不过你说，我听着。`,
 };
 
-// Brag cards ask for recognition, not for more context. Keep mock replies
-// congratulatory even when the persona is still unfamiliar.
-const BRAG_MOCK: Record<string, string[]> = {
-  shenmo: ['能把这件闲活跟完整天，也算有始有终。', '一整天跟下来，先把这个结果记着。'],
-  weini: ['嗯，一整天都跟下来了，挺不容易的。', '能跟完整天，已经说明不少了。'],
-  miaoze: ['一整天跟下来，这个结果挺具体。', '“闲”也是活，能跟完就是进展。'],
-  yanggao: ['哇，一整天！这个得记一下。', '跟了一整天，挺能扛啊。'],
-  default: ['这次有了具体进展，挺替你高兴。', '能坚持下来，先把这个结果记着。'],
+// Brag/life replies must quote this card's own detail. Hard-coded lines like
+// “能跟完整天” were off-card on an experiment-report win.
+const bragMockLine = (personaId: string, detail: string): string => {
+  const quote = detail ? `“${detail}”` : '这次的结果';
+  switch (personaId) {
+    case 'shenmo': return `${quote}能落下来，就算有始有终。`;
+    case 'weini': return `嗯，${quote}这件事做完了，挺不容易的。`;
+    case 'miaoze': return `${quote}这个进展挺具体，先记着。`;
+    case 'yanggao': return `哇，${quote}，这得高兴一下。`;
+    default: return `${quote}有了结果，挺替你高兴。`;
+  }
 };
 
-const LIFE_MOCK: Record<string, string[]> = {
-  shenmo: ['能记住这顿饭的味道，今天算有个小落点。', '这种小事能说出来，就挺好。'],
-  weini: ['嗯，听起来是个不错的瞬间。', '能因为一顿饭好一点，也挺好。'],
-  miaoze: ['一顿好吃的，确实能把一天拉回来一点。', '这个细节挺具体，先记着。'],
-  yanggao: ['听着不错啊，今天这顿值了。', '这种小开心，先别让它跑掉。'],
-  default: ['这件小事我看到了，先记着这个瞬间。', '能有一点小开心，就挺好。'],
+const lifeMockLine = (personaId: string, detail: string): string => {
+  const quote = detail ? `“${detail}”` : '这件小事';
+  switch (personaId) {
+    case 'shenmo': return `${quote}能说出来，今天就算有个小落点。`;
+    case 'weini': return `嗯，${quote}听着是个不错的瞬间。`;
+    case 'miaoze': return `这种小事能记住，挺具体的。`;
+    case 'yanggao': return `听着不错啊，${quote}这个得记一下。`;
+    default: return `${quote}我看到了，先记着这个瞬间。`;
+  }
 };
 
 const MOCK_LINES: Record<MockTopic, Record<string, { arrival: string[]; reply: string[] }>> = {
@@ -1057,18 +1063,12 @@ async function generateComment(
   if (isMock(ctx.config)) {
     if (isGoalResultCard(card)) return {kind:'reply',text:uniqueFallback(careFocus),origin:'demo'};
     if (card.kind === 'brag') {
-      const rows = BRAG_MOCK[persona.id] ?? BRAG_MOCK.default;
-      const used = new Set(card.comments.filter((c) => c.authorId === persona.id).map((c) => c.text.trim()));
-      const fresh = rows.filter((line) => !used.has(line));
-      ctx.logs.push('brag 卡使用祝贺回复，不追问细节');
-      return { kind: 'reply', text: pick(fresh.length ? fresh : rows), origin: 'demo' };
+      ctx.logs.push('brag 卡引用本卡结果并祝贺，不追问细节');
+      return { kind: 'reply', text: bragMockLine(persona.id, resultCardDetail(card)), origin: 'demo' };
     }
     if (card.kind === 'life') {
-      const rows = LIFE_MOCK[persona.id] ?? LIFE_MOCK.default;
-      const used = new Set(card.comments.filter((c) => c.authorId === persona.id).map((c) => c.text.trim()));
-      const fresh = rows.filter((line) => !used.has(line));
-      ctx.logs.push('life 卡回应具体小事，不追问身份细节');
-      return { kind: 'reply', text: pick(fresh.length ? fresh : rows), origin: 'demo' };
+      ctx.logs.push('life 卡引用本卡小事，不套用吃饭模板');
+      return { kind: 'reply', text: lifeMockLine(persona.id, resultCardDetail(card)), origin: 'demo' };
     }
     const isShort = shortContact;
     const text = persona.intimacy < 22 && card.comments.length === 0 && !isShort
