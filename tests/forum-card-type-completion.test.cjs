@@ -194,6 +194,14 @@ test('short acknowledgements cycle through four lines before repeating the last 
   assert.equal(lines[5], lines[3]);
 });
 
+test('comment rules scope 在的, memory attribution and invitations', () => {
+  const { COMMENT_RULES } = lib('prompts');
+  assert.match(COMMENT_RULES, /只有对方在打招呼.*在的/u);
+  assert.match(COMMENT_RULES, /属于玩家/u);
+  assert.match(COMMENT_RULES, /邀请或提问/u);
+  assert.match(COMMENT_RULES, /没去过你们食堂/u);
+});
+
 test('step board, card detail and note drawer share the same card-type/actionability gates', () => {
   const read = (name) => fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
   const step = read('src/components/StepBoard.tsx');
