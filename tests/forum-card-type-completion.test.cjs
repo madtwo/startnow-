@@ -95,6 +95,30 @@ test('mock first replies echo the topic instead of asking the player to re-expla
   assert.match(reply.text, /学习/);
 });
 
+test('mock short acknowledgements stay short and life questions do not become a moment', async () => {
+  const ack = comment('嗯嗯', 'me', { authorKind: 'player' });
+  const shortCard = card('worry', {
+    text: '明天有门课要交作业。',
+    comments: [ack],
+    pending: [{ personaId: 'weini', at: NOW - 1, phase: 'reply', sourceCommentId: ack.id }],
+  });
+  const shortOut = await tickCards({ cards: [shortCard], personas: people, settings, config: mock, now: NOW });
+  const shortReply = shortOut.cards[0].comments.filter((row) => row.authorKind === 'persona').at(-1);
+  assert.ok(shortReply);
+  assert.match(shortReply.text, /收到|知道|听见|接到/);
+  assert.doesNotMatch(shortReply.text, /学习|状态|先听你讲/);
+
+  const ask = card('life', {
+    text: '周末有人去图书馆吗？',
+    pending: [{ personaId: 'weini', at: NOW - 1, phase: 'reply' }],
+  });
+  const askOut = await tickCards({ cards: [ask], personas: people, settings, config: mock, now: NOW });
+  const askReply = askOut.cards[0].comments.find((row) => row.authorKind === 'persona');
+  assert.ok(askReply);
+  assert.match(askReply.text, /去不了|在线/);
+  assert.doesNotMatch(askReply.text, /瞬间/);
+});
+
 test('mock brag/life replies quote the card instead of borrowing another topic', async () => {
   const bragCard = card('brag', {
     text: '今天把实验报告的第一段写完了，虽然只有三百字。',

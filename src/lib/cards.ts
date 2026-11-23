@@ -589,8 +589,17 @@ const bragMockLine = (personaId: string, detail: string): string => {
   }
 };
 
-const lifeMockLine = (personaId: string, detail: string): string => {
-  const quote = detail ? `“${detail}”` : '这件小事';
+const lifeMockLine = (personaId: string, detail: string, asking: boolean): string => {
+  const quote = detail ? `“${detail}”` : '这个邀请';
+  if (asking) {
+    switch (personaId) {
+      case 'shenmo': return `${quote}我这边只能在线，去不了，不过听你说说也行。`;
+      case 'weini': return `嗯，${quote}我只能在线上接一句，去不了，别介意。`;
+      case 'miaoze': return `${quote}线下我就到不了了，只能在这儿听着。`;
+      case 'yanggao': return `哎，${quote}这个我去不了，线上陪你聊两句还行。`;
+      default: return `${quote}我这边去不了，只能在线接一句。`;
+    }
+  }
   switch (personaId) {
     case 'shenmo': return `${quote}能说出来，今天就算有个小落点。`;
     case 'weini': return `嗯，${quote}听着是个不错的瞬间。`;
@@ -1068,9 +1077,14 @@ async function generateComment(
     }
     if (card.kind === 'life') {
       ctx.logs.push('life 卡引用本卡小事，不套用吃饭模板');
-      return { kind: 'reply', text: lifeMockLine(persona.id, resultCardDetail(card)), origin: 'demo' };
+      return { kind: 'reply', text: lifeMockLine(persona.id, resultCardDetail(card), /[？?]\s*$|吗[。！!]?$/u.test(card.text.trim())), origin: 'demo' };
     }
     const isShort = shortContact;
+    if (forumAcknowledgement(incoming)) {
+      const used = new Set(card.comments.filter((c) => c.authorId === persona.id).map((c) => c.text.trim()));
+      ctx.logs.push('短确认只回一句确认');
+      return { kind: 'reply', text: distinctForumShortAck(used), origin: 'demo' };
+    }
     const text = persona.intimacy < 22 && card.comments.length === 0 && !isShort
       ? (TENTATIVE[persona.id]?.(TOPIC_WORD[topicGroup(inferTrouble(card.text))]) ?? mockComment(persona, card, phase, sourceCommentId))
       : mockComment(persona, card, phase, sourceCommentId);
