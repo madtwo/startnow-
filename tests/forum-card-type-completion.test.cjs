@@ -92,7 +92,17 @@ test('mock first replies echo the topic instead of asking the player to re-expla
   const reply = out.cards[0].comments.find((row) => row.authorId === 'weini');
   assert.ok(reply);
   assert.doesNotMatch(reply.text, /你想从哪讲起|先说是哪一件|先说说是哪一件/);
-  assert.match(reply.text, /学习/);
+  assert.match(reply.text, /学习|材料物理/);
+});
+
+test('short result clauses without punctuation are quoted whole, not cut mid-word', async () => {
+  const brag = card('brag', { text: '今天终于把方法部分的三个小标题列完了。' });
+  assert.equal(resultCardDetail(brag), '今天终于把方法部分的三个小标题列完了');
+  const out = await tickCards({ cards: [{ ...brag, pending: [{ personaId: 'weini', at: NOW - 1, phase: 'reply' }] }], personas: people, settings, config: mock, now: NOW });
+  const reply = out.cards[0].comments.find((row) => row.authorId === 'weini');
+  assert.ok(reply);
+  assert.match(reply.text, /三个小标题列完了/);
+  assert.doesNotMatch(reply.text, /标题列…/);
 });
 
 test('mock short acknowledgements stay short and life questions do not become a moment', async () => {

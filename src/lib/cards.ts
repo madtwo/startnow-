@@ -569,11 +569,11 @@ const TOPIC_WORD: Record<MockTopic, string> = {
 // First contact is honest about being unfamiliar, but never asks the player to
 // re-explain a card they already wrote out. Echo the topic instead of
 // "你想从哪讲起？".
-const TENTATIVE: Record<string, (word: string) => string> = {
-  shenmo: (word) => `呃……${word}的事，我也刚来，但我在听。`,
-  weini: (word) => `嗯……${word}的事，我可能也说不好，先听你讲。`,
-  miaoze: (word) => `我也刚来，${word}这种事，我先听着。`,
-  yanggao: (word) => `哎，${word}啊。我其实也不太懂，不过你说，我听着。`,
+const TENTATIVE: Record<string, (word: string, detail: string) => string> = {
+  shenmo: (word, detail) => detail ? `呃……“${detail}”这事，我也刚来，但我在听。` : `呃……${word}的事，我也刚来，但我在听。`,
+  weini: (word, detail) => detail ? `嗯……“${detail}”这事，我可能也说不好，先听你讲。` : `嗯……${word}的事，我可能也说不好，先听你讲。`,
+  miaoze: (word, detail) => detail ? `我也刚来，“${detail}”这种事，我先听着。` : `我也刚来，${word}这种事，我先听着。`,
+  yanggao: (word, detail) => detail ? `哎，“${detail}”啊。我其实也不太懂，不过你说，我听着。` : `哎，${word}啊。我其实也不太懂，不过你说，我听着。`,
 };
 
 // Brag/life replies must quote this card's own detail. Hard-coded lines like
@@ -1086,7 +1086,7 @@ async function generateComment(
       return { kind: 'reply', text: distinctForumShortAck(used), origin: 'demo' };
     }
     const text = persona.intimacy < 22 && card.comments.length === 0 && !isShort
-      ? (TENTATIVE[persona.id]?.(TOPIC_WORD[topicGroup(inferTrouble(card.text))]) ?? mockComment(persona, card, phase, sourceCommentId))
+      ? (TENTATIVE[persona.id]?.(TOPIC_WORD[topicGroup(inferTrouble(card.text))], resultCardDetail(card)) ?? mockComment(persona, card, phase, sourceCommentId))
       : mockComment(persona, card, phase, sourceCommentId);
     return { kind: 'reply', text, origin: 'demo' };
   }

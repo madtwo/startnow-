@@ -40,7 +40,16 @@ export function resultCardDetail(card: Card): string {
     head.lastIndexOf('，'), head.lastIndexOf(','), head.lastIndexOf('；'),
     head.lastIndexOf(';'), head.lastIndexOf('：'), head.lastIndexOf(':'), head.lastIndexOf(' '),
   );
-  return `${boundary >= 4 ? head.slice(0, boundary) : head}…`;
+  if (boundary >= 4) return `${head.slice(0, boundary)}…`;
+  // No punctuation to cut on. A 16-char hard slice can end mid-word
+  // ("…三个小标题列"); short clauses are kept whole instead.
+  if (chars.length <= 24) return part;
+  const wider = chars.slice(0, 24).join('');
+  const late = Math.max(
+    wider.lastIndexOf('，'), wider.lastIndexOf(','), wider.lastIndexOf('；'),
+    wider.lastIndexOf(';'), wider.lastIndexOf('：'), wider.lastIndexOf(':'), wider.lastIndexOf(' '),
+  );
+  return `${late >= 4 ? wider.slice(0, late) : wider}…`;
 }
 
 export function hasResultCardAnchor(card: Card, text: string): boolean {
