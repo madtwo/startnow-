@@ -489,10 +489,17 @@ export function mergeImportedPersonaHistory(rows: unknown): Persona[] {
 }
 
 const markPersonaSchema = () => {
+  // Never stamp a successful migration when the persona record is quarantined,
+  // nor bypass the stale-tab write lock via a metadata-only localStorage call.
+  if (storageReadOnly || corruptEntries.has(KEYS.personas) ||
+      corruptEntries.has(PERSONA_SCHEMA_KEY)) return;
   try {
     localStorage.setItem(PERSONA_SCHEMA_KEY, String(PERSONA_SCHEMA_VERSION));
   } catch {
-    // 隐私模式：本次会话仍用迁移后的内存数据。
+    // A schema-marker write is still a failed persistence operation. Surface it
+    // to the same persistent banner as all other local-storage failures.
+    failedStorageKeys.add(PERSONA_SCHEMA_KEY);
+    try { storageErrorHandler?.(PERSONA_SCHEMA_KEY); } catch { /* non-fatal warning */ }
   }
 };
 

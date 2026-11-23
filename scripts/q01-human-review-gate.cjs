@@ -212,4 +212,4 @@ if (require.main === module) {
   try { main(process.argv.slice(2)); }
   catch (e) { process.stderr.write(`Q01 review gate: ${e.message}\n`); process.exitCode = 2; }
 }
-module.exports = { main, loadFixtures, inspectPacket, FIXTURES, pinnedFixtureSha };
+module.exports = { main, loadFixtures, inspectPacket, FIXTURES, pinnedFixtureSha, RUNTIME_SHA };

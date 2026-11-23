@@ -132,3 +132,43 @@ test('日程视图与拆解成功后的草稿清理不因禁用 localStorage 而
   assert.match(schedule, /try\s*\{\s*localStorage\.setItem\(MODE_KEY, next\);\s*\}\s*catch/);
   assert.match(sheet, /onSave\([\s\S]*?try \{ localStorage\.removeItem\(DECOMPOSE_DRAFT_KEY\); \} catch/);
 });
+
+
+test('损坏角色存档不能被自动标记为已完成新版角色迁移', () => {
+  const bad = '{"persona":"broken"';
+  global.localStorage = fakeStorage({ 'shudong.personas.v3': bad });
+  assert.equal(store.loadPersonas().length >= 4, true);
+  assert.equal(global.localStorage.getItem('shudong.personaSchema.v1'), null);
+  assert.equal(global.localStorage.getItem('shudong.personas.v3'), bad);
+  assert.ok(store.listCorruptStorageKeys().includes('shudong.personas.v3'));
+  assert.deepEqual(store.discardCorruptStorage(), { removed: ['shudong.personas.v3'], failed: [] });
+});
+
+test('跨标签只读锁保护角色迁移元数据，解锁后正常写入标记', () => {
+  global.localStorage = fakeStorage({ 'shudong.personas.v3': '[]' });
+  store.setStorageReadOnly(true);
+  try {
+    assert.equal(store.loadPersonas().length >= 4, true);
+    assert.equal(global.localStorage.getItem('shudong.personaSchema.v1'), null);
+  } finally { store.setStorageReadOnly(false); }
+  store.loadPersonas();
+  assert.ok(Number(global.localStorage.getItem('shudong.personaSchema.v1')) > 0);
+});
+
+test('角色迁移标记的配额失败不再静默吞掉，而是进入保存失败通道', () => {
+  const data = fakeStorage({ 'shudong.personas.v3': '[]' });
+  global.localStorage = {
+    ...data,
+    setItem(key, value) {
+      if (key === 'shudong.personaSchema.v1') throw new Error('QuotaExceededError');
+      data.setItem(key, value);
+    },
+  };
+  let failedKey = '';
+  store.setStorageErrorHandler((key) => { failedKey = key; });
+  try {
+    store.loadPersonas();
+    assert.equal(failedKey, 'shudong.personaSchema.v1');
+    assert.ok(store.listFailedStorageKeys().includes(failedKey));
+  } finally { store.setStorageErrorHandler(null); }
+});

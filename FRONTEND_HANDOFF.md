@@ -192,3 +192,13 @@ push 前逐项确认：
 - [x] 本文件「交付状态」「本轮变更」「已知问题」已更新
 - [x] 已 `git fetch`，与远端 `main` 一致
 - [x] `git status` 无截图、压缩包、API Key、真实姓名/学校
+
+## Patch5 本地补丁（2026-11-23，非上游提交）
+
+此交付基于用户新上传的需求包 HEAD `eeee5cf`，仅在完整 ZIP 中增加源码变更及证据；没有 Git push、线上发布或真实模型调用。
+
+- `src/lib/store.ts`：角色存档损坏/跨标签只读状态下不再绕过防覆盖锁写入 persona schema 标记；元数据写失败纳入持久存储警告。
+- `scripts/q01-coordinator-preflight.cjs`：仅生成控制方用的 SHA/冻结样本数量诊断；当前冻结运行时 SHA 过期，明确 BLOCKED/NO-GO；不自动重冻结、发盲包、改标签或模拟真人签核。
+- Q01 固定运行时 pin 与 98 条样本标签、Q06 固定样本完全不变。`room/*` 全部未改。
+- 本地 baseline 804 项：803 通过、1 项原有跳过；V4 127/127；npm 依赖安装异常，本环境 `vite/client` 缺失无法重新 build。交接包先前的构建通过记录不代表本次构建通过。
+- 详见 ZIP 根目录 `PATCH5-EXECUTION-REPORT.md`、`PATCH5-READ-ME.md`、`EVIDENCE/PATCH5/` 与 `docs/Q01-COORDINATOR-PREFLIGHT.md`。
