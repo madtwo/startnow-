@@ -1,4 +1,5 @@
 import type { ChatMessage, LlmConfig } from '../types';
+import { rejectQueuedProviderRequests, withProviderRequestSlot } from './providerConcurrency';
 import {
   isMock,
   isOpenCodeBase,
@@ -82,6 +83,15 @@ export function parseRetryAfterMs(value: string | null | undefined, now = Date.n
 
 let opencodeRateLimitUntil = 0;
 export const modelRateLimitRemainingMs = (now = Date.now()) => Math.max(0, opencodeRateLimitUntil - now);
+
+// A provider's 429 response must not echo its detailed error body to other
+// queued callers. Stop this burst with a generic redacted rate-limit error.
+const stopQueuedAfterRateLimit = (baseUrl: string, error: LlmError): void => {
+  const wait = error.retryAfterMs;
+  const hint = wait !== undefined ? `建议等待约 ${Math.ceil(wait / 1000)} 秒。` : '稍后重试。';
+  rejectQueuedProviderRequests(baseUrl,
+    new LlmError('rate', `同一服务商返回 429，排队请求已停止且未发送。${hint}`, wait));
+};
 
 const parseServerError = (
   status: number,
@@ -296,7 +306,7 @@ async function rawStreamChatOnce(opts: StreamChatOptions): Promise<string> {
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw parseServerError(
+    const error = parseServerError(
       res.status,
       body,
       config.baseUrl,
@@ -304,6 +314,8 @@ async function rawStreamChatOnce(opts: StreamChatOptions): Promise<string> {
       config.apiKey,
       res.headers.get('retry-after'),
     );
+    if (error.kind === 'rate') stopQueuedAfterRateLimit(config.baseUrl, error);
+    throw error;
   }
 
   const contentType = res.headers.get('content-type') ?? '';
@@ -465,7 +477,8 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
     reasoningBudgetExhausted: false,
   };
   try {
-    const text = await rawStreamChatOnce({
+    // Hold the slot until the JSON body or final SSE event has been consumed.
+    const text = await withProviderRequestSlot(opts.config.baseUrl, opts.signal, () => rawStreamChatOnce({
       ...opts,
       onDelta: (chunk) => {
         meta.visibleChars += chunk.length;
@@ -475,14 +488,17 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
         Object.assign(meta, part);
         opts.onStreamMetadata?.(part);
       },
-    });
+    }));
     meta.visibleChars = text.length;
     meta.outcome = 'ok';
     return text;
   } catch (err) {
-    meta.outcome = err instanceof LlmError && err.kind === 'truncated' ? 'truncated'
-      : err instanceof LlmError && /没有返回任何文字/.test(err.message) ? 'empty' : 'error';
-    throw err;
+    // Queued requests can time out before fetch() starts. Keep the same error
+    // classification and retry semantics as requests cancelled during fetch.
+    const classified = (err as Error)?.name === 'AbortError' ? requestError(err, opts.signal) : err;
+    meta.outcome = classified instanceof LlmError && classified.kind === 'truncated' ? 'truncated'
+      : classified instanceof LlmError && /没有返回任何文字/.test(classified.message) ? 'empty' : 'error';
+    throw classified;
   } finally {
     meta.durationMs = Math.round(performance.now() - started);
     meta.reasoningBudgetExhausted = (meta.outcome === 'empty' || meta.outcome === 'truncated') &&
@@ -525,50 +541,58 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
     throw new LlmError('config', '先把接口地址、模型名和密钥填完整。');
   }
   validateLlmEndpointBase(config.baseUrl);
+  const safeSignal = signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(20_000)])
+    : AbortSignal.timeout(20_000);
 
-  let res: Response;
   try {
-    const safeSignal = signal
-      ? AbortSignal.any([signal, AbortSignal.timeout(20_000)])
-      : AbortSignal.timeout(20_000);
-    res = await fetch(endpoint(config.baseUrl), {
-      method: 'POST',
-      signal: safeSignal,
-      headers: chatHeaders(config),
-      body: JSON.stringify({
-        model: config.model.trim(),
-        messages: [{ role: 'user', content: '只回复两个字：可以' }],
-        stream: false,
-        max_tokens: 240,
-      }),
+    return await withProviderRequestSlot(config.baseUrl, safeSignal, async () => {
+      let res: Response;
+      try {
+        res = await fetch(endpoint(config.baseUrl), {
+          method: 'POST',
+          signal: safeSignal,
+          headers: chatHeaders(config),
+          body: JSON.stringify({
+            model: config.model.trim(),
+            messages: [{ role: 'user', content: '只回复两个字：可以' }],
+            stream: false,
+            max_tokens: 240,
+          }),
+        });
+      } catch (err) {
+        throw requestError(err, safeSignal);
+      }
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        const error = parseServerError(
+          res.status, body, config.baseUrl,
+          res.headers.get('x-startnow-proxy') === '1',
+          config.apiKey, res.headers.get('retry-after'),
+        );
+        if (error.kind === 'rate') stopQueuedAfterRateLimit(config.baseUrl, error);
+        throw error;
+      }
+
+      const data = await res.json().catch(() => null);
+      if (!data) throw new LlmError('server', '返回的不是合法 JSON，这个地址可能不是 OpenAI 兼容接口。');
+      const content = extractText(data?.choices?.[0]?.message?.content);
+      if (!content.trim()) {
+        throw new LlmError(
+          'server',
+          '接口通了，但模型没有返回文字。它可能把 token 全用在 reasoning 上，换一个模型或调高 max_tokens。',
+        );
+      }
+      const servedModel = data?.model ?? config.model;
+      return `连接成功 · ${servedModel}`;
     });
   } catch (err) {
-    throw requestError(err, signal);
+    // A timeout/abort while waiting in the queue has the same public error
+    // semantics as cancelling a request already sent to the provider.
+    if ((err as Error)?.name === 'AbortError') throw requestError(err, safeSignal);
+    throw err;
   }
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw parseServerError(
-      res.status,
-      body,
-      config.baseUrl,
-      res.headers.get('x-startnow-proxy') === '1',
-      config.apiKey,
-      res.headers.get('retry-after'),
-    );
-  }
-
-  const data = await res.json().catch(() => null);
-  if (!data) throw new LlmError('server', '返回的不是合法 JSON，这个地址可能不是 OpenAI 兼容接口。');
-  const content = extractText(data?.choices?.[0]?.message?.content);
-  if (!content.trim()) {
-    throw new LlmError(
-      'server',
-      '接口通了，但模型没有返回文字。它可能把 token 全用在 reasoning 上，换一个模型或调高 max_tokens。',
-    );
-  }
-  const servedModel = data?.model ?? config.model;
-  return `连接成功 · ${servedModel}`;
 }
 
 export interface ModelOption {

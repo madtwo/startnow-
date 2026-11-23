@@ -44,6 +44,11 @@ npm run test:all
 
 见 `AGENTS.md`。
 
+
+## 模型请求并发保护（第六轮补丁）
+
+同一模型接口的活跃聊天响应最多 2 条（从开始请求直到 JSON/SSE 响应结束）；超出的请求按 FIFO 等候。排队时取消/超时不会发送 HTTP 请求。429 会停止该批尚未发出的排队请求，不自动切备用模型，保留原有 Retry-After 提示与上层退避。两个不同的接口 URL 各有自己的限额。不会裁剪 prompt、记忆或输出 Token。详见 [并发策略](docs/PROVIDER-CONCURRENCY-POLICY.md)。
+
 ## 离线人类评审准备（Q06，仍未真人签核）
 
 建议/动作别名的双评盲包生成和只读校验，使用 `scripts/q06-human-review-gate.cjs`；完整步骤见 [Q06 人类评审协议](docs/Q06-HUMAN-REVIEW-PROTOCOL.md)。运行 `npm run test:q06-human-gate` 仅测试工具逻辑，**不是**真人评审或发布批准。

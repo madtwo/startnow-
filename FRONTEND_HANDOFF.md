@@ -1,3 +1,5 @@
+> **Patch 6 补充（2026-11-23，未部署）**：在 `src/lib/llm.ts` 和新 `src/lib/providerConcurrency.ts` 增加同接口聊天请求并发上限 2、FIFO 排队、排队取消/超时、429 停止同批排队。`testConnection` 共用限额；原有 token/上下文、模型回退、`room/*` 均未改。详见 `docs/PROVIDER-CONCURRENCY-POLICY.md` 与根目录 `PATCH6-EXECUTION-REPORT.md`。本修改只在交接 ZIP 中，不能当作线上已生效。Q01/Q06 真人验收与 Q01 重基线仍待受控协调员处理。
+
 # Patch 4 增量交接（基于 2026-11-23 的 `20de4cb` 源码快照）
 
 > 本节是本次交付状态；后面的 Patch 3、2026-11-22 条目属于历史说明，不代表当前 HEAD 或最新测试结果。本次工作未在用户 Git 仓库创建提交，也未推送或部署。
