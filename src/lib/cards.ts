@@ -863,14 +863,20 @@ const curatedSafeLine = (persona: Persona) => {
 };
 
 // 对方随口提学校/食堂时，模型容易顺着编出“我也去过”。这里统一改成不同校的口径。
-const venueSafeLine = (persona: Persona) => {
+const venueWord = (text: string): string => {
+  const match = /食堂|图书馆|宿舍|教室|球场|操场|校门/u.exec(text);
+  return match ? match[0] : '';
+};
+
+const venueSafeLine = (persona: Persona, context = '') => {
+  const place = venueWord(context) ? `${venueWord(context)}那边` : '那边';
   const lines: Record<string, string> = {
-    shenmo: '我不在你们学校那边，食堂的情况我真不清楚。你说的这些，我在听。',
-    weini: '我不在你们学校诶，食堂我没去过，也说不好……你说的这些，我在听。',
-    miaoze: '咱俩不是一个学校的，食堂我还真不知道。你说的这些，我在听。',
-    yanggao: '我不在你们学校，食堂我可没去过哈哈。你说的这些，我在听。',
+    shenmo: `我不在你们学校，${place}的情况我不清楚。你说的这些，我在听。`,
+    weini: `我不在你们学校诶，${place}我没去过，也说不好……你说的这些，我在听。`,
+    miaoze: `咱俩不是一个学校，${place}我还真不知道。你说的这些，我在听。`,
+    yanggao: `我不在你们学校，${place}我可没去过哈哈。你说的这些，我在听。`,
   };
-  return lines[persona.id] ?? '我不在你们学校，那边的情况我不清楚。说回你刚才的事吧。';
+  return lines[persona.id] ?? `我不在你们学校，${place}我不清楚。说回你刚才的事吧。`;
 };
 
 /** 安全拦截后的文案也按真实违规类型分流，避免问邮箱却回答“不能见面”。 */
@@ -1204,7 +1210,7 @@ async function generateComment(
     );
     if (venueLeak) {
       ctx.logs.push(`${persona.name} 顺着对方的学校场所编造经历，改为不同校回复`);
-      return { kind: 'reply', text: venueSafeLine(persona), origin: 'boundary' };
+      return { kind: 'reply', text: venueSafeLine(persona, `${incoming} ${card.text}`), origin: 'boundary' };
     }
     const social = auditSocial(line);
     const problem = replyProblem(line);
