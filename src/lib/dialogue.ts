@@ -79,7 +79,7 @@ export function mentionsLocalVenue(text: string): boolean {
 // 这两类表达决定产品硬边界，不能把模型输出中的“先不”等词当作放行证明。
 // 归一化只用于检测，不改变用户保存的原文。
 const normalizeBoundaryText = (text: string) =>
-  text.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF\s]/g, '').toLowerCase();
+  text.normalize('NFKC').replace(/[\s\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}·•・‧∙⋅]/gu, '').toLowerCase();
 
 const OFFLINE_REQUESTS = [
   /(?:见个?面|见一面|碰个?面|面基|奔现|线下见|现实里见|约(?:个)?饭|聚聚)/,

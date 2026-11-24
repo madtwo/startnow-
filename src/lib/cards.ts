@@ -9,6 +9,7 @@ import type {
   WorldSettings,
 } from '../types';
 import { isMock } from '../config/providers';
+import { captureModelFence } from './modelFence';
 import { auditCriticalContent, auditSocial, auditTone } from './baseline';
 import {
   ensureMind,
@@ -32,7 +33,7 @@ import { completedActionAnchor, fallbackCompletionReaction, isGroundedCompletion
 import { diagnosticExcerpt } from './completionDiagnostics';
 import type { RejectedCompletionDiagnostic } from './completionDiagnostics';
 import { MAX_FREE_TEXT_SHRINK, canRequestSmallerComment, fallbackSmallerText, likelyFreeTextAction, safeSmallerText, validSmallerText } from './freeTextShrink';
-import { canUseNextStep, isActionableStepText } from './cardPolicy';
+import { canUseNextStep, validActionReference } from './cardPolicy';
 import { actionLabel, inferTrouble, pickActions, recentActionUses, selectActionLine, smallerAction } from './actions';
 import { chooseAdviceCopy, parseAdviceChoice, validateAdviceLine } from './adviceLine';
 import { emitSyntheticAnchorRejection, type LocalAnchorProbe } from './adviceAnchorDiagnostics';
@@ -330,7 +331,7 @@ export function adoptCommentAdvice(
       auditSocial(text) || auditCriticalContent(text)) {
     return { card, error: '这条回复包含不适合写入便签的内容，请换一条安全、具体的建议' };
   }
-  if (!comment.actionId && !isActionableStepText(text)) {
+  if (!validActionReference(card, {...comment, text, fromPersonaId: comment.authorId})) {
     return { card, error: '这条更像回应，不是下一步；换一条具体建议' };
   }
   const context = [card.text, ...card.comments.filter((row) => row.authorKind === 'player')
@@ -358,13 +359,13 @@ export function adoptCommentAdvice(
  * the player must explicitly adopt the new comment to replace the original advice.
  */
 export async function proposeSmallerComment(input: {
-  card: Card; persona: Persona; config: LlmConfig; settings: WorldSettings; now?: number;
+  card: Card; persona: Persona; config: LlmConfig; settings: WorldSettings; now?: number; modelCallBudget?: number;
 }): Promise<{ comment?: Card['comments'][number]; error?: string; calls: number; logs: string[] }> {
   const { card, persona, config, settings } = input;
   const now = input.now ?? Date.now();
   const advice = card.advice;
   const invalid = '这条原话不适合继续拆成动作，先留着它，或换一条具体建议。';
-  if (card.authorKind !== 'player' || card.status !== 'advised' ||
+  if (!canUseNextStep(card) || card.authorKind !== 'player' || card.status !== 'advised' ||
       hasPlayerCrisisInput(card) || !advice || advice.accepted || advice.actionId ||
       !canRequestSmallerComment(card) || advice.fromPersonaId !== persona.id)
     return { error: '只能在尚未贴便签的自由文本建议上请求再小一步。', calls: 0, logs: [] };
@@ -383,14 +384,14 @@ export async function proposeSmallerComment(input: {
   let calls = 0;
   let origin: 'model' | 'simulated' = 'simulated';
   let text = fallbackSmallerText(advice.text, depth)!;
-  if (!isMock(config)) {
-    const ctx: Ctx = { config, settings, calls: 0, logs };
+  if (!isMock(config) && !settings.paused && settings.dailyCalls > 0 && (input.modelCallBudget ?? Infinity) > 0) {
+    const ctx: Ctx = { config, settings, calls: 0, logs, storagePermit: captureModelFence() };
     try {
       const raw = await callOnce(ctx,
         systemFor(persona, '', FREE_TEXT_SHRINK_RULES, settings.baselineExtra),
         withUntrustedHistory(freeTextShrinkPrompt(card, advice.text, depth), persona, now),
         SHORT_TASK_TOKEN_BUDGETS.shrink, 10_000, `${persona.id}:${card.id}`,
-        shortTaskTelemetry('shrink', logs));
+        shortTaskTelemetry('shrink', logs), Math.min(settings.dailyCalls, input.modelCallBudget ?? Infinity));
       const candidate = raw.trim().replace(/^[“「"']|[”」"']$/g, '');
       if (validSmallerText(candidate, advice.text)) {
         text = candidate;
@@ -447,14 +448,16 @@ export function advicePersonaFor(
 }
 
 export function shrinkAdvice(card: Card, now = Date.now()): Card {
-  if (card.status !== 'advised' || hasPlayerCrisisInput(card)) return card;
+  if (!canUseNextStep(card) || card.status !== 'advised' || hasPlayerCrisisInput(card)) return card;
   const advice = card.advice;
-  if (advice?.accepted) return card;
+  if (advice?.accepted || !advice || !validActionReference(card, advice)) return card;
   if (advice?.origin === 'material' && advice.materialAnchorId && card.material) {
     const smaller = smallerMaterialStep({text:advice.text,anchorId:advice.materialAnchorId}, card.material);
     if (!smaller) return card;
-    return {...card,advice:{...advice,text:smaller.text,materialAnchorId:smaller.anchorId,materialSource:'template',at:now},
-      comments:[...card.comments,{id:uid(),authorId:advice.fromPersonaId,authorKind:'persona',
+    const commentId=uid();
+    return {...card,advice:{...advice,text:smaller.text,materialAnchorId:smaller.anchorId,materialSource:'template',at:now,
+      sourceCommentId:commentId,parentAdviceSource:advice.sourceCommentId},
+      comments:[...card.comments,{id:commentId,authorId:advice.fromPersonaId,authorKind:'persona',
         text:smaller.text,at:now,origin:'material'}]};
   }
   if (!advice?.actionId) return card;
@@ -464,16 +467,19 @@ export function shrinkAdvice(card: Card, now = Date.now()): Card {
     : smallerAction(advice.actionId);
   if (!smaller) return card;
   const smallerText = helpSeeking ? smaller.label : smaller.line;
+  const commentId = uid();
   return {
     ...card,
-    advice: { ...advice, text: smallerText, actionId: smaller.id, at: now, lineSource: 'curated' },
+    advice: { ...advice, text: smallerText, actionId: smaller.id, at: now, lineSource: 'curated',
+      sourceCommentId: commentId, parentAdviceSource: advice.sourceCommentId },
     comments: [
       ...card.comments,
       {
-        id: uid(),
+        id: commentId,
         authorId: advice.fromPersonaId,
         authorKind: 'persona',
-        text: smaller.line,
+        text: smallerText,
+        actionId: smaller.id,
         at: now,
         lineSource: 'curated',
       },
@@ -483,7 +489,7 @@ export function shrinkAdvice(card: Card, now = Date.now()): Card {
 
 export function acceptAdvice(card: Card, now = Date.now()): Card {
   if (!canUseNextStep(card) || card.status !== 'advised' || !card.advice || card.advice.accepted || hasPlayerCrisisInput(card)) return card;
-  if (!card.advice.actionId && !isActionableStepText(card.advice.text)) return card;
+  if (!validActionReference(card, card.advice)) return card;
   return {
     ...card,
     status: 'noted',
@@ -509,7 +515,10 @@ export function closeCard(card: Card, now = Date.now()): Card {
 export function completeCard(card: Card, now = Date.now(), speed = 6): Card {
   if (!canUseNextStep(card) || card.authorId !== 'me' ||
       card.status !== 'noted' || !card.note || hasPlayerCrisisInput(card)) return card;
-  if (!card.note.actionId && !isActionableStepText(card.note.text)) return card;
+  if (!validActionReference(card, card.note)) return card;
+  if (card.advice && (card.advice.text !== card.note.text || card.advice.actionId !== card.note.actionId ||
+      card.advice.materialAnchorId !== card.note.materialAnchorId || card.advice.sourceCommentId !== card.note.sourceCommentId ||
+      card.advice.fromPersonaId !== card.note.fromPersonaId)) return card;
   const rawLabel = (card.note?.text ?? '那件小事').replace(/\s+/g, ' ').trim();
   const label = (rawLabel.length > 48 ? `${rawLabel.slice(0, 48)}…` : rawLabel)
     .replace(/[。.!！?？]+$/u, '') || '那件小事';
@@ -542,6 +551,8 @@ interface Ctx {
   settings: WorldSettings;
   calls: number;
   logs: string[];
+  maxAttempts?: number;
+  storagePermit?: () => boolean;
   /** Per-tick history plus decisions made during this tick (not high-trust prompt data). */
   usedCurated?: RecentAction[];
   /** Source-backed comments across this tick for once-per-week growth references. */
@@ -830,10 +841,17 @@ const REFUSE_LINES = [
 async function callOnce(
   ctx: Ctx, system: string, user: string, maxTokens: number,
   timeoutMs = 20_000, sessionScope = 'forum', onTelemetry?: (entry: ChatTelemetry) => void,
+  requestBudget?: number,
 ) {
-  ctx.calls++;
+  const limit = requestBudget ?? ctx.maxAttempts ?? ctx.settings.maxCallsPerTick;
   return streamChat({
     config: ctx.config,
+    storagePermit: ctx.storagePermit,
+    onRequestAttempt: () => {
+      if (ctx.settings.paused || ctx.calls >= limit || ctx.calls >= ctx.settings.dailyCalls)
+        throw new LlmError('quota', '模型额度已用尽');
+      ctx.calls++;
+    },
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -1458,7 +1476,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
     return { cards: input.cards, personas: input.personas, calls: 0, logs: [] };
   }
   const ctx: Ctx = {
-    config: input.config, settings: input.settings, calls: 0, logs: [],
+    config: input.config, settings: input.settings, calls: 0, logs: [], storagePermit: captureModelFence(),
     usedCurated: recentActionUses(input.cards, now),
     historyCards: input.cards, growthReferencesThisTick: new Set(),tickNow:now,
     onRejectedCompletion: input.onRejectedCompletion,
@@ -1471,6 +1489,7 @@ export async function tickCards(input: TickInput): Promise<TickOutput> {
   }));
   const limit = isMock(input.config) ? 6 : Number.isFinite(input.settings.maxCallsPerTick)
     ? Math.max(0, Math.min(10, Math.floor(input.settings.maxCallsPerTick))) : 0;
+  ctx.maxAttempts = limit;
   const speed = scale(input.settings);
 
   let cards: Card[] = [];
@@ -2106,7 +2125,7 @@ export async function askForAdvice(
   if (hasPlayerCrisisInput(card)) {
     return { cards: input.cards, personas: input.personas, calls: 0, logs: ['检测到危机内容，不生成普通行动建议；请走危机求助层'] };
   }
-  if (isClosed(card) || card.advice || card.status === 'noted') {
+  if (!canUseNextStep(card) || isClosed(card) || card.advice || card.status === 'noted') {
     return { cards: input.cards, personas: input.personas, calls: 0, logs: ['当前卡片不可再次生成下一步'] };
   }
   const persona = advicePersonaFor(card, input.personas, input.personaId);
@@ -2119,6 +2138,7 @@ export async function askForAdvice(
 
   // 危机不是普通的微行动；完整提交入口必须由 App 展示危机求助层。
   const context = [card.text, ...card.comments.filter((c) => c.authorKind === 'player').map((c) => c.text)].join(' ');
+  const modelAllowed = !input.settings.paused && input.settings.dailyCalls > 0 && (input.modelCallBudget ?? Infinity) > 0;
   // 优先匹配非诊断性求助起点，避免“应就医”与正式动作“开窗”自相矛盾。
   const seekingHelp = card.authorKind === 'player' && needsHelpSeeking(context);
   // User-initiated image lane; tick never calls vision or invents a material extraction.
@@ -2135,8 +2155,8 @@ export async function askForAdvice(
     const material=verifiedCached || (cached ? templateMaterialStep(card.material) :
       await materialFirstStep({extraction:card.material,persona,config:input.config,now,
         onModelAttempt:()=>{
-          if (calls>=2 || (input.modelCallBudget!==undefined && calls>=input.modelCallBudget))
-            throw new Error('material advice model budget exhausted');
+          if (!modelAllowed || calls>=Math.min(2, input.settings.dailyCalls, input.modelCallBudget ?? Infinity))
+            throw new LlmError('quota', 'material advice model budget exhausted');
           calls++;
         },
       }));
@@ -2189,11 +2209,15 @@ export async function askForAdvice(
   let calls = 0;
   const logs: string[] = [];
 
-  if (!seekingHelp && !isMock(input.config)) {
+  if (!seekingHelp && !isMock(input.config) && modelAllowed) {
     try {
-      calls++;
       const raw = await streamChat({
         config: input.config,
+        onRequestAttempt: () => {
+          if (calls >= Math.min(input.settings.dailyCalls, input.modelCallBudget ?? Infinity))
+            throw new LlmError('quota', '下一步模型额度已用尽');
+          calls++;
+        },
         messages: [
           {
             role: 'system',
@@ -2232,7 +2256,8 @@ export async function askForAdvice(
         logs.push('advice_choice=model');
         if (choice.line !== null) {
           const checked = validateAdviceLine(choice.line, action, contextText);
-          if (checked.ok) modelLine = choice.line;
+          if (checked.ok && validActionReference(card, {text:choice.line, actionId:action.id})) modelLine = choice.line;
+          else if (checked.ok) logs.push('advice_line=fallback:unverified_action_binding');
           else {
             logs.push(`advice_line=fallback:${checked.reason}`);
             if (checked.reason === 'no_anchor') {
@@ -2315,7 +2340,7 @@ export async function catchUp(
   const quota = dailyQuota(input.settings);
   if (quota === 0) return { cards: input.cards, personas: input.personas, calls: 0 };
   const count = Math.min(4, Math.max(1, Math.round(input.hours / 3)));
-  const ctx: Ctx = { config: input.config, settings: input.settings, calls: 0, logs: [] };
+  const ctx: Ctx = { config: input.config, settings: input.settings, calls: 0, logs: [], storagePermit: captureModelFence(), maxAttempts: Math.min(4, input.settings.dailyCalls) };
   const now = input.now ?? Date.now();
   let personas: Persona[] = input.personas.map((p) => ({
     ...p,

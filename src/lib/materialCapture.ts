@@ -1,9 +1,10 @@
+import { captureModelFence } from './modelFence';
 import type { LlmConfig, Persona } from '../types';
 import { isMock } from '../config/providers';
 import { scopedOpenCodeSessionId, validateLlmEndpointBase } from './llm';
 import { templateMaterialStep, validateMaterialStep, type MaterialStep } from './materialAdvice';
 import {
-  materialErrorFromHttp, materialErrorMessage, materialResponseText, parseMaterialExtraction,
+  materialErrorFromHttp, materialErrorMessage, materialResponseText, materialContentFiltered, parseMaterialExtraction,
   redactMaterialText, validMaterialImage, extractMaterial,
   type MaterialError, type MaterialExtraction,
 } from './materialVision';
@@ -64,6 +65,7 @@ export async function captureFirstStep(input: {
   if (!input.config.apiKey?.trim()) return fail('auth');
   try {validateLlmEndpointBase(input.config.baseUrl);} catch {return fail('server');}
   const started=Date.now();
+  const allowed = captureModelFence();
   const overall = new AbortController();
   let timeout = false;
   const stopOverall = () => overall.abort();
@@ -75,13 +77,14 @@ export async function captureFirstStep(input: {
   let last:MaterialError|'advice_invalid'='format_invalid';
   let lastSafe:MaterialExtraction|undefined;
   const asTemplate=(retried:boolean):CaptureResult|null => {
-    if (!lastSafe || overall.signal.aborted) return null;
+    if (!lastSafe || overall.signal.aborted || !allowed()) return null;
     const step=templateMaterialStep(lastSafe);
     return step ? {ok:true,extraction:lastSafe,step,retried,latencyMs:Date.now()-started}:null;
   };
   try {
     for (let attempt=0;attempt<2;attempt++) {
       if (overall.signal.aborted) return fail(timeout?'timeout':'cancelled',attempt>0);
+      if (!allowed()) return fail('cancelled',attempt>0);
       try {input.onModelAttempt?.();}
       catch {return asTemplate(attempt>0) ?? fail('rate_limit',attempt>0);}
       const controller=new AbortController();
@@ -90,6 +93,7 @@ export async function captureFirstStep(input: {
       overall.signal.addEventListener('abort',stop,{once:true});
       const timer=setTimeout(()=>{attemptTimedOut=true;controller.abort();},ATTEMPT_MS);
       try {
+        if (!allowed()) return fail('cancelled',attempt>0);
         const response=await fetch(url,{method:'POST',signal:controller.signal,
           headers:{'Content-Type':'application/json',Authorization:`Bearer ${input.config.apiKey.trim()}`,
             'x-opencode-session':session},
@@ -102,9 +106,13 @@ export async function captureFirstStep(input: {
           const classification=materialErrorFromHttp(response.status,await response.text().catch(()=>''));
           last=classification.code;
           if (classification.retryable && attempt===0) continue;
+          if (classification.code === 'unsafe_output') return fail('unsafe_output',attempt>0);
           return asTemplate(attempt>0) ?? fail(classification.code,attempt>0);
         }
-        const output=materialResponseText(await response.json().catch(()=>null));
+        const payload=await response.json().catch(()=>null);
+        if (!allowed()) return fail('cancelled',attempt>0);
+        if (materialContentFiltered(payload)) return fail('unsafe_output',attempt>0);
+        const output=materialResponseText(payload);
         if (!output || output.length>MAX_OUTPUT) {last='format_invalid';continue;}
         const parsed=parseCapturedMaterial(output);
         if (parsed.ok) return {...parsed,retried:attempt>0,latencyMs:Date.now()-started};

@@ -128,7 +128,8 @@ test('real model rejection degrades to a local peer line, not a helper/error or 
  assert.equal(out.cards[0].plan.length,0);
  assert.equal(out.cards[0].pending.length,0);
  assert.equal(replies.filter(c=>c.authorKind==='helper').length,0);
- assert.equal(out.calls,1);
+ // Invalid configuration is rejected before fetch, so no HTTP attempt is charged.
+ assert.equal(out.calls,0);
 });
 
 test('offline tick consumes due peer plan exactly once without a paid model',()=>{

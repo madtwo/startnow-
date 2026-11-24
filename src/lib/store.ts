@@ -8,6 +8,7 @@ import type {
   Persona,
   Room,
   RoomSettings,
+  RoomUsage,
   ScheduleItem,
   Todo,
   World,
@@ -28,6 +29,7 @@ import { isManipulative } from './agentVulnerability';
 import { stripAiProvenance } from './displayText';
 import { OPENING_GATE_KEY, validPlayerIntroText } from './openingGate';
 import { repairForumComments, repairForumPending, repairForumPlan } from './forumArchive';
+import { registerModelFence } from './modelFence';
 
 const KEYS = {
   config: 'shudong.config.v1',
@@ -41,6 +43,7 @@ const KEYS = {
   room: 'shudong.room.v1',
   archives: 'shudong.archives.v1',
   roomSettings: 'shudong.roomsettings.v1',
+  roomUsage: 'shudong.roomusage.v1',
   goals: 'shudong.goals.v1',
   schedule: 'shudong.schedule.v1',
   summaries: 'shudong.summaries.v1',
@@ -57,20 +60,100 @@ const ROOM_KEYS = ['shudong.room.v1', 'shudong.archives.v1', 'shudong.roomsettin
 // copy before explicitly discarding that particular entry. No logs or network.
 const corruptEntries = new Map<string, string>();
 const failedStorageKeys = new Set<string>();
+// A failed read is not a missing key. Keep the write barrier for the lifetime
+// of this page; a later successful read cannot make an already mounted empty
+// React snapshot authoritative. Reload or explicit destructive reset to recover.
+const unreadableEntries = new Set<string>();
 let storageReadOnly = false;
+let clearIncomplete = false;
+// A small non-private reset journal survives refresh. Retain the completed
+// epoch so an old page cannot pass the guard merely because deletion finished.
+// localStorage has no transaction/CAS: this is a pre-write fence, not an
+// atomic cross-tab transaction. A racing writer can still interleave.
+const RESET_KEY = 'shudong.reset.v1';
+type ResetMarker = { epoch: string; pending: boolean };
+let resetObservation: { storage: Storage; raw: string | null } | undefined;
+function resetState(): { raw: string | null; pending: boolean; changed: boolean; readable: boolean } {
+  try {
+    const storage = localStorage;
+    const raw = storage.getItem(RESET_KEY) ?? null;
+    if (!resetObservation || resetObservation.storage !== storage) resetObservation = { storage, raw };
+    const changed = resetObservation.raw !== raw;
+    if (raw === null) return { raw, pending: false, changed, readable: true };
+    try {
+      const marker = JSON.parse(raw) as Partial<ResetMarker> | null;
+      if (marker && typeof marker.epoch === 'string' && marker.epoch && typeof marker.pending === 'boolean') {
+        return { raw, pending: marker.pending, changed, readable: true };
+      }
+    } catch { /* malformed marker: require explicit recovery */ }
+    return { raw, pending: true, changed, readable: true };
+  } catch { return { raw: null, pending: false, changed: false, readable: false }; }
+}
+type FenceReason = 'read-only' | 'unreadable' | 'reset-pending' | 'stale-epoch';
+/** One source of truth for write/generation/recovery permission. */
+export function storageFence(): { reason: FenceReason | null; raw: string | null; incomplete: boolean } {
+  const state = resetState();
+  const incomplete = clearIncomplete || !state.readable || state.pending;
+  const reason = !state.readable ? 'unreadable' : incomplete ? 'reset-pending' :
+    state.changed ? 'stale-epoch' : storageReadOnly ? 'read-only' : null;
+  return { reason, raw: state.raw, incomplete };
+}
+function resetWriteBlocked(): boolean { return storageFence().reason !== null; }
+/** A capability pinned before loading any component snapshot. A completed
+ * same-page clear advances the marker but can never renew an old capability. */
+export type StorageSession = Readonly<{ storage: Storage; raw: string | null }>;
+export function captureStorageSession(): StorageSession | null {
+  const fence = storageFence();
+  if (fence.reason) return null;
+  try { return Object.freeze({ storage: localStorage, raw: fence.raw }); } catch { return null; }
+}
+export function storageSessionCurrent(session: StorageSession | null): boolean {
+  if (!session) return false;
+  const fence = storageFence();
+  try { return !fence.reason && session.storage === localStorage && session.raw === fence.raw; }
+  catch { return false; }
+}
+registerModelFence(() => {
+  const session = captureStorageSession();
+  return () => storageSessionCurrent(session);
+});
+function persistResetMarker(marker: ResetMarker): string {
+  const raw = JSON.stringify(marker);
+  localStorage.setItem(RESET_KEY, raw);
+  if (localStorage.getItem(RESET_KEY) !== raw) throw new Error('reset journal not persisted');
+  resetObservation = { storage: localStorage, raw };
+  return raw;
+}
 const ARRAY_KEYS = new Set([
   KEYS.cards, KEYS.personas, KEYS.todos, KEYS.archives, KEYS.goals,
   KEYS.schedule, KEYS.summaries, ...LEGACY_CARD_KEYS,
 ]);
 const OBJECT_KEYS = new Set([
   KEYS.config, KEYS.world, KEYS.settings, KEYS.identity,
-  KEYS.identityLegacy, KEYS.room, KEYS.roomSettings,
+  KEYS.identityLegacy, KEYS.room, KEYS.roomSettings, KEYS.roomUsage,
 ]);
 
 /** A second tab has newer data: block writes from this stale React tree. */
 export const setStorageReadOnly = (value: boolean): void => { storageReadOnly = value; };
 export const listCorruptStorageKeys = (): string[] => [...corruptEntries.keys()];
 export const listFailedStorageKeys = (): string[] => [...failedStorageKeys];
+const ROOM_DOMAIN_KEYS = [KEYS.room, KEYS.roomSettings, KEYS.roomUsage];
+const roomDomainFailed = () => ROOM_DOMAIN_KEYS.some(key => corruptEntries.has(key) || unreadableEntries.has(key));
+// Validate all related persisted domains on every write/authorization, even if
+// the bad bytes appeared after the component mounted. Never treat unreadable
+// or malformed data as a missing ledger. Recovery is explicit (discard/reload).
+export function roomStorageBlocked(session?: StorageSession | null): boolean {
+  if (resetWriteBlocked() || (session !== undefined && !storageSessionCurrent(session)) || roomDomainFailed()) return true;
+  read(KEYS.room, raw => normalizeRoom(raw as Partial<Room>));
+  read(KEYS.roomSettings, validateRoomSettings);
+  loadRoomUsage();
+  return roomDomainFailed() || resetWriteBlocked() || (session !== undefined && !storageSessionCurrent(session));
+}
+export const archiveStorageBlocked = (session?: StorageSession | null): boolean => roomStorageBlocked(session) ||
+  corruptEntries.has(KEYS.archives) || unreadableEntries.has(KEYS.archives);
+export const isClearIncomplete = (): boolean => storageFence().incomplete;
+export const canWriteAppStorage = (): boolean => !resetWriteBlocked();
+export const resetBlocksGeneration = (): boolean => resetWriteBlocked();
 
 /** This backup can contain PRIVATE content or an API key; download locally only. */
 export const exportCorruptStorage = (): string => JSON.stringify({
@@ -81,7 +164,7 @@ export const exportCorruptStorage = (): string => JSON.stringify({
 
 /** Explicit, surgical recovery: never delete a key changed by another tab. */
 export function discardCorruptStorage(): { removed: string[]; failed: string[] } {
-  if (storageReadOnly) return { removed: [], failed: listCorruptStorageKeys() };
+  if (storageReadOnly || resetWriteBlocked()) return { removed: [], failed: listCorruptStorageKeys() };
   const removed: string[] = [];
   const failed: string[] = [];
   for (const [key, raw] of corruptEntries) {
@@ -90,6 +173,7 @@ export function discardCorruptStorage(): { removed: string[]; failed: string[] }
       localStorage.removeItem(key);
       corruptEntries.delete(key);
       failedStorageKeys.delete(key);
+      unreadableEntries.delete(key);
       removed.push(key);
     } catch { failed.push(key); }
   }
@@ -97,8 +181,15 @@ export function discardCorruptStorage(): { removed: string[]; failed: string[] }
 }
 
 const safeGetItem = (key: string): string | null => {
+  // Pin the epoch before loading snapshots, not just when saving them.
+  resetState();
   try { return localStorage.getItem(key); }
-  catch { failedStorageKeys.add(key); return null; }
+  catch {
+    const first = !unreadableEntries.has(key);
+    unreadableEntries.add(key); failedStorageKeys.add(key);
+    if (first && storageErrorHandler) queueMicrotask(() => reportStorageFailure(key));
+    return null;
+  }
 };
 
 /** 旧 posts 格式不兼容：不在用户不知情的情况下静默迁移或丢弃。 */
@@ -107,7 +198,7 @@ export const listLegacyPostKeys = (): string[] => {
   catch { return []; }
 };
 export const deleteLegacyPosts = (): void => {
-  if (storageReadOnly) return;
+  if (storageReadOnly || resetWriteBlocked()) return;
   LEGACY_POST_KEYS.forEach((key) => { try { localStorage.removeItem(key); } catch { /* 存储受限 */ } });
 };
 
@@ -118,7 +209,7 @@ export const cleanStoredMemory = (rows: unknown): Persona['memory'] =>
   })) : [];
 const DAY = 86_400_000;
 
-const read = (key: string): unknown => {
+const read = (key: string, validate?: (value: unknown) => unknown): unknown => {
   const raw = safeGetItem(key);
   if (raw === null) return null;
   try {
@@ -130,10 +221,18 @@ const read = (key: string): unknown => {
         (OBJECT_KEYS.has(key) && (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)))) {
       throw new SyntaxError('unexpected storage root shape');
     }
+    if (validate) {
+      const checked = validate(parsed);
+      if (checked === null || checked === undefined) throw new SyntaxError('invalid domain archive');
+      return checked;
+    }
     return parsed;
   } catch {
     // Do not retain in console or analytics; an archive can include private data.
-    if (!corruptEntries.has(key)) corruptEntries.set(key, raw);
+    if (!corruptEntries.has(key)) {
+      corruptEntries.set(key, raw);
+      if (storageErrorHandler) queueMicrotask(() => reportStorageFailure(key));
+    }
     return null;
   }
 };
@@ -146,16 +245,24 @@ export const setStorageErrorHandler = (handler: StorageErrorHandler | null): voi
   storageErrorHandler = handler;
 };
 
-const write = (key: string, value: unknown) => {
-  // In both cases, a write would irreversibly overwrite data we did not load.
-  if (storageReadOnly || corruptEntries.has(key)) return;
+function reportStorageFailure(key: string): void {
+  failedStorageKeys.add(key);
+  try { storageErrorHandler?.(key); } catch { /* warning handlers are non-fatal */ }
+}
+
+const writeChecked = (key: string, value: unknown): boolean => {
+  // A write must not overwrite data we did not load or a newer reset epoch.
+  if (storageReadOnly || corruptEntries.has(key)) return false;
+  if (resetWriteBlocked() || unreadableEntries.has(key)) { reportStorageFailure(key); return false; }
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    failedStorageKeys.add(key);
-    try { storageErrorHandler?.(key); } catch { /* the warning handler must stay non-fatal */ }
+    reportStorageFailure(key);
+    return false;
   }
 };
+const write = (key: string, value: unknown): void => { writeChecked(key, value); };
 
 export const defaultSettings: WorldSettings = {
   paused: false,
@@ -491,8 +598,9 @@ export function mergeImportedPersonaHistory(rows: unknown): Persona[] {
 const markPersonaSchema = () => {
   // Never stamp a successful migration when the persona record is quarantined,
   // nor bypass the stale-tab write lock via a metadata-only localStorage call.
-  if (storageReadOnly || corruptEntries.has(KEYS.personas) ||
-      corruptEntries.has(PERSONA_SCHEMA_KEY)) return;
+  if (storageReadOnly || resetWriteBlocked() || corruptEntries.has(KEYS.personas) ||
+      corruptEntries.has(PERSONA_SCHEMA_KEY) || unreadableEntries.has(KEYS.personas) ||
+      unreadableEntries.has(PERSONA_SCHEMA_KEY)) return;
   try {
     localStorage.setItem(PERSONA_SCHEMA_KEY, String(PERSONA_SCHEMA_VERSION));
   } catch {
@@ -611,33 +719,93 @@ export const saveIdentity = (identity: Identity) => write(KEYS.identity, identit
  * 群聊
  * ------------------------------------------------------------------ */
 
-export const defaultRoomSettings: RoomSettings = {
-  liveliness: 0.5,
-  timeFlow: false,
-  dailyMessages: 400,
-};
+import { defaultRoomSettings } from './roomSettingsDefaults';
+export { defaultRoomSettings };
 
+function validateRoomSettings(raw: unknown): Partial<RoomSettings> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const value = raw as Partial<RoomSettings>;
+  if (value.liveliness !== undefined && (typeof value.liveliness !== 'number' || !Number.isFinite(value.liveliness) || value.liveliness < 0 || value.liveliness > 1)) return null;
+  if (value.timeFlow !== undefined && typeof value.timeFlow !== 'boolean') return null;
+  if (value.dailyMessages !== undefined && (typeof value.dailyMessages !== 'number' || !Number.isFinite(value.dailyMessages) || value.dailyMessages < 0)) return null;
+  return value;
+}
 export function loadRoomSettings(): RoomSettings {
-  const saved = read(KEYS.roomSettings) as Partial<RoomSettings> | null;
-  if (!saved || typeof saved !== 'object') return { ...defaultRoomSettings };
+  const saved = read(KEYS.roomSettings, validateRoomSettings) as Partial<RoomSettings> | null;
+  if (!saved) return { ...defaultRoomSettings, ...(corruptEntries.has(KEYS.roomSettings) || unreadableEntries.has(KEYS.roomSettings) ? { dailyMessages: 0 } : {}) };
   return {
     liveliness:
       typeof saved.liveliness === 'number' && Number.isFinite(saved.liveliness)
         ? Math.max(0, Math.min(1, saved.liveliness))
         : defaultRoomSettings.liveliness,
     timeFlow: saved.timeFlow === true,
-    dailyMessages:
-      typeof saved.dailyMessages === 'number' && saved.dailyMessages > 0
-        ? Math.round(saved.dailyMessages)
-        : defaultRoomSettings.dailyMessages,
+    dailyMessages: saved.dailyMessages === undefined ? defaultRoomSettings.dailyMessages :
+      typeof saved.dailyMessages === 'number' && Number.isFinite(saved.dailyMessages) && saved.dailyMessages >= 0
+        ? Math.min(5000, Math.floor(saved.dailyMessages)) : 0,
   };
 }
 
-export const saveRoomSettings = (settings: RoomSettings) => write(KEYS.roomSettings, settings);
+export function saveRoomSettings(settings: RoomSettings, session?: StorageSession | null): boolean {
+  if (session !== undefined && !storageSessionCurrent(session)) return false;
+  if (roomStorageBlocked(session) || !validateRoomSettings(settings)) { reportStorageFailure(KEYS.roomSettings); return false; }
+  return writeChecked(KEYS.roomSettings, settings);
+}
 
+const roomString = (value: unknown): value is string => typeof value === 'string';
+const roomNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const roomId = (value: unknown): value is string => roomString(value) && !!value.trim();
+function validRoomPersona(value: unknown): value is Persona {
+  if (!value || typeof value !== 'object') return false;
+  const p = value as Partial<Persona>;
+  return roomId(p.id) && roomId(p.name) && roomId(p.archetype ?? 'quiet') &&
+    ['quiet','shy','rational','warm'].includes(p.archetype ?? 'quiet') &&
+    [p.handle,p.tagline,p.background,p.voice,p.color,p.avatarKey,p.gender,p.school,p.major,
+      p.cohort,p.personality,p.speech,p.approach].every(roomString) &&
+    [p.age,p.intimacy,p.replyDesire,p.lastDistillAt].every(roomNumber) &&
+    !!p.weights && typeof p.weights === 'object' &&
+    ['study','people','love','family','self','future'].every(k => roomNumber(p.weights?.[k as keyof Persona['weights']])) &&
+    Array.isArray(p.memory) && p.memory.every(isSafeMemoryEntry) &&
+    Array.isArray(p.weekLog) && p.weekLog.every(row => row && roomNumber(row.at) && roomString(row.text)) &&
+    (!p.awake || (Array.isArray(p.awake) && p.awake.length === 2 && p.awake.every(roomNumber))) &&
+    (!p.peak || (Array.isArray(p.peak) && p.peak.length === 2 && p.peak.every(roomNumber))) &&
+    (!p.pace || (Array.isArray(p.pace) && p.pace.length === 2 && p.pace.every(roomNumber))) &&
+    (p.interests === undefined || (Array.isArray(p.interests) && p.interests.every(roomString))) &&
+    (p.speechHabit === undefined || (Array.isArray(p.speechHabit) && p.speechHabit.every(roomString))) &&
+    (p.situation === undefined || (!!p.situation && [p.situation.day,p.situation.agenda,p.situation.worry,p.situation.busyLabel].every(roomString) &&
+      roomNumber(p.situation.busy) && Array.isArray(p.situation.knows) && p.situation.knows.every(roomString))) &&
+    (p.relations === undefined || (!!p.relations && typeof p.relations === 'object' && !Array.isArray(p.relations) &&
+      Object.values(p.relations).every(roomNumber))) &&
+    (p.relationsAt === undefined || roomNumber(p.relationsAt)) &&
+    (p.mind === undefined || (!!p.mind && ['calm','low','tense','warm','restless'].includes(p.mind.mood) &&
+      roomString(p.mind.thought) && roomString(p.mind.focus) && roomNumber(p.mind.lastActAt) &&
+      ['lurk','post','reply','brag','rest','step'].includes(p.mind.lastAct) &&
+      (p.mind.movedBy === undefined || (!!p.mind.movedBy && roomString(p.mind.movedBy.by) &&
+        roomString(p.mind.movedBy.what) && roomNumber(p.mind.movedBy.at)))));
+}
+const uniqueRoomIds = (rows: {id: string}[]) => new Set(rows.map(row => row.id)).size === rows.length;
 const normalizeRoom = (raw: Partial<Room> | null): Room | null => {
   if (!raw || typeof raw !== 'object') return null;
-  if (!Array.isArray(raw.messages) || !Array.isArray(raw.cast) || !raw.cast.length) return null;
+  if (!Array.isArray(raw.messages) || !Array.isArray(raw.cast) || !raw.cast.length ||
+      !raw.cast.every(validRoomPersona) || !uniqueRoomIds(raw.cast)) return null;
+  if (!raw.messages.every(m => m && roomId(m.id) && roomId(m.authorId) && roomString(m.authorName) &&
+      roomString(m.text) && roomNumber(m.at) && ['chat','system'].includes(m.kind) &&
+      ['player','persona','system'].includes(m.authorKind) &&
+      (m.mentions === undefined || (Array.isArray(m.mentions) && m.mentions.every(roomString))) &&
+      (m.replyTo === undefined || roomId(m.replyTo)) && (m.stepId === undefined || roomId(m.stepId))) ||
+      !uniqueRoomIds(raw.messages)) return null;
+  if (raw.scheduled !== undefined && (!Array.isArray(raw.scheduled) || !raw.scheduled.every(s => s &&
+      roomId(s.id) && roomId(s.personaId) && roomNumber(s.at) &&
+      ['welcome','reply','peer','ambient','react','comfort','advise'].includes(s.intent) &&
+      (s.replyTo === undefined || roomId(s.replyTo)) && (s.stepId === undefined || roomId(s.stepId))) || !uniqueRoomIds(raw.scheduled))) return null;
+  if (raw.steps !== undefined && (!Array.isArray(raw.steps) || !raw.steps.every(s => s &&
+      roomId(s.id) && roomString(s.text) && roomId(s.ownerId) && roomString(s.ownerName) &&
+      roomNumber(s.createdAt) && ['ai','self','persona'].includes(s.origin) &&
+      (s.dueAt === undefined || roomNumber(s.dueAt)) && (s.doneAt === undefined || roomNumber(s.doneAt))) ||
+      !uniqueRoomIds(raw.steps))) return null;
+  if (raw.gone !== undefined && (!Array.isArray(raw.gone) || !raw.gone.every(validRoomPersona))) return null;
+  if (raw.usage !== undefined && (!raw.usage || !roomString(raw.usage.day) ||
+      !Number.isSafeInteger(raw.usage.messages) || raw.usage.messages < 0)) return null;
+  if ([raw.createdAt, raw.lastSeenAt, raw.lastMessageAt, raw.archivedAt].some(value => value !== undefined && !roomNumber(value))) return null;
   const now = Date.now();
   return {
     id: typeof raw.id === 'string' ? raw.id : crypto.randomUUID(),
@@ -659,37 +827,114 @@ const normalizeRoom = (raw: Partial<Room> | null): Room | null => {
   };
 };
 
-export function loadRoom(): Room | null {
-  return normalizeRoom(read(KEYS.room) as Partial<Room> | null);
+function loadRoomUsage(): RoomUsage | null {
+  return read(KEYS.roomUsage, raw => {
+    const usage = raw as Partial<RoomUsage> | null;
+    return usage && roomString(usage.day) && Number.isSafeInteger(usage.messages) && usage.messages! >= 0 ? usage : null;
+  }) as RoomUsage | null;
 }
 
-export const saveRoom = (room: Room) => write(KEYS.room, room);
+/** Keep paid attempts independent of React mount/unmount and room archives. */
+export function withRoomUsageFloor(room: Room, now = Date.now()): Room {
+  const day = dayKey(now);
+  const ledger = loadRoomUsage();
+  const used = room.usage?.day === day ? room.usage.messages : 0;
+  return ledger?.day === day && ledger.messages > used ? { ...room, usage: ledger } : room;
+}
+
+/** Reserve synchronously before each real POST. If storage is blocked, do
+ * not send the paid request. Conservative: a reservation is not refunded
+ * after a network error. Cross-tab atomicity remains a separate migration. */
+export function reserveRoomRequest(room: Room, limit: number, now = Date.now(), session?: StorageSession | null): boolean {
+  session = roomSession(room, session);
+  if (roomStorageBlocked(session) || !Number.isFinite(limit) || limit <= 0) return false;
+  const current = withRoomUsageFloor(room, now);
+  if (roomStorageBlocked(session)) return false; // loading the ledger may quarantine it
+  const day = dayKey(now);
+  const used = current.usage?.day === day ? current.usage.messages : 0;
+  if (!Number.isSafeInteger(used) || used < 0 || used >= Math.floor(limit)) return false;
+  const next = { day, messages: used + 1 };
+  if (!writeChecked(KEYS.roomUsage, next)) return false;
+  if (safeGetItem(KEYS.roomUsage) !== JSON.stringify(next) || roomStorageBlocked(session)) {
+    reportStorageFailure(KEYS.roomUsage);
+    return false;
+  }
+  return true;
+}
+
+// Also remember loaded/saved room IDs for older callers of the domain API.
+// The mounted UI always passes its explicit session, including for new IDs.
+const roomSessionsByStorage = new WeakMap<Storage, Map<string, StorageSession | null>>();
+function roomSessions(): Map<string, StorageSession | null> | null {
+  try {
+    const storage = localStorage;
+    let sessions = roomSessionsByStorage.get(storage);
+    if (!sessions) { sessions = new Map(); roomSessionsByStorage.set(storage, sessions); }
+    return sessions;
+  } catch { return null; }
+}
+function roomSession(room: Room, supplied?: StorageSession | null): StorageSession | null {
+  const known = roomSessions()?.get(room.id);
+  if (known !== undefined && !storageSessionCurrent(known)) return null;
+  return supplied !== undefined ? supplied : known ?? captureStorageSession();
+}
+export function loadRoom(): Room | null {
+  const session = captureStorageSession();
+  const room = read(KEYS.room, raw => normalizeRoom(raw as Partial<Room>)) as Room | null;
+  if (!room) return null;
+  // Re-reading a room does not renew an earlier ID from a revoked epoch.
+  const sessions = roomSessions();
+  if (sessions && !sessions.has(room.id) && session) sessions.set(room.id, session);
+  return withRoomUsageFloor(room);
+}
+
+export function saveRoom(room: Room, session?: StorageSession | null): boolean {
+  session = roomSession(room, session);
+  if (!storageSessionCurrent(session)) return false; // expected cleanup of a revoked session
+  if (roomStorageBlocked(session) || !normalizeRoom(room)) { reportStorageFailure(KEYS.room); return false; }
+  const next = withRoomUsageFloor(room);
+  if (roomStorageBlocked(session)) { reportStorageFailure(KEYS.room); return false; }
+  const ok = writeChecked(KEYS.room, next);
+  if (ok) roomSessions()?.set(room.id, session);
+  return ok;
+}
 
 export function loadArchives(): Room[] {
-  const raw = read(KEYS.archives);
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((row) => normalizeRoom(row as Partial<Room>))
-    .filter((row): row is Room => Boolean(row))
-    .slice(0, 8);
+  return (read(KEYS.archives, raw => {
+    if (!Array.isArray(raw) || raw.length > 8) return null;
+    const normalized = raw.map(row => normalizeRoom(row as Partial<Room>));
+    return normalized.every(row => row !== null) && uniqueRoomIds(normalized as Room[]) ? normalized : null;
+  }) as Room[] | null) ?? [];
 }
 
-export const saveArchives = (rooms: Room[]) => write(KEYS.archives, rooms.slice(0, 8));
+export function saveArchives(rooms: Room[], session?: StorageSession | null): boolean {
+  // Validate the existing archive before replacing it; an unreadable archive
+  // alone need not stop the active room, but must not be overwritten.
+  if (session !== undefined && !storageSessionCurrent(session)) return false;
+  loadArchives();
+  if (archiveStorageBlocked(session) || !rooms.every(room => normalizeRoom(room)) || !uniqueRoomIds(rooms)) {
+    reportStorageFailure(KEYS.archives); return false;
+  }
+  return writeChecked(KEYS.archives, rooms.slice(0, 8));
+}
 
-export const loadGoals = (): Goal[] => parseGoals(read(KEYS.goals)) ?? [];
+export const loadGoals = (): Goal[] => (read(KEYS.goals, parseGoals) as Goal[] | null) ?? [];
 export const saveGoals = (goals: Goal[]): void => {
   const safe = parseGoals(goals);
   if (safe) write(KEYS.goals, safe);
+  else reportStorageFailure(KEYS.goals);
 };
-export const loadSchedule = (): ScheduleItem[] => parseSchedule(read(KEYS.schedule)) ?? [];
+export const loadSchedule = (): ScheduleItem[] => (read(KEYS.schedule, raw => parseSchedule(raw, loadGoals())) as ScheduleItem[] | null) ?? [];
 export const saveSchedule = (items: ScheduleItem[]): void => {
   const safe = parseSchedule(items);
   if (safe) write(KEYS.schedule, safe);
+  else reportStorageFailure(KEYS.schedule);
 };
-export const loadSummaries = (): DailySummary[] => parseSummaries(read(KEYS.summaries)) ?? [];
+export const loadSummaries = (): DailySummary[] => (read(KEYS.summaries, parseSummaries) as DailySummary[] | null) ?? [];
 export const saveSummaries = (items: DailySummary[]): void => {
   const safe = parseSummaries(items);
   if (safe) write(KEYS.summaries, safe);
+  else reportStorageFailure(KEYS.summaries);
 };
 
 export interface Bundle {
@@ -730,17 +975,15 @@ export function importBundle(raw: string): Bundle | null {
     if (!data || data.version !== 3 || !Array.isArray(data.cards) || hasCrisisInArchive(data)) return null;
     // 显式 null 与非法对象都整体拒绝，不能被“旧存档缺键”兼容规则吞掉。
     const goals = parseGoals(data.goals === undefined ? [] : data.goals);
-    const schedule = parseSchedule(data.schedule === undefined ? [] : data.schedule);
+    const schedule = parseSchedule(data.schedule === undefined ? [] : data.schedule, goals ?? undefined);
     const summaries = parseSummaries(data.summaries === undefined ? [] : data.summaries);
     if (!goals || !schedule || !summaries) return null;
     // 日程里的目标/步骤引用必须存在，防止伪造关联。
     const goalById = new Map(goals.map((goal) => [goal.id, goal]));
     const valid = schedule.every((item) => {
-      if (item.goalId && !goalById.has(item.goalId)) return false;
-      if (item.stepId) {
-        const owner = item.goalId ? goalById.get(item.goalId) : goals.find((goal) => goal.steps.some((step) => step.id === item.stepId));
-        if (!owner || !owner.steps.some((step) => step.id === item.stepId)) return false;
-      }
+      const owner = item.goalId ? goalById.get(item.goalId) : undefined;
+      if (item.goalId && (!owner || owner.ownerId !== item.ownerId)) return false;
+      if (item.stepId && item.goalId && (!owner || !owner.steps.some((step) => step.id === item.stepId))) return false;
       return true;
     });
     if (!valid) return null;
@@ -772,15 +1015,58 @@ export function importBundle(raw: string): Bundle | null {
   }
 }
 
-export function clearAll() {
-  if (storageReadOnly) return;
-  [...Object.values(KEYS), ...LEGACY_POST_KEYS, ...LEGACY_CARD_KEYS, ...UI_KEYS, ...ROOM_KEYS].forEach((key) => {
+export interface ClearAllResult { ok: boolean; removed: string[]; failed: string[]; }
+export function clearAll(): ClearAllResult {
+  const known = [...Object.values(KEYS), ...LEGACY_POST_KEYS, ...LEGACY_CARD_KEYS,
+    ...UI_KEYS, ...ROOM_KEYS, PERSONA_SCHEMA_KEY];
+  // Include app-owned keys introduced by legacy/auxiliary views. The journal
+  // itself is deliberately retained, without private user content.
+  let discovered: string[];
+  try {
+    discovered = Object.keys(localStorage).filter(key => key !== RESET_KEY &&
+      (key.startsWith('shudong.') || key.startsWith('startnow.')));
+  } catch {
+    clearIncomplete = true;
+    reportStorageFailure(RESET_KEY);
+    return { ok: false, removed: [], failed: [RESET_KEY, ...new Set(known)] };
+  }
+  const keys = [...new Set([...known, ...discovered])];
+  const state = resetState();
+  if (storageReadOnly || state.changed) return { ok: false, removed: [], failed: keys };
+  const removed: string[] = [], failed: string[] = [];
+  // Persist the pending epoch BEFORE deleting anything. Failed or interrupted
+  // clears stay blocked on refresh and can be explicitly retried.
+  clearIncomplete = true;
+  const epoch = crypto.randomUUID();
+  let pending: string;
+  try {
+    if (!state.readable || localStorage.getItem(RESET_KEY) !== state.raw) throw new Error('reset epoch changed');
+    pending = persistResetMarker({ epoch, pending: true });
+  } catch {
+    reportStorageFailure(RESET_KEY);
+    return { ok: false, removed, failed: [RESET_KEY, ...keys] };
+  }
+  for (const key of keys) {
     try {
+      if (localStorage.getItem(RESET_KEY) !== pending) throw new Error('reset epoch changed');
       localStorage.removeItem(key);
+      if (localStorage.getItem(key) !== null) throw new Error('key remains');
       corruptEntries.delete(key);
       failedStorageKeys.delete(key);
+      unreadableEntries.delete(key);
+      removed.push(key);
     } catch {
-      // 忽略
+      failed.push(key);
+      reportStorageFailure(key);
     }
-  });
+  }
+  if (!failed.length) {
+    try {
+      if (localStorage.getItem(RESET_KEY) !== pending) throw new Error('reset epoch changed');
+      persistResetMarker({ epoch, pending: false });
+      failedStorageKeys.delete(RESET_KEY);
+    } catch { failed.push(RESET_KEY); reportStorageFailure(RESET_KEY); }
+  }
+  clearIncomplete = failed.length > 0;
+  return { ok: !clearIncomplete, removed, failed };
 }

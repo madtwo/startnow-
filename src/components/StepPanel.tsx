@@ -6,7 +6,7 @@ interface Props {
   busy: boolean;
   ready: boolean;
   onClose: () => void;
-  onAdd: (text: string, group: string) => void;
+  onAdd: (text: string, group: string) => boolean;
   onComplete: (id: string) => void;
   onDrop: (id: string) => void;
   onShrink: (id: string) => void;
@@ -44,8 +44,7 @@ export default function StepPanel({
   const add = () => {
     const clean = text.trim();
     if (!clean) return;
-    onAdd(clean, group);
-    setText('');
+    if (onAdd(clean, group)) setText('');
   };
 
   return (

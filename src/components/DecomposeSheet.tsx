@@ -14,9 +14,11 @@ import { containsCrisis } from '../lib/submissionGuard';
 import { fileToImage } from '../lib/image';
 import { dateKeyLocal, parseLocalDate } from '../lib/schedule';
 import { readDecomposeDraft, saveDecomposeDraft, DECOMPOSE_DRAFT_KEY } from '../lib/decomposeDraft';
+import { captureStorageSession, storageSessionCurrent } from '../lib/store';
 
 interface Props {
   config: LlmConfig;
+  canPersist?: () => boolean;
   onSave: (input: { title: string; detail: string; source: GoalSource; steps: StepInput[]; dueAt?: number }, schedule: boolean) => void;
   onClose: () => void;
   /** Keep this component mounted while open is false: in-flight decomposition persists. */
@@ -28,7 +30,9 @@ interface Props {
   onCrisis?: () => void;
   onModelAttempt: (kind?: 'decompose' | 'vision') => void;
 }
-export default function DecomposeSheet({ config, onSave, onClose, open, onBackgroundReady, onBackgroundFailed, onBackgroundState, onCrisis, onModelAttempt }: Props) {
+export default function DecomposeSheet({ config, canPersist = () => true, onSave, onClose, open, onBackgroundReady, onBackgroundFailed, onBackgroundState, onCrisis, onModelAttempt }: Props) {
+  const [session] = useState(captureStorageSession);
+  const storageAllowed = () => canPersist() && storageSessionCurrent(session);
   const openRef = useRef(open);
   const draftActivated = useRef(open);
   openRef.current = open;
@@ -77,7 +81,8 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
   const goalInputRef = useRef<HTMLTextAreaElement>(null);
   const questions = useMemo(() => goalQuestions(goal, answers), [goal, answers]);
   useEffect(() => {
-    if (!draftActivated.current) return;
+    if (!draftActivated.current || !canPersist()) return;
+    if (!storageSessionCurrent(session)) return;
     try { saveDecomposeDraft(localStorage, { goal, manualSteps, answers, confirmedDeadline: deadline, mode }); }
     catch { /* storage may be unavailable */ }
   }, [goal, manualSteps, answers, deadline, mode]);
@@ -125,12 +130,13 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     if (clearAll) {
       setGoal(''); setManualSteps(''); setDeadline(''); setMode('ai');
     }
-    try { localStorage.removeItem(DECOMPOSE_DRAFT_KEY); } catch { /* storage may be blocked */ }
+    if (storageAllowed()) try { localStorage.removeItem(DECOMPOSE_DRAFT_KEY); } catch { /* storage may be blocked */ }
     reportJob({status:'idle'});
   };
   // Hiding is NOT cancellation. React keeps the component (and request) mounted.
   const closeSheet = () => { openRef.current = false; onClose(); };
   const useLocalPlan = () => {
+    if (!storageAllowed()) { setError('本地存储已锁定，未开始本次操作。请先恢复存储。'); return; }
     if (!goal.trim()) { setError('请先填写目标'); return; }
     if (containsCrisis([goal])) { handleCrisis(); return; }
     const result = localPersonalizedPlan(goal);
@@ -152,6 +158,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     return { next, notes: answeredPersonalizedQuestions(grillRounds,grillAnswers) };
   };
   const beginPersonalized = async () => {
+    if (!storageAllowed()) { setError('本地存储已锁定，未开始本次操作。请先恢复存储。'); return; }
     const ticket = ++operationId.current;
     const controller = new AbortController(); activeController.current = controller;
     setGrillAnswers({});setGrillRounds([]);setFollowupRounds(0);setGrillNotice('');
@@ -173,11 +180,11 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
           notice = '模型问题生成失败或额度不足，这次用本地问题继续（非 AI 生成）。';
         }
       }
-      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current) return;
+      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current || !storageAllowed()) return;
       setGrillSource(origin);setGrillNotice(notice);setGrillRounds([prompts]);setPhase('questions');
       reportJob({status:'running',goal,stage:'questions'});
     } catch (e) {
-      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current) return;
+      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current || !storageAllowed()) return;
       setError('个性化问题暂时无法生成，请稍后重试或改用自由拆解。');
       setPhase('entry');
       reportJob({status:'failed',goal,error:'个性化问题生成失败',seen:openRef.current});
@@ -187,6 +194,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     }
   };
   const decidePersonalized = async () => {
+    if (!storageAllowed()) { setError('本地存储已锁定，未开始本次操作。请先恢复存储。'); return; }
     if (busy) return;
     if (containsCrisis(Object.values(grillAnswers))) {handleCrisis();return;}
     const {next,notes}=personalizedInput();
@@ -198,12 +206,12 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
       const history = personalizedQuestionHistory(grillRounds,grillAnswers);
       const added = await requestPersonalizedQuestions({config,goal,stage:'followup',history,
         signal:controller.signal,onModelAttempt:()=>onModelAttempt('decompose')});
-      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current) return;
+      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current || !storageAllowed()) return;
       if (added.length===0) {void generate(next,false,notes);return;}
       setGrillRounds((prev)=>[...prev,added]);setFollowupRounds((r)=>r+1);setPhase('questions');
       reportJob({status:'running',goal,stage:'questions'});
     } catch(e) {
-      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current) return;
+      if (controller.signal.aborted || ticket!==operationId.current || !activeMounted.current || !storageAllowed()) return;
       setGrillNotice('模型本轮判断不可用，已停止追加追问，直接尝试拆解。');
       void generate(next,true,notes);
     } finally {
@@ -222,6 +230,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     plan.steps.filter((_, i) => checked.includes(i)), parseLocalDate(deadline), Date.now()) : null,
     [plan, checked, deadline]);
   const start = () => {
+    if (!storageAllowed()) { setError('本地存储已锁定，未开始本次操作。请先恢复存储。'); return; }
     if (!goal.trim() || goal.length > 2000) {setError('请先填写目标（最多 2000 字）');return;}
     setError('');setLocalOffer(false);
     if (containsCrisis([goal])) {handleCrisis();return;}
@@ -241,6 +250,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
   };
   const generate = async (nextAnswers: Partial<Record<MissingField,string>>, didSkip: boolean,
     notes: readonly {question:string;answer:string}[] = []) => {
+    if (!storageAllowed()) { setError('本地存储已锁定，未生成拆解。请先恢复存储。'); return; }
     const ticket = ++operationId.current;
     const controller = new AbortController();
     activeController.current = controller;
@@ -252,18 +262,17 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
         if (controller.signal.aborted || ticket!==operationId.current) return;
         useLocalPlan();return;
       }
-      onModelAttempt('decompose'); // reserve before the first network request
       const result = await decomposeViaApi(config, {
         goalText: goal, answers: nextAnswers, skipped: didSkip, personalized:mode==='grill', notes, signal: controller.signal,
-        onRetryAttempt: () => onModelAttempt('decompose'),
+        onRequestAttempt: () => onModelAttempt('decompose'),
       });
-      if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted) return;
+      if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted || !storageAllowed()) return;
       setPlan(result); setChecked(result.steps.map((_, i) => i));
       setSource(visionText ? 'image' : 'ai'); setPhase('preview');
       reportJob({status:'ready',goal,title:result.title,seen:openRef.current});
       if (!openRef.current) onBackgroundReady?.();
     } catch (e) {
-      if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted) return;
+      if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted || !storageAllowed()) return;
       setError(`${scrubSecrets((e as Error)?.message ?? '模型请求失败',config.apiKey).slice(0,240)}。答案还在，可以重试，或使用明确标注的本地示例/自由拆解。`);
       setLocalOffer(true);setPhase('failed');
       reportJob({status:'failed',goal,error:'模型请求失败，可返回拆解窗口查看并重试',seen:openRef.current});
@@ -292,6 +301,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     void generate(next, true);
   };
   const upload = async (file?: File) => {
+    if (!storageAllowed()) { setError('本地存储已锁定，未开始本次操作。请先恢复存储。'); return; }
     if (!file || busy || !config.visionModel?.trim()) return;
     const ticket = ++operationId.current;
     const controller = new AbortController();
@@ -300,18 +310,18 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     try {
       if (file.size > 15_000_000) throw new Error('截图超过 15MB');
       const dataURL = await fileToImage(file);
-      if (controller.signal.aborted || ticket !== operationId.current) return;
+      if (controller.signal.aborted || ticket !== operationId.current || !storageAllowed()) return;
       const result = await recognizeNotice(config, dataURL, {
         signal: controller.signal, onModelAttempt: () => onModelAttempt('vision'),
       });
-      if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted) return;
+      if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted || !storageAllowed()) return;
       if (!result.ok) { setError(`${result.message}；也可以直接粘贴通知原文。`); return; }
       setVisionResult(result);
       setVisionNotice(result.format === 'raw'
         ? '没有按字段识别出来，已保留识别原文。请核对后使用；也可以重新上传或自己粘贴。'
         : '识别结果需要核对。日期仅供参考，不会作为已确认的真实截止日。');
     } catch(e) {
-      if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted) return;
+      if (!activeMounted.current || ticket !== operationId.current || controller.signal.aborted || !storageAllowed()) return;
       setError(`${(e as Error).message}；可直接粘贴通知原文。`);
     } finally {
       if (ticket === operationId.current && activeMounted.current) {
@@ -343,6 +353,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
     if (fileInputRef.current) {fileInputRef.current.value = '';fileInputRef.current.click();}
   };
   const save = (schedule:boolean) => {
+    if (!storageAllowed()) { setError('本地存储已锁定，未开始本次操作。请先恢复存储。'); return; }
     if (!plan || checked.length === 0) {setError('请至少选中一个步骤');return;}
     if (plan.steps.some((step, i) => checked.includes(i) && (!step.text.trim() || !Number.isInteger(step.minutes) || (step.minutes ?? 0) < 1 || (step.minutes ?? 0) > 120))) { setError('请检查所选步骤的动作和分钟数（1–120）'); return; }
     try {
@@ -350,7 +361,7 @@ export default function DecomposeSheet({ config, onSave, onClose, open, onBackgr
         steps:plan.steps.filter((_,i)=>checked.includes(i)), dueAt:parseLocalDate(deadline)},schedule);
       // A blocked preference cleanup must not make a successfully saved goal
       // look like a failure and tempt the player to create it twice.
-      try { localStorage.removeItem(DECOMPOSE_DRAFT_KEY); } catch { /* storage disabled */ }
+      if (storageAllowed()) try { localStorage.removeItem(DECOMPOSE_DRAFT_KEY); } catch { /* storage disabled */ }
       reportJob({status:'idle'});
       setPlan(null);setChecked([]);setGoal('');setAnswers({});setGrillRounds([]);setGrillAnswers({});
       setPhase('entry');setDeadline('');setVisionText('');onClose();

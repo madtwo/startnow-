@@ -6,7 +6,7 @@ export function localDailySummary(goals: readonly Goal[], cards: readonly Card[]
   schedule: readonly ScheduleItem[], now = Date.now()): string {
   const today = dateKeyLocal(now);
   const completed = goals.filter((goal) => goal.ownerId === 'me').flatMap((goal) =>
-    goal.steps.filter((step) => step.completedAt &&
+    goal.steps.filter((step) => step.status === 'done' && step.completedAt &&
     dateKeyLocal(step.completedAt) === today).map((step) => step.text));
   const posts = cards.filter((card) => card.authorId === 'me' && dateKeyLocal(card.createdAt) === today).length;
   const cheers = cards.filter((card) => card.authorId === 'me').reduce((sum, card) =>
@@ -37,6 +37,15 @@ export function saveLocalSummary(current: readonly DailySummary[], goals: readon
 }
 
 
+// Free-form negative regexes cannot prove that a sentence is non-factual.
+// The model may choose from reviewed, non-factual connective lines only.
+const SUMMARY_CONNECTORS = [
+  '停一停也可以，别急。',
+  '没关系，慢慢来，今天可以停一会儿。',
+  '按自己的节奏就好。',
+  '不用急着安排下一件事。',
+] as const;
+
 /** Optional model adapter: the caller must reserve one API slot before invoking
  * it. Keep dates, counts and task names assembled from verified local data;
  * the model may only supply a short, non-factual connective sentence.
@@ -51,12 +60,9 @@ export async function generateDailySummary(input: {
   try {
     // Use a generated sentence only if it is non-imperative and makes no new claims.
     const raw = (await input.generate(
-      `你是虚构论坛里一位温和的同伴。根据以下【本地统计】，只写一句不超过32字的自然衔接话，不增加人名、行动、数字或事实；不要照搬用户原文，不要说成长/蜕变，不要命令他继续努力。\n【本地统计】\n${facts}`)).trim();
-    const line = raw.split(/[\r\n]/).map(row=>row.trim()).filter(Boolean)[0] ?? '';
-    const unsafe = !line || line.length > 32 ||
-      /(?:成长|蜕变|保证|必须|应该|一定要|你已|完成了|已经做|共|沈默|魏霓|苗泽|杨槔|张三|李四|王五|小王|小李|小张|[A-Z][a-z]{1,}|[0-9０-９]|[零〇一二三四五六七八九十百千万两]+(?:个|次|张|步|天|小时|项|条|件|页|份|段|分钟))/.test(line) ||
-      (line.match(/[。！？!?]/g) ?? []).length > 1;
-    if (unsafe) throw new Error('model_summary_unverifiable');
+      `你是虚构论坛里一位温和的同伴。根据以下【本地统计】，只从以下固定衔接句中原样选择一句，不得改写或添加内容：\n${SUMMARY_CONNECTORS.join('\n')}\n【本地统计】\n${facts}`)).trim();
+    const line = SUMMARY_CONNECTORS.find(option => option === raw);
+    if (!line) throw new Error('model_summary_unverifiable');
     // Model text can never change verified facts; it only adds one gentle line.
     return {text:`${facts}\n${line}`,origin:'model'};
   } catch {

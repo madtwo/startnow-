@@ -126,6 +126,8 @@ const createProxy = (upstreamBase: string) => async (req: IncomingMessage, res: 
   res.statusCode = upstream.status;
   const contentType = upstream.headers.get('content-type');
   if (contentType) res.setHeader('content-type', contentType);
+  const retryAfter = upstream.headers.get('retry-after');
+  if (retryAfter) res.setHeader('retry-after', retryAfter);
   const cacheControl = upstream.headers.get('cache-control');
   if (cacheControl) res.setHeader('cache-control', cacheControl);
 

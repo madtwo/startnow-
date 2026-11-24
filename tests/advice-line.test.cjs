@@ -150,7 +150,7 @@ test('shrinkAdvice preserves actionId chain and marks smaller copy curated (sour
   const source=fs.readFileSync(path.join(src,'lib','cards.ts'),'utf8');
   assert.match(source,/const smallerText = helpSeeking \? smaller\.label : smaller\.line;/u);
   assert.match(source,/text: smallerText, actionId: smaller\.id, at: now, lineSource: 'curated'/u);
-  assert.match(source,/text: smaller\.line,\s*at: now,\s*lineSource: 'curated'/u);
+  assert.match(source,/text: smallerText,\s*actionId: smaller\.id,\s*at: now,\s*lineSource: 'curated'/u);
 });
 test('import sanitization drops only illegal lineSource and preserves old records', () => {
   const card={ id:'x', comments:[{at:now,text:good,lineSource:'forged',kind:'advice'},
@@ -196,7 +196,7 @@ test('advice source contract preserves one model call and all special-case branc
   assert.match(cards,/materialFirstStep\(/u);
   assert.match(cards,/needsHelpSeeking\(context\)/u);
   assert.match(cards,/hasPlayerCrisisInput\(card\)/u);
-  assert.match(cards,/if \(!seekingHelp && !isMock\(input\.config\)\)/u);
+  assert.match(cards,/if \(!seekingHelp && !isMock\(input\.config\) && modelAllowed\)/u);
 });
 
 const completeRepo = !partialSnapshot && fs.existsSync(path.join(src,'lib','store.ts'));
@@ -272,7 +272,7 @@ if (completeRepo) {
   });
   test('real shrinkAdvice: help-seeking keeps the neutral label', ()=>{
     const fixture={...card('help-shrink','最近总是提不起劲'),status:'advised',
-      advice:{text:'我先找学校心理中心',actionId:'help-3',origin:'curated',lineSource:'curated',fromPersonaId:'shenmo',accepted:false,at:now}};
+      advice:{text:'先找到学校心理中心或正规医院的官方渠道，再看看预约方式',actionId:'help-3',origin:'curated',lineSource:'curated',fromPersonaId:'shenmo',accepted:false,at:now}};
     const next=shrinkAdvice(fixture,now+1);
     assert.equal(next.advice.actionId,'help-2');
     assert.match(next.advice.text,/搜索学校心理中心或正规医院/u);

@@ -5,6 +5,8 @@ const fs=require('node:fs');
 const Module=require('node:module');
 const path=require('node:path');
 const ts=require('typescript');
+// Load the real storage capability implementation using this test suite's TS loader.
+require('./_ts-loader.cjs');
 Module._extensions['.tsx']=(mod,filename)=>{
  const out=ts.transpileModule(fs.readFileSync(filename,'utf8'),{fileName:filename,
   compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}});
@@ -42,7 +44,7 @@ let pending=null;let captured=null;
 const plan={title:'十二分钟跑满分',assumptions:[],steps:[{text:'查满分标准',minutes:15},{text:'记录12分钟跑距离',minutes:20},{text:'安排训练',minutes:15}]};
 const deps={
  '../lib/decompose':{
-  decomposeViaApi:(_config,input)=>{captured=input;return new Promise((resolve,reject)=>{
+  decomposeViaApi:(_config,input)=>{captured=input;input.onRequestAttempt?.();return new Promise((resolve,reject)=>{
    pending={resolve,reject,signal:input.signal};
    input.signal.addEventListener('abort',()=>reject(new Error('aborted')),{once:true});
   })},

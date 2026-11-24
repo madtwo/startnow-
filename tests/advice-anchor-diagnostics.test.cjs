@@ -105,16 +105,18 @@ test('real askForAdvice branch emits only for rejected no_anchor, not for model 
   const action=actionMap[row.actionId];
   let mockLine=row.rejectedLine;
   const dependencies={
-    hasPlayerCrisisInput:()=>false,isClosed:()=>false,
+    hasPlayerCrisisInput:()=>false,isClosed:()=>false,canUseNextStep:require('../src/lib/cardPolicy.ts').canUseNextStep,
     advicePersonaFor:(card,people)=>people[0],needsHelpSeeking:()=>false,
     adviceContextText:(card)=>card.text,inferTrouble:()=> 'study',
     recentActionUses:()=>[],pickActions:()=>[action],
     isMock:()=>false,
     systemFor:()=>'',withUntrustedHistory:()=>'',SHORT_TASK_TOKEN_BUDGETS:{advice:900},
     scopedOpenCodeSessionId:()=> 'synthetic',shortTaskTelemetry:()=>()=>{},
-    streamChat:async()=>{calls++;return JSON.stringify({actionId:action.id,line:mockLine})},
+    streamChat:async(opts)=>{opts.onRequestAttempt?.();calls++;return JSON.stringify({actionId:action.id,line:mockLine})},
     parseAdviceChoice:require('../src/lib/adviceLine.ts').parseAdviceChoice,
     validateAdviceLine,emitSyntheticAnchorRejection,
+    validActionReference:require('../src/lib/cardPolicy.ts').validActionReference,
+    LlmError:require('../src/lib/llm.ts').LlmError,
     chooseAdviceCopy:()=>({text:'curated placeholder',lineSource:'curated',useAlternate:false}),
     selectActionLine:()=>action.line,uid:()=> 'sample-comment',
     mindAfterReply:()=>({}),safeName:()=> 'synthetic',rememberOnCard:(p)=>p,
@@ -122,7 +124,7 @@ test('real askForAdvice branch emits only for rejected no_anchor, not for model 
   const fn=new Function('d',`const exports={}; const {${Object.keys(dependencies).join(',')}}=d; ${body}; return exports.askForAdvice`)(dependencies);
   const seen=[];
   const input=()=>({cards:[makeCard()],cardId:row.case_id,personas:[{id:'p1',name:'fixture'}],
-    config:{model:'fixture-model'},settings:{},now:1800000000000,
+    config:{model:'fixture-model'},settings:{dailyCalls:5,paused:false},now:1800000000000,
     localAnchorProbe:sampleProbe(row,x=>seen.push(x))});
   const rejected=await fn(input());
   assert.equal(calls,1);

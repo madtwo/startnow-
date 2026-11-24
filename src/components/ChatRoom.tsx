@@ -11,9 +11,9 @@ interface Props {
   usage: { used: number; limit: number };
   apiLabel: string;
   apiReady: boolean;
-  onSend: (text: string, mentions: string[], replyTo?: string) => void;
+  onSend: (text: string, mentions: string[], replyTo?: string) => boolean;
   /** 用户自己改群名 */
-  onRename: (title: string) => void;
+  onRename: (title: string) => boolean;
   onOpenSteps: () => void;
   onOpenRoom: () => void;
   onOpenArchive: () => void;
@@ -108,7 +108,7 @@ export default function ChatRoom({
   const send = () => {
     const text = draft.trim();
     if (!text || busy) return;
-    onSend(text, mentions, replyTo || undefined);
+    if (!onSend(text, mentions, replyTo || undefined)) return;
     setDraft('');
     setReplyTo('');
     setMentions([]);
@@ -122,7 +122,7 @@ export default function ChatRoom({
 
   const commitTitle = () => {
     const clean = titleDraft.trim();
-    if (clean && clean !== room.title) onRename(clean);
+    if (clean && clean !== room.title && !onRename(clean)) return;
     setEditingTitle(false);
   };
 

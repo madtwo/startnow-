@@ -109,7 +109,7 @@ function prepare(out) {
     }));
     writeNew(path.join(run, `packet-${slot}.jsonl`), encode([header, ...rows]));
   }
-  process.stdout.write('Q06: 2 independent packets, 10 synthetic cases each. NOT REVIEWED; RELEASE NO-GO.\nmanifest_sha256=${manifestSha} — retain this separately from the review folder; keep manifest private.\n');
+  process.stdout.write(`Q06: 2 independent packets, 10 synthetic cases each. NOT REVIEWED; RELEASE NO-GO.\nmanifest_sha256=${manifestSha} — retain this separately from the review folder; keep manifest private.\n`);
 }
 function loadLines(filename) {
   const bytes = fs.readFileSync(filename);

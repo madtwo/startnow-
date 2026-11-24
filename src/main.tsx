@@ -1,6 +1,7 @@
 import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { clearAll } from './lib/store';
 import './styles.css';
 import './theme.css';
 import './theme-v2.css';
@@ -82,8 +83,9 @@ class Boundary extends Component<{ children: ReactNode }, { error: Error | null 
             onClick={() => {
               if (!confirm('确定永久清空本机 StartNow 的全部数据吗？此操作不可撤销。建议先下载原始备份。')) return;
               try {
-                appStorageKeys().forEach((key) => localStorage.removeItem(key));
-                location.reload();
+                const result = clearAll();
+                if (result.ok) location.reload();
+                else alert('清空未完成。请关闭其他标签页、备份原始数据，再刷新重试。');
               } catch { alert('浏览器禁止删除本地数据，请检查隐私模式或存储权限。'); }
             }}
             style={{ padding: '8px 18px', borderRadius: 999, border: 0, background: '#c96442', color: '#faf9f5', cursor: 'pointer' }}

@@ -84,7 +84,7 @@ const selfHarmPatterns = [
 ];
 
 const normalizeCrisisText = (text: string) =>
-  text.normalize('NFKC').replace(/[\s\u200B-\u200F\u2060\uFEFF]/g, '').toLowerCase();
+  text.normalize('NFKC').replace(/[\s\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}·•・‧∙⋅]/gu, '').toLowerCase();
 
 /**
  * Screen a copy, not the original user text. These exemptions cover complete,

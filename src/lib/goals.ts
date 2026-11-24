@@ -6,6 +6,8 @@ const DAY = 86_400_000;
 const VALID_KINDS = new Set<GoalStep['kind']>(['research', 'draft', 'review', 'admin', 'other']);
 export interface StepInput { text: string; kind?: GoalStep['kind']; minutes?: number; dueAt?: number }
 
+export const MAX_STORED_GOALS = 250;
+
 export function goalProgress(goal: Goal) {
   const total = goal.steps.length;
   const done = goal.steps.filter((s) => s.status === 'done').length;
@@ -17,6 +19,7 @@ export function makeGoal(input: {
   dueAt?: number; ownerId?: string; now?: number;
 }, existing: readonly Goal[] = []): Goal {
   const now = input.now ?? Date.now();
+  if (existing.length >= MAX_STORED_GOALS) throw new Error('目标总数已达到 250 个，请先备份并删除不再需要的历史目标');
   const title = input.title.trim();
   if (!title || title.length > 120 || input.detail && input.detail.length > 2000 ||
       containsCrisis([title, input.detail, ...input.steps.map((step) => step.text)])) {

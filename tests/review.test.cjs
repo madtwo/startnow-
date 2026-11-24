@@ -653,7 +653,7 @@ test('第三轮：动作不可在 accepted/closed/done 状态下修改或重启'
   base.authorId='me'; base.authorName='我'; base.authorKind='player';
   base.pending=[];
   base.status='advised';
-  base.advice={text:'先打开文档',actionId:'draft-3',fromPersonaId:'shenmo',at:now,accepted:false};
+  base.advice={text:load('actions').actionMap['draft-3'].line,actionId:'draft-3',fromPersonaId:'shenmo',at:now,accepted:false};
   const approved=acceptAdvice(base,now+100);
   assert.equal(approved.status,'noted');
   assert.equal(approved.advice.accepted,true);

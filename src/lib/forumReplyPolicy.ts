@@ -28,9 +28,14 @@ const EXCLUSIVE_FORUM_REPLY = new RegExp([
 // A fictitious forum persona must not promise indefinite, exclusive availability.
 const ALWAYS_AVAILABLE_FORUM_REPLY = /(?:我(?:会|能|可以)?(?:每天|天天|一直|永远).{0,8}(?:陪着?|守着?)你|我永远不会(?:离开|走|抛下)你)/u;
 
+// Normalize a detection-only copy. Unicode default-ignorable code points
+// include word joiner, invisible operators, bidi controls and variation selectors.
+const boundaryScreen = (text: string): string =>
+  text.normalize('NFKC').replace(/[\s\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}·•・‧∙⋅]/gu, '');
+
 /** Raw safety checks precede cleanup/truncation; tone-only repairs remain separate. */
 export function unsafeForumRaw(text: string): boolean {
-  const normalized = text.normalize('NFKC').replace(/[\s\u200B-\u200D\uFEFF]/gu, '');
+  const normalized = boundaryScreen(text);
   return Boolean(findCrisis(normalized) || isManipulative(normalized) ||
     EXCLUSIVE_FORUM_REPLY.test(normalized) || ALWAYS_AVAILABLE_FORUM_REPLY.test(normalized) ||
     auditCriticalContent(normalized) || auditSocial(normalized));
@@ -38,8 +43,8 @@ export function unsafeForumRaw(text: string): boolean {
 
 /** Forum-only additions: keep the shared room intent policy unchanged. */
 export function forumDependencySignal(text: string): boolean {
-  if (isDependencySignal(text)) return true;
-  const normalized = text.normalize('NFKC').replace(/[\s\u200B-\u200D\uFEFF]/gu, '');
+  const normalized = boundaryScreen(text);
+  if (isDependencySignal(normalized)) return true;
   return /^(?:那|所以|以后)?你(?:能|可以|可不可以|能不能)?(?:每天|天天|一直)(?:都)?陪(?:着)?我(?:吗|么|嘛|好不好|可以吗|[。？?!！]|$)/u.test(normalized);
 }
 
@@ -53,7 +58,7 @@ const BRAG_AFFIRMATION = /恭喜|祝贺|真(?:不错|棒|好|利落|厉害)|太(
 
 /** A conservative local backstop; this is not a general Chinese intent parser. */
 export function forumReplyModeProblem(card: Card, text: string, shortContact: boolean): string | null {
-  const normalized = text.normalize('NFKC').replace(/[\s\u200B-\u200D\uFEFF]/gu, '');
+  const normalized = boundaryScreen(text);
   if ((shortContact || card.intro || card.playerIntro || card.kind === 'brag' || card.kind === 'life' ||
       isGoalResultCard(card)) && DIRECTIVE.test(normalized)) return 'unsolicited_action';
   if (card.kind === 'brag' && !BRAG_AFFIRMATION.test(normalized)) return 'off_card';
@@ -160,8 +165,7 @@ const SHORT_ACK_FALLBACKS = [
 ] as const;
 
 export function distinctForumShortAck(previous: ReadonlySet<string>): string {
-  const normalized = (value: string) => value.normalize('NFKC')
-    .replace(/[\s\u200B-\u200D\uFEFF]/gu, '');
+  const normalized = boundaryScreen;
   const already = new Set([...previous].map(normalized));
   return SHORT_ACK_FALLBACKS.find(line => !already.has(normalized(line))) ??
     SHORT_ACK_FALLBACKS[SHORT_ACK_FALLBACKS.length - 1];

@@ -1,3 +1,4 @@
+import { captureModelFence } from './modelFence';
 import type { ChatMessage, LlmConfig } from '../types';
 import { rejectQueuedProviderRequests, withProviderRequestSlot } from './providerConcurrency';
 import {
@@ -21,6 +22,7 @@ export type LlmErrorKind =
 export class LlmError extends Error {
   kind: LlmErrorKind;
   retryAfterMs?: number;
+  noFallback = false;
 
   constructor(kind: LlmErrorKind, message: string, retryAfterMs?: number) {
     super(message);
@@ -29,6 +31,9 @@ export class LlmError extends Error {
     this.retryAfterMs = retryAfterMs;
   }
 }
+
+import { isContentFilteredResponse, isContentFilteredBody } from './contentFilter';
+const filteredError = () => Object.assign(new LlmError('server', '模型输出被上游内容过滤，未采用此结果。'), {noFallback:true});
 
 /** 避免把浏览器 Bearer Key 通过明文 HTTP 或跨站 // URL 发给未知接口。 */
 export function validateLlmEndpointBase(baseUrl: string): void {
@@ -101,6 +106,7 @@ const parseServerError = (
   apiKey = '',
   retryAfter: string | null = null,
 ): LlmError => {
+  if (isContentFilteredBody(body)) return filteredError();
   let detail = '';
   try {
     const json = JSON.parse(body);
@@ -227,17 +233,25 @@ const sendChat = async (
   stream: boolean,
   maxTokens: number,
   lowEffort: boolean,
+  onRequestAttempt?: () => void,
+  allowed: () => boolean = captureModelFence(),
 ) => {
-  const post = () =>
-    fetch(endpoint(config.baseUrl), {
+  const post = () => {
+    if (signal?.aborted) throw signal.reason ?? new DOMException('请求已取消。', 'AbortError');
+    if (!allowed()) throw new LlmError('config', '本地存储已锁定，未发送模型请求。');
+    onRequestAttempt?.();
+    if (!allowed()) throw new LlmError('config', '本地存储已锁定，未发送模型请求。');
+    return fetch(endpoint(config.baseUrl), {
       method: 'POST',
       signal,
       headers: chatHeaders(config, sessionId),
       body: JSON.stringify(chatBody(config, messages, stream, maxTokens, lowEffort)),
     });
+  };
   let res = await post();
   if (res.status === 400 && lowEffort && !effortUnsupported.has(effortKey(config))) {
     const detail = await res.clone().text().catch(() => '');
+    if (isContentFilteredBody(detail)) throw filteredError();
     if (/reasoning_effort|thinking|unsupported|unknown (param|field)/i.test(detail)) {
       effortUnsupported.add(effortKey(config));
       res = await post();
@@ -281,6 +295,10 @@ type StreamChatOptions = {
   maxTokens?: number;
   lowEffort?: boolean;
   onTelemetry?: (entry: ChatTelemetry) => void;
+  /** Invoked before each actual HTTP attempt (including retry/fallback). May reject authorization. */
+  onRequestAttempt?: () => void;
+  /** Captured once for the entire logical operation, including fallback. */
+  storagePermit?: () => boolean;
   /** Internal per-attempt usage/finish snapshot; not user text. */
   onStreamMetadata?: (part: Partial<ChatTelemetry>) => void;
 };
@@ -299,8 +317,9 @@ async function rawStreamChatOnce(opts: StreamChatOptions): Promise<string> {
 
   let res: Response;
   try {
-    res = await sendChat(config, messages, signal, sessionId, true, maxTokens, lowEffort);
+    res = await sendChat(config, messages, signal, sessionId, true, maxTokens, lowEffort, opts.onRequestAttempt, opts.storagePermit);
   } catch (err) {
+    if (err instanceof LlmError) throw err;
     throw requestError(err, signal);
   }
 
@@ -321,6 +340,8 @@ async function rawStreamChatOnce(opts: StreamChatOptions): Promise<string> {
   const contentType = res.headers.get('content-type') ?? '';
   if (contentType.includes('application/json')) {
     const data = await res.json().catch(() => null);
+    if (isContentFilteredResponse(data)) throw filteredError();
+    if (data?.error) throw new LlmError('server', '模型返回错误。');
     const text = extractText(data?.choices?.[0]?.message?.content);
     const usage = data?.usage;
     opts.onStreamMetadata?.({
@@ -329,6 +350,7 @@ async function rawStreamChatOnce(opts: StreamChatOptions): Promise<string> {
       completionTokens: usage?.completion_tokens,
       reasoningTokens: usage?.completion_tokens_details?.reasoning_tokens,
     });
+    if (text.length > 20_000) throw new LlmError('server', '模型输出超过安全长度限制。');
     if (data?.choices?.[0]?.finish_reason === 'length') {
       throw new LlmError('truncated', '模型达到输出 Token 上限，已丢弃可能不完整的回复。');
     }
@@ -363,6 +385,7 @@ async function rawStreamChatOnce(opts: StreamChatOptions): Promise<string> {
   };
   const applyPayload = (json: any) => {
     if (!json) return;
+    if (isContentFilteredResponse(json)) throw filteredError();
     if (typeof json?.choices?.[0]?.finish_reason === 'string') {
       finishReason = json.choices[0].finish_reason;
       opts.onStreamMetadata?.({ finishReason });
@@ -449,7 +472,7 @@ async function rawStreamChatOnce(opts: StreamChatOptions): Promise<string> {
     throw new LlmError('truncated', '模型达到输出 Token 上限，已丢弃可能不完整的回复。');
   }
   if (finishReason === 'content_filter') {
-    throw new LlmError('server', '模型输出被上游内容过滤，未采用此结果。');
+    throw Object.assign(new LlmError('server', '模型输出被上游内容过滤，未采用此结果。'), {noFallback:true});
   }
   if (!full.trim()) {
     const exhausted = completionTokens !== undefined && reasoningTokens !== undefined &&
@@ -481,6 +504,7 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
     const text = await withProviderRequestSlot(opts.config.baseUrl, opts.signal, () => rawStreamChatOnce({
       ...opts,
       onDelta: (chunk) => {
+        if (opts.storagePermit && !opts.storagePermit()) throw new LlmError('config', '数据已重置，本次回复未采用。');
         meta.visibleChars += chunk.length;
         opts.onDelta(chunk);
       },
@@ -489,6 +513,7 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
         opts.onStreamMetadata?.(part);
       },
     }));
+    if (opts.storagePermit && !opts.storagePermit()) throw new LlmError('config', '数据已重置，本次回复未采用。');
     meta.visibleChars = text.length;
     meta.outcome = 'ok';
     return text;
@@ -513,6 +538,9 @@ async function streamChatOnce(opts: StreamChatOptions): Promise<string> {
  * 只有“还没输出任何文字”的失败才切换；已经吐了半句再断流不重试，避免重复。
  */
 export async function streamChat(opts: StreamChatOptions): Promise<string> {
+  const captured = captureModelFence();
+  const parent = opts.storagePermit;
+  opts = { ...opts, storagePermit: () => captured() && (!parent || parent()) };
   const fallback = opts.config.fallbackModel?.trim();
   if (!fallback || fallback === opts.config.model.trim()) return streamChatOnce(opts);
 
@@ -527,7 +555,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<string> {
     });
   } catch (err) {
     if (emitted || opts.signal.aborted) throw err;
-    if (!(err instanceof LlmError) || err.kind === 'auth' || err.kind === 'config' || err.kind === 'quota' || err.kind === 'rate') throw err;
+    if (!(err instanceof LlmError) || err.noFallback || err.kind === 'auth' || err.kind === 'config' || err.kind === 'quota' || err.kind === 'rate') throw err;
     return streamChatOnce({
       ...opts,
       config: { ...opts.config, model: fallback },
@@ -537,6 +565,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<string> {
 
 export async function testConnection(config: LlmConfig, signal?: AbortSignal): Promise<string> {
   if (isMock(config)) return '演示模式可用，不需要 API。';
+  const allowed = captureModelFence();
   if (!config.baseUrl.trim() || !config.model.trim() || !config.apiKey.trim()) {
     throw new LlmError('config', '先把接口地址、模型名和密钥填完整。');
   }
@@ -549,6 +578,7 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
     return await withProviderRequestSlot(config.baseUrl, safeSignal, async () => {
       let res: Response;
       try {
+        if (!allowed()) throw new LlmError('config', '本地存储已锁定，未发送模型请求。');
         res = await fetch(endpoint(config.baseUrl), {
           method: 'POST',
           signal: safeSignal,
@@ -576,6 +606,8 @@ export async function testConnection(config: LlmConfig, signal?: AbortSignal): P
       }
 
       const data = await res.json().catch(() => null);
+      if (isContentFilteredResponse(data)) throw filteredError();
+      if (data?.error) throw new LlmError('server', '模型返回错误。');
       if (!data) throw new LlmError('server', '返回的不是合法 JSON，这个地址可能不是 OpenAI 兼容接口。');
       const content = extractText(data?.choices?.[0]?.message?.content);
       if (!content.trim()) {

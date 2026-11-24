@@ -7,9 +7,10 @@ import StepPanel from './StepPanel';
 import { configLabel, isMock, isReady } from '../config/providers';
 import { pickCast } from '../lib/personas';
 import {
-  addStep,
+  tryAddStep,
   catchUpRoom,
-  completeStep,
+  tryCompleteStep,
+  commitRoomOperation,
   discardArchive,
   dropStep,
   ensureRoomTitle,
@@ -26,12 +27,17 @@ import {
 } from '../lib/room';
 import { findCrisis } from '../lib/safety';
 import {
+  captureStorageSession,
   loadArchives,
   loadRoom,
   loadRoomSettings,
+  roomStorageBlocked,
+  archiveStorageBlocked,
   saveArchives,
   saveRoom,
   saveRoomSettings,
+  reserveRoomRequest,
+  withRoomUsageFloor,
 } from '../lib/store';
 import type { Identity, LlmConfig, Room, RoomSettings } from '../types';
 
@@ -43,27 +49,32 @@ interface Props {
   identity: Identity;
   config: LlmConfig;
   onOpenApi: () => void;
+  blocked?: boolean;
 }
 
-export default function RoomView({ identity, config, onOpenApi }: Props) {
+export default function RoomView({ identity, config, onOpenApi, blocked = false }: Props) {
+  const [session] = useState(captureStorageSession);
   const [roomSettings, setRoomSettings] = useState<RoomSettings>(() => loadRoomSettings());
   const [archives, setArchives] = useState<Room[]>(() => loadArchives());
   const [room, setRoom] = useState<Room>(() => {
     const saved = loadRoom();
-    return saved ? ensureRoomTitle(saved, identity.name) : newRoom(pickCast(4), Date.now(), identity.name);
+    return saved ? ensureRoomTitle(saved, identity.name) : withRoomUsageFloor(newRoom(pickCast(4), Date.now(), identity.name));
   });
   const [panel, setPanel] = useState<Panel>('none');
   const [working, setWorking] = useState(false);
   const [toast, setToast] = useState('');
+  const [saveFailed, setSaveFailed] = useState(false);
   const [crisis, setCrisis] = useState('');
   const [now, setNow] = useState(() => Date.now());
 
   const ready = isReady(config);
   const busy = useRef(false);
+  const active = useRef(true);
+  const pendingOperation = useRef<AbortController | null>(null);
   const caughtUp = useRef(false);
   const roomRef = useRef(room);
-  const latest = useRef({ room, roomSettings, config });
-  latest.current = { room, roomSettings, config };
+  const latest = useRef({ room, roomSettings, config, blocked });
+  latest.current = { room, roomSettings, config, blocked };
   roomRef.current = room;
 
   /* ---- UI 时钟：只为了「正在输入」和用量数字 ---- */
@@ -74,69 +85,93 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
 
   /* ---- 落盘 ---- */
   useEffect(() => {
-    const id = window.setTimeout(() => saveRoom(room), 500);
+    const id = window.setTimeout(() => { if (!saveRoom(roomRef.current, session)) setSaveFailed(true); }, 500);
     return () => window.clearTimeout(id);
   }, [room]);
-  useEffect(() => saveArchives(archives), [archives]);
-  useEffect(() => saveRoomSettings(roomSettings), [roomSettings]);
-  useEffect(() => () => saveRoom(roomRef.current), []);
+  useEffect(() => { if (!saveArchives(archives, session)) setSaveFailed(true); }, [archives, session]);
+  useEffect(() => { if (!saveRoomSettings(roomSettings, session)) setSaveFailed(true); }, [roomSettings, session]);
+  useEffect(() => () => { saveRoom(roomRef.current, session); }, [session]);
 
-  /* ---- 一次 tick ---- */
-  const tick = async () => {
-    if (busy.current) return;
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; pendingOperation.current?.abort(); };
+  }, []);
+  useEffect(() => {
+    if (blocked || roomStorageBlocked(session)) pendingOperation.current?.abort();
+  }, [blocked, session, now]);
+
+  const runRoomOperation = async (mode: 'tick' | 'catch-up' | 'manual') => {
     const cur = latest.current;
-    if (!isReady(cur.config)) return;
-    if (usedToday(cur.room) >= cur.roomSettings.dailyMessages) return;
+    if (busy.current || !active.current || cur.blocked || roomStorageBlocked(session) || !isReady(cur.config)) return false;
+    const operationRoom = withRoomUsageFloor(cur.room);
+    if (roomStorageBlocked(session) || usedToday(operationRoom) >= cur.roomSettings.dailyMessages) {
+      if (mode === 'manual') setToast('今天的群聊额度已用尽');
+      return false;
+    }
+    const controller = new AbortController();
+    pendingOperation.current = controller;
     busy.current = true;
+    if (mode === 'manual') setWorking(true);
     try {
-      const out = await tickRoom({
-        room: cur.room,
-        settings: cur.roomSettings,
-        config: cur.config,
-      });
-      setRoom(out.room);
+      const args = { room: operationRoom, settings: cur.roomSettings, config: cur.config, signal: controller.signal,
+        reserveAttempt: () => {
+          const live = latest.current;
+          return active.current && !controller.signal.aborted && !live.blocked && live.room.id === cur.room.id &&
+            live.config === cur.config && reserveRoomRequest(live.room, live.roomSettings.dailyMessages, Date.now(), session);
+        },
+      };
+      const out = mode === 'manual' ? await askStep(operationRoom, args) :
+        mode === 'tick' ? await tickRoom(args) : await catchUpRoom(args);
+      if (!active.current || latest.current.blocked || roomStorageBlocked(session)) return false;
+      if (controller.signal.aborted || latest.current.config !== cur.config) {
+        // The independent ledger already reserved paid attempts. Never commit
+        // stale content; refresh usage on the still-live room only.
+        commitPlayerRoom(withRoomUsageFloor(latest.current.room));
+        if (mode === 'manual') setToast('群聊或模型设置已改变，本次结果未采用');
+        return false;
+      }
+      const settled = withRoomUsageFloor(out.room);
+      const live = latest.current.room;
+      const merged = commitRoomOperation(live, cur.room, settled);
+      if (!commitPlayerRoom(merged)) {
+        if (mode === 'manual') setToast('本次生成未能保存，未创建下一步');
+        return false;
+      }
+      if (mode === 'catch-up') caughtUp.current = true;
+      if (mode === 'manual') setToast(merged.steps.some(step => !live.steps.some(old => old.id === step.id))
+        ? '有人给了一个下一步' : out.logs[0] || '暂时没有生成下一步');
+      else if (out.logs.length) setToast(out.logs[0]);
+      return true;
+    } catch {
+      if (active.current && !controller.signal.aborted) setToast(mode === 'manual' ? '这次未能生成下一步' : '这次群聊生成未成功');
+      return false;
     } finally {
+      if (pendingOperation.current === controller) pendingOperation.current = null;
       busy.current = false;
+      if (active.current && mode === 'manual') setWorking(false);
     }
   };
 
+  /* ---- Catch up before the first tick. A busy/aborted attempt does not
+   * mark catch-up as complete; the next visible interval retries it. ---- */
+  const pump = () => runRoomOperation(caughtUp.current ? 'tick' : 'catch-up');
   useEffect(() => {
     if (!ready) return;
     const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void tick();
+      if (document.visibilityState === 'visible') void pump();
     }, TICK_MS);
-    void tick();
+    if (document.visibilityState === 'visible') void pump();
     return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
-
-  /* ---- 回来时补算 ---- */
-  const runCatchUp = async () => {
-    const cur = latest.current;
-    if (!isReady(cur.config)) return;
-    const out = await catchUpRoom({
-      room: cur.room,
-      settings: cur.roomSettings,
-      config: cur.config,
-    });
-    setRoom(out.room);
-  };
-
-  useEffect(() => {
-    if (!ready) return;
-    // StrictMode 会把 effect 跑两遍，这里只补一次
-    if (caughtUp.current) return;
-    caughtUp.current = true;
-    void runCatchUp();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
-        setRoom((prev) => ({ ...prev, lastSeenAt: Date.now() }));
+        if (!roomStorageBlocked(session)) commitPlayerRoom({ ...latest.current.room, lastSeenAt: Date.now() });
       } else if (isReady(latest.current.config)) {
-        void runCatchUp();
+        caughtUp.current = false;
+        void pump();
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -151,17 +186,33 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
   }, [toast]);
 
   /* ---- 玩家动作 ---- */
+  const roomWritable = (): boolean => {
+    if (!roomStorageBlocked(session)) return true;
+    setSaveFailed(true);
+    setToast('群聊存档已锁定，未保存本次修改。请备份并刷新。');
+    return false;
+  };
+  const commitPlayerRoom = (next: Room): boolean => {
+    if (!roomWritable()) return false;
+    next = withRoomUsageFloor(next);
+    if (!saveRoom(next, session)) { setSaveFailed(true); return false; }
+    roomRef.current = next;
+    latest.current = { ...latest.current, room: next };
+    setRoom(next);
+    return true;
+  };
   const send = (text: string, mentions: string[], replyTo?: string) => {
     if (findCrisis(text)) {
       setCrisis(text);
-      return;
+      return false;
     }
+    if (!roomWritable()) return false;
     const at = Date.now();
     // 演示模式的台词是模板，一条消息一个人接就够了，免得显得吵
     const cap = isMock(latest.current.config) ? 1 : undefined;
-    setRoom((prev) =>
+    return commitPlayerRoom(
       postPlayerMessage(
-        prev,
+        latest.current.room,
         text,
         identity,
         mentions,
@@ -180,52 +231,65 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
       onOpenApi();
       return;
     }
-    setWorking(true);
-    try {
-      const out = await askStep(latest.current.room, { config: latest.current.config });
-      setRoom(out.room);
-      setToast('有人给了一个下一步');
-    } finally {
-      setWorking(false);
-    }
+    if (busy.current) { setToast('群聊正在回应，稍后再试'); return; }
+    if (latest.current.blocked || roomStorageBlocked(session)) { setToast('群聊已暂停或存档需要恢复'); return; }
+    await runRoomOperation('manual');
   };
 
   const finish = (id: string) => {
-    setRoom((prev) => completeStep(prev, id, Date.now(), latest.current.roomSettings.liveliness));
-    setToast('做完了。群里会看到。');
+    if (!roomWritable()) return;
+    const current = latest.current.room;
+    const result = tryCompleteStep(current, id, Date.now(), latest.current.roomSettings.liveliness);
+    if (!result.ok) { setToast(result.reason); return; }
+    if (commitPlayerRoom(result.room)) setToast('做完了。群里会看到。');
+  };
+  const add = (text: string, group: string): boolean => {
+    if (!roomWritable()) return false;
+    const current = latest.current.room;
+    const result = tryAddStep(current, text, group, identity, Date.now());
+    if (!result.ok) { setToast(result.reason); return false; }
+    return commitPlayerRoom(result.room);
   };
 
-  const rename = (title: string) => setRoom((prev) => renameRoom(prev, title));
+  const rename = (title: string) => commitPlayerRoom(renameRoom(latest.current.room, title));
 
   const reroll = () => {
+    if (archiveStorageBlocked(session)) { setToast('旧群聊存档需要先备份并恢复，暂不能换群。'); return; }
     if (archives.length >= MAX_ARCHIVES) {
       setToast('旧群聊已经满了，先去「旧群聊」里舍弃一个再换人。');
       setPanel('archive');
       return;
     }
     if (!window.confirm('这 4 位会离开，聊天记录会收进「旧群聊」，之后还能放回当下。继续？')) return;
+    pendingOperation.current?.abort();
     const { room: next, archived } = rerollRoom(latest.current.room, identity.name, Date.now());
-    setRoom(next);
-    setArchives((prev) => [archived, ...prev].slice(0, MAX_ARCHIVES));
+    const nextArchives = [archived, ...archives].slice(0, MAX_ARCHIVES);
+    if (!saveArchives(nextArchives, session) || !commitPlayerRoom(next)) { setSaveFailed(true); return; }
+    setArchives(nextArchives);
     setPanel('none');
     setToast('换了一批群友');
   };
 
   const restore = (id: string) => {
+    if (archiveStorageBlocked(session)) { setToast('旧群聊存档需要先恢复'); return; }
     const out = restoreArchive(latest.current.room, archives, id, Date.now());
     if (!out) {
       setToast('这个群聊找不到了。');
       return;
     }
-    setRoom(out.room);
+    pendingOperation.current?.abort();
+    if (!saveArchives(out.archives, session) || !commitPlayerRoom(out.room)) { setSaveFailed(true); return; }
     setArchives(out.archives);
     setPanel('none');
     setToast('把这个群聊放回了当下');
   };
 
   const discard = (id: string) => {
+    if (archiveStorageBlocked(session)) { setToast('旧群聊存档需要先恢复'); return; }
     if (!window.confirm('舍弃之后就找不回来了，确定吗？')) return;
-    setArchives((prev) => discardArchive(prev, id));
+    const next = discardArchive(archives, id);
+    if (!saveArchives(next, session)) { setSaveFailed(true); return; }
+    setArchives(next);
     setToast('已经舍弃');
   };
 
@@ -243,6 +307,9 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
 
   return (
     <div className="room-view">
+      {saveFailed && <div className="banner" role="alert">群聊保存未成功，最近的修改可能尚未落盘。请先备份原始存档，再刷新恢复。</div>}
+      {roomStorageBlocked(session) && <div className="banner" role="alert">群聊存档不可安全读取或当前页面只读。已停止相关写入和模型调用；请先备份原始浏览器数据，再刷新。</div>}
+      {archiveStorageBlocked(session) && !roomStorageBlocked(session) && <div className="banner" role="alert">旧群聊存档已隔离；当前群聊仍可使用。请先备份和恢复旧群聊，再执行换群或恢复。</div>}
       {!ready && (
         <div className="banner">
           <p>还没接入模型。点「未接入 API」，选「演示模式」也能完整走一遍。</p>
@@ -288,12 +355,10 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
               busy={working}
               ready={ready}
               onClose={() => setPanel('none')}
-              onAdd={(text, group) =>
-                setRoom((prev) => addStep(prev, text, group, identity, Date.now()))
-              }
+              onAdd={add}
               onComplete={finish}
-              onDrop={(id) => setRoom((prev) => dropStep(prev, id))}
-              onShrink={(id) => setRoom((prev) => shrinkStep(prev, id))}
+              onDrop={(id) => { commitPlayerRoom(dropStep(latest.current.room, id)); }}
+              onShrink={(id) => { commitPlayerRoom(shrinkStep(latest.current.room, id)); }}
               onRequest={() => void requestOne()}
             />
           )}
@@ -301,7 +366,7 @@ export default function RoomView({ identity, config, onOpenApi }: Props) {
             <RoomPanel
               settings={roomSettings}
               used={used}
-              onChange={setRoomSettings}
+              onChange={(next) => { if (roomWritable() && saveRoomSettings(next, session)) setRoomSettings(next); else setSaveFailed(true); }}
               onReroll={reroll}
               onOpenApi={onOpenApi}
               onClose={() => setPanel('none')}

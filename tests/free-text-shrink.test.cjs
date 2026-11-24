@@ -118,7 +118,7 @@ test('UI 两个入口有显式确认、不自动调用 adopt，动作链继续�
  assert.match(detail,/用这条作为下一步/);
  assert.match(app,/proposeSmallerComment/);
  assert.match(app,/gate\.current\.start\('advice'\)/);
- const before={...adopted(),advice:{text:'先写三行',actionId:'book-3',fromPersonaId:'weini',accepted:false,at:now}};
+ const before={...adopted(),advice:{text:'先把书翻到要考的那一章，暂时不看别的。',actionId:'book-3',fromPersonaId:'weini',accepted:false,at:now}};
  assert.notEqual(shrinkAdvice(before),before,'actionId 分支应继续使用原动作库');
 });
 

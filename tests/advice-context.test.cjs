@@ -100,6 +100,7 @@ let lastActionContext = null;
 const defaultAction = {id:'lab-unit',label:'核对单位',line:'先核对一列单位',minutes:5};
 const fakeModules = {
   '../config/providers': {isMock:(config)=>config.providerId==='mock'},
+  './cardPolicy': {canUseNextStep:require('../src/lib/cardPolicy.ts').canUseNextStep},
   './safety': {findCrisis:()=>false,isHeavyShare:()=>false},
   './submissionGuard': {hasPlayerCrisis:()=>false},
   './support': {needsHelpSeeking:()=>false, HELP_SEEKING_ACTIONS:[]},
@@ -132,7 +133,8 @@ const fakeModules = {
   './llm': {
     LlmError:Error, describeError:(err)=>String(err),
     scopedOpenCodeSessionId:(key)=>key,
-    streamChat:async({messages,maxTokens,lowEffort,sessionId,onTelemetry})=>{
+    streamChat:async({messages,maxTokens,lowEffort,sessionId,onTelemetry,onRequestAttempt})=>{
+      onRequestAttempt?.();
       const response = await global.fetch('https://local.invalid/advice', {
         method:'POST',body:JSON.stringify({messages,max_tokens:maxTokens,reasoning_effort:lowEffort?'low':'medium',sessionId}),
       });
@@ -278,7 +280,13 @@ function makeAppHarness(options={}) {
   let resolveModel=null;
   const model=options.deferred ? (args)=>{requests.push(args);return new Promise(resolve=>{resolveModel=resolve;});} :
     async(args)=>{requests.push(args);return {cards:args.cards,personas:args.personas,calls:0,logs:[]};};
+  // The handler now requires a storage-session dependency; this AST harness
+  // models a healthy storage epoch, independently of the real store probes.
+  const epoch = { id: 1 };
   const deps={
+    resetBlocksGeneration:()=>false,
+    captureStorageSession:()=>epoch,
+    storageSessionCurrent:(session)=>session===epoch,
     latest,
     gate:{current:lock},
     guardSubmission:(...parts)=> { if(parts.some(part=>typeof part==='string'&&part.includes('危机'))) {

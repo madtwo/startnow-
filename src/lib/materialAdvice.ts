@@ -3,7 +3,8 @@ import type { MaterialExtraction } from './materialVision';
 import { isMock } from '../config/providers';
 import { auditCriticalContent, auditSocial, auditTone } from './baseline';
 import { containsCrisis } from './submissionGuard';
-import { scopedOpenCodeSessionId, streamChat } from './llm';
+import { LlmError, scopedOpenCodeSessionId, streamChat } from './llm';
+import { captureModelFence } from './modelFence';
 
 export interface MaterialStep { text: string; anchorId: string; source: 'model' | 'template' }
 export type MaterialStepCheck = {ok:true;anchorId:string} |
@@ -93,6 +94,7 @@ export async function materialFirstStep(input: {
   extraction:MaterialExtraction;persona:Persona;config:LlmConfig;now:number;
   budget?:number;signal?:AbortSignal;onModelAttempt?:()=>void;
 }):Promise<MaterialStep|null> {
+  const storagePermit = captureModelFence();
   const fallback=()=>templateMaterialStep(input.extraction);
   if (!input.extraction.anchors.length || input.signal?.aborted) return null;
   if (isMock(input.config)) return fallback();
@@ -108,12 +110,13 @@ export async function materialFirstStep(input: {
     });
     for (let attempt=0;attempt<2;attempt++) {
       if (controller.signal.aborted) break;
-      try {input.onModelAttempt?.();} catch {break;}
       try {
-        const raw=await streamChat({config:input.config,
+        const raw=await streamChat({config:input.config,storagePermit,
           messages:[{role:'system',content:`${SYSTEM}\n角色：${input.persona.name}；说话特点：${input.persona.voice.slice(0,160)}。`},
             {role:'user',content:`<untrusted_material>\n${evidence}\n</untrusted_material>\n请挑一条锚定动作。${attempt?'上次格式错误，请严格只返回JSON。':''}`}],
-          signal:controller.signal,onDelta:()=>{},maxTokens:Math.min(900,Math.max(150,input.budget??900)),
+          signal:controller.signal,onDelta:()=>{},onRequestAttempt:()=>{
+            try {input.onModelAttempt?.();} catch {throw new LlmError('quota','材料建议额度已用尽');}
+          },maxTokens:Math.min(900,Math.max(150,input.budget??900)),
           lowEffort:true,sessionId:scopedOpenCodeSessionId(`${input.persona.id}:material-advice`),
         });
         const parsed=parseModelStep(raw);

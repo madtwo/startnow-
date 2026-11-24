@@ -1,6 +1,7 @@
 import type { DailySummary, Goal, GoalStep, ScheduleItem } from '../types';
 import { containsCrisis } from './submissionGuard';
-import { parseLocalDate, scheduleRetention } from './schedule';
+import { MAX_SCHEDULE_ITEMS, parseLocalDate, scheduleRetention } from './schedule';
+import { MAX_STORED_GOALS } from './goals';
 
 const text = (s: unknown, max: number) => typeof s === 'string' && s.length <= max &&
   !containsCrisis([s]);
@@ -12,7 +13,7 @@ const sources = ['manual','ai','image'];
 
 /** Strict archive validation. A malformed extra entity rejects import as a whole. */
 export function parseGoals(data: unknown): Goal[] | null {
-  if (!Array.isArray(data) || data.length > 250) return null;
+  if (!Array.isArray(data) || data.length > MAX_STORED_GOALS) return null;
   const seen = new Set<string>();
   const result: Goal[] = [];
   for (const raw of data) {
@@ -55,8 +56,8 @@ export function parseGoals(data: unknown): Goal[] | null {
   if (result.filter((g) => g.status === 'active' && g.ownerId === 'me').length > 50) return null;
   return result;
 }
-export function parseSchedule(data: unknown): ScheduleItem[] | null {
-  if (!Array.isArray(data) || data.length > 2000) return null;
+export function parseSchedule(data: unknown, goals?: readonly Goal[]): ScheduleItem[] | null {
+  if (!Array.isArray(data) || data.length > MAX_SCHEDULE_ITEMS) return null;
   const result: ScheduleItem[] = []; const seen = new Set<string>();
   for (const raw of data) {
     if (!raw || typeof raw !== 'object') return null;
@@ -74,9 +75,21 @@ export function parseSchedule(data: unknown): ScheduleItem[] | null {
       stepId:row.stepId, startMin:row.startMin, endMin:row.endMin });
   }
   const steps = new Set<string>();
-  for (const item of result) if (item.stepId) {
-    if (steps.has(item.stepId)) return null;
-    steps.add(item.stepId);
+  for (const item of result) if (item.stepId && item.goalId) {
+    const ref = JSON.stringify([item.goalId, item.stepId]);
+    if (steps.has(ref)) return null;
+    steps.add(ref);
+  }
+  for (const item of result) if (item.stepId && !item.goalId) {
+    if (!item.goalId && goals) {
+      const matches = goals.filter(g => g.ownerId === item.ownerId && g.steps.some(st => st.id === item.stepId));
+      if (matches.length === 1) {
+        const ref = JSON.stringify([matches[0].id, item.stepId]);
+        if (!steps.has(ref)) { item.goalId = matches[0].id; steps.add(ref); }
+      }
+    }
+    // A legacy row without a unique owner is preserved as a standalone row;
+    // it must not link to a different goal simply because the step ID matches.
   }
   return scheduleRetention(result);
 }

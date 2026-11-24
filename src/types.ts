@@ -389,6 +389,8 @@ export interface Message {
   kind: MessageKind;
   /** 引用回复的是哪条消息的 id */
   replyTo?: string;
+  /** Generated step-related message; used to discard stale async results. */
+  stepId?: string;
   /** @ 到的人 */
   mentions?: string[];
   /** 这条负面情绪已经走过「安慰 + 建议」，不要重复触发 */
