@@ -397,7 +397,7 @@ function confirmedPersonaResult(raw: string): string | null {
   // affirmative verb. Work removed or discarded must stay pending.
   const discarded = /(?:删(?:了|掉|除)|清空|重写|重新写|全没了|白写|又全删|没保存|未保存|空白文档|开了?个?文档|写了?标题|起了?个头|半页|半张|一半|只.{0,8}(?:标题|开头|一句|一行|半))/u;
   // Natural completion verbs that do not use the generic 做完/写好 suffix.
-  const concrete = /(?:抄.{0,12}(?:到|在).{0,6}了?|抄.{0,8}(?:完|好)了?|写.{0,8}(?:出|完|好)了?|列.{0,8}(?:出|到|在|完|好)了?|投.{0,8}(?:出|完|好)了?|发.{0,8}(?:出|完|好)了?|背.{0,8}完了?)/u;
+  const concrete = /(?:抄(?:到|在|上).{0,6}了?|抄(?:完|好)了?|写(?:出|完|好).{0,4}了?|列(?:出|好|完|在|到).{0,4}了?|投(?:出|完|好).{0,4}了?|发(?:出|完|好).{0,4}了?|粘(?:完|好|上|到).{0,4}了?|背.{0,8}完了?)/u;
   return !negative.test(normalized) && !uncertain.test(normalized) && !discarded.test(normalized) &&
     (affirmative.test(normalized) || concrete.test(normalized)) ? result : null;
 }
