@@ -377,7 +377,10 @@ const roomAttempt = (ctx: Ctx) => {
   ctx.calls++;
 };
 const visibleRoomText = (line: string) => line.normalize('NFKC').replace(/[\s\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}·•・‧∙⋅]/gu, '');
-const safeRoomLine = (line: string) => !!visibleRoomText(line) && !unsafeForumRaw(line) && !auditTone(line);
+// "你可以试试" is ordinary peer phrasing, not a command. Keep the stricter
+// tone policy for other surfaces; only the room accepts this soft suggestion.
+const softPeerSuggestion = /(?:你可以试试|不如试试)/gu;
+const safeRoomLine = (line: string) => !!visibleRoomText(line) && !unsafeForumRaw(line) && !auditTone(line.replace(softPeerSuggestion, ''));
 const meaningfulResult = (line: string) => /[\p{L}\p{N}\p{Extended_Pictographic}]/u.test(visibleRoomText(line));
 const hasCrisisHistory = (messages: readonly Message[]) => messages.some(m => findCrisis(m.text));
 const recentCrisis = (room: Room) => hasCrisisHistory(room.messages.filter(m => m.kind === 'chat').slice(-8));

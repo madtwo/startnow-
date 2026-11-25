@@ -10,7 +10,7 @@
     "test:review": "node --test tests/review.test.cjs",
     "test:patch": "node --test tests/patch.test.cjs",
     "test:all": "npm run test:baseline && npm run test:v4 && npm run test:audit && npm run test:audit:v2 && npm run test:audit:v3 && npm run test:audit:v4 && npm run test:audit:v5 && npm run test:audit:completion && npm run test:r7",
-    "test:r7": "node --test tests/persona-action-context.test.cjs",
+    "test:r7": "node --test tests/persona-action-context.test.cjs tests/room-voice.test.cjs",
     "test:audit:completion": "node --test tests/persona-completion-contract.test.cjs tests/persona-completion-catalog.test.cjs tests/persona-completion-variants.test.cjs tests/persona-completion-semantic.test.cjs tests/persona-completion-scoped-evidence.test.cjs tests/persona-completion-followup.test.cjs tests/persona-completion-confirmed-semantics.test.cjs tests/persona-completion-self-review.test.cjs tests/persona-completion-v5-audit.test.cjs",
     "test:audit:v5": "node --test tests/independent-audit-v5.test.cjs",
     "test:audit:v4": "node --test tests/independent-audit-v4.test.cjs",
