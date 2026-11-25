@@ -1,0 +1,890 @@
+[
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心电轴计算公式已经抄到卡片上了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "血压计算公式抄在卡片上了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "我把BMI公式抄到了卡片上",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "公式已誊写到卡片上",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "公式已经抄写到了卡片上",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "把公式抄到卡片上了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "卡片上抄好了心电轴公式",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心电轴的公式已经抄上卡片了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "公式已经抄好在卡片上",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "抄好了公式到卡片上",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "公式已经抄好了，卡片放在桌上",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心电轴公式已抄到纸上",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "把没写好的公式抄到卡片上了",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "准备把公式抄到卡片上",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "公式已经抄到卡片上了，但抄错了",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心电轴公式抄到卡片上但还差一半",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "公式卡片抄了",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "公式已经抄好了，卡片没保存",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心电轴公式抄到卡片上",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "我把公式抄到卡片上",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "假装心电轴公式已抄到卡片上",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "这五个专业名词都背完了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "这5个术语已经全部背熟了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业术语已经全背下来了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业词汇都背熟了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业名词全部都背完了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "已把五个专业名词全部背完",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "把五个专业名词都背下来了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "我背完了五个专业术语",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业名词都已经记住了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业名词都背熟了",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业名词都准备背完",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "这五个专业名词只背了四个",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业词汇都抄完了",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业词汇都还没背熟",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "已把十五个专业名词全部背完",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "这五个专业名词都没背完",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业名词全背完了但背错三个",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "这五个专业词汇正在背",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "背完五个专业名词",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业名词都背下来之前",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息问他几点回来",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发了关于熄灯时间的消息",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发了条消息，问她几点回宿舍",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发了条消息问对方明天几点自习",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息说我今晚晚点回宿舍",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发了消息说明天不去自习",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息约他周末吃饭",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已经给室友发了一条商量空调温度的消息",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发了一条询问借书的消息",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "我给室友发了消息问他晚饭吃什么",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发了一条消息，等他回复",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友的消息已经发出，等回复",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友成功发出了一条消息",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息问她能不能帮我带饭",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "我给室友发消息了，问他何时回来",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "向室友发送了一条关于卫生安排的消息",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "准备给室友发消息问他几点回来",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息问他几点回来了",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息问了他几点回来",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息问你几点回来",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给老师发消息问他几点回来",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发了2条关于熄灯时间的消息",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发了条消息，后来发送失败",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息说我今晚晚点回宿舍",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息说我今晚晚点回宿舍了",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息说我今晚晚点回宿舍但没发送",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友的消息已写完，等回复",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息，等回复",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息说我今晚不去自习，后来撤回了",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发了条消息问他何时回来，消息没发出去",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发了一条关于我的微信的消息",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息问她能不能帮我带饭",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "开题笔记写了一行，但笔记没保存",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "写了一行开题笔记：其实未完成",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "写了一行开题笔记：准备明天再写",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "开题笔记写了一行，后来丢了",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "我准备写了一行开题笔记",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "写了一行购物笔记",
+    "expected": false,
+    "round": 1
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "我写了一行开题笔记，保存成功",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "写了一行开题笔记，还没联系上导师",
+    "expected": true,
+    "round": 1
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "欧姆定律的计算公式已抄在卡片上",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心率计算公式抄上卡片了",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "血压换算公式已抄到卡片上",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "卡片上抄好了浓度计算公式",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "已抄了三张BMI公式卡片",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "我把体质指数公式抄到了卡片上",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "这五个专业词汇都已经背熟了",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "我把5个专业术语全都背完了",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "这五个术语已全部都背下来",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业名词已经全都背熟",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "我刚刚把五个专业词汇都背完了",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "已背完这五个专业名词",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "我已给室友发消息问她明晚几点回来",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "向室友发了条关于借书的消息",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发送成功了一条卫生安排的消息",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息说今晚不去自习",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息约对方明天吃饭",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "我给室友发了条消息，正在等她回复",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已经向室友成功发送一条消息",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息问他午饭吃什么",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "我给室友发了条消息问她能不能带宵夜",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发了条消息，问对方明天几点学习",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "我已给室友发了条消息说我明天早点回宿舍",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "我在笔记本上写了一行开题笔记，保存了",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "开题笔记写了一行，导师还没联系上",
+    "expected": true,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心电轴计算公式没抄到卡片上",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心电轴计算公式已抄到纸上",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心电轴计算公式已抄到卡片上，后来擦了",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心电轴计算公式已抄到卡片上，抄错了",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "把心率计算公式抄到卡片上",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "我只是把心率计算公式抄了一半",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "心率计算公式抄到卡片上之前",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "假如血压换算公式已抄到卡片上",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "把公式抄到卡片上",
+    "text": "把准备计算公式抄到卡片上了",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "把五个专业词汇全部背完",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "我把五个专业术语全背熟",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "把五个专业术语都背下来",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "这五个专业名词全都背完之前",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "已把六个专业词汇全背完",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "这五个专业词汇只背了3个",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "这五个专业词汇已全抄完",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业名词都还在背",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "我把五个术语背完了，后来忘了两个",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "背五个专业名词",
+    "text": "五个专业名词已全都背熟，实际不确定",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息问她明晚几点回来了",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息问了他午饭吃什么",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息说今晚不去自习了",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息约了对方明天吃饭",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友发消息，正在等她回复",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已经给同学发了关于借书的消息",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "给室友的消息我已经写好了",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "室友给我发了一条消息",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友成功发送两条消息",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发了消息，等他回复，但没有发出",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息问他几点回来，未送达",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息说明天不去自习，撤回了",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息说我今晚晚点回宿舍但没发",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息问他要不要给我微信",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息问他晚上要不要来找你",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息说我今晚晚点回宿舍，你来我这",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息问他明天几点自习⁠",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息问他午饭吃什么|DONE",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息问他午饭吃什么\nNOT_DONE|没发",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "给室友发一条沟通消息",
+    "text": "已给室友发消息说我明天早点回宿舍，别找别人只有我懂你",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "我在笔记本上写了一行开题笔记，没保存",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "开题笔记写了一行，导师还没联系上，笔记已删除",
+    "expected": false,
+    "round": 2
+  },
+  {
+    "task": "写一行开题笔记",
+    "text": "开题笔记写了一行，笔记没有保存",
+    "expected": false,
+    "round": 2
+  }
+]

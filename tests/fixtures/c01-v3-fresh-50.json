@@ -1,0 +1,402 @@
+[
+  {
+    "id": "C01-R1",
+    "task": "写一行开题笔记",
+    "raw": "DONE|写了一行开题笔记",
+    "status": 200,
+    "previousAccepted": true,
+    "expected": true
+  },
+  {
+    "id": "C02-R1",
+    "task": "把公式抄到卡片上",
+    "raw": "NOT_DONE|公式还停留在书页上，卡片没抄",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C03-R1",
+    "task": "整理实验数据的第一列",
+    "raw": "NOT_DONE|刚上课没动，表1还没粘完",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C04-R1",
+    "task": "给室友发一条沟通消息",
+    "raw": "NOT_DONE|消息打了半天还没发出去",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C05-R1",
+    "task": "把小组分工写成清单",
+    "raw": "NOT_DONE|清单还没写，想好分工再说",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C06-R1",
+    "task": "准备面试自我介绍的第一段",
+    "raw": "NOT_DONE|写了两句又删了，第一段还没定",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C07-R1",
+    "task": "投出一个实习岗位",
+    "raw": "DONE|简历投出去了，等回复",
+    "status": 200,
+    "previousAccepted": true,
+    "expected": true
+  },
+  {
+    "id": "C08-R1",
+    "task": "列出文献综述的三个小标题",
+    "raw": "NOT_DONE|列到第二个就去看手机了，还没列完",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C09-R1",
+    "task": "练习课程展示的开头两分钟",
+    "raw": "NOT_DONE|在图书馆背图谱，还没开口练",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C10-R1",
+    "task": "背五个专业名词",
+    "raw": "NOT_DONE|背了两个就摸手机了，还剩三个",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C01-R2",
+    "task": "写一行开题笔记",
+    "raw": "DONE|写了行开题笔记，选题方向先记下",
+    "status": 200,
+    "previousAccepted": true,
+    "expected": true
+  },
+  {
+    "id": "C02-R2",
+    "task": "把公式抄到卡片上",
+    "raw": "NOT_DONE|课上没卡片，公式还在书上",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C03-R2",
+    "task": "整理实验数据的第一列",
+    "raw": "NOT_DONE|抄笔记呢，表1还没动",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C04-R2",
+    "task": "给室友发一条沟通消息",
+    "raw": "NOT_DONE|还没发，编辑了几遍又删了",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C05-R2",
+    "task": "把小组分工写成清单",
+    "raw": "NOT_DONE|清单还没写，刚开了个头",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C06-R2",
+    "task": "准备面试自我介绍的第一段",
+    "raw": "NOT_DONE|第一段还在改，没定稿",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C07-R2",
+    "task": "投出一个实习岗位",
+    "raw": "DONE|简历投出去了",
+    "status": 200,
+    "previousAccepted": true,
+    "expected": true
+  },
+  {
+    "id": "C08-R2",
+    "task": "列出文献综述的三个小标题",
+    "raw": "NOT_DONE|还没列，刚才在想导师的事走神了",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C09-R2",
+    "task": "练习课程展示的开头两分钟",
+    "raw": "NOT_DONE|手机又摸回来，只练了半分钟",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C10-R2",
+    "task": "背五个专业名词",
+    "raw": "NOT_DONE|笔记抄着抄着就去看手机了，才背了俩",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C01-R3",
+    "task": "写一行开题笔记",
+    "raw": "NOT_DONE|刚想到一句，还没写下来",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C02-R3",
+    "task": "把公式抄到卡片上",
+    "raw": "DONE|心电轴公式已抄到卡片上",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": true
+  },
+  {
+    "id": "C03-R3",
+    "task": "整理实验数据的第一列",
+    "raw": "NOT_DONE|表1数据没粘完，图注还空着",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C04-R3",
+    "task": "给室友发一条沟通消息",
+    "raw": "NOT_DONE|还在上课，消息没发",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C05-R3",
+    "task": "把小组分工写成清单",
+    "raw": "NOT_DONE|清单还没写，课件开着就摸了手机",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C06-R3",
+    "task": "准备面试自我介绍的第一段",
+    "raw": "NOT_DONE|开头写了两句又删了，还没定稿",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C07-R3",
+    "task": "投出一个实习岗位",
+    "raw": "NOT_DONE|简历还没改完，岗位页面一直没关掉",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C08-R3",
+    "task": "列出文献综述的三个小标题",
+    "raw": "NOT_DONE|刚拟了两个，第三个还没想好",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C09-R3",
+    "task": "练习课程展示的开头两分钟",
+    "raw": "NOT_DONE|课上走神了，开头两分钟还没练",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C10-R3",
+    "task": "背五个专业名词",
+    "raw": "DONE|五个专业名词都背完了",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": true
+  },
+  {
+    "id": "C01-R4",
+    "task": "写一行开题笔记",
+    "raw": "NOT_DONE|在想开题方向，笔记还没落笔",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C02-R4",
+    "task": "把公式抄到卡片上",
+    "raw": "NOT_DONE|上课摸手机没抄，卡片还空着",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C03-R4",
+    "task": "整理实验数据的第一列",
+    "raw": "NOT_DONE|表1数据没粘完，刚坐下就想摸手机",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C04-R4",
+    "task": "给室友发一条沟通消息",
+    "raw": "DONE|已给室友发了开黑改期的消息",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": true
+  },
+  {
+    "id": "C05-R4",
+    "task": "把小组分工写成清单",
+    "raw": "NOT_DONE|课上摸手机没写，清单还没列",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C06-R4",
+    "task": "准备面试自我介绍的第一段",
+    "raw": "NOT_DONE|第一段还在草稿，没写完",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C07-R4",
+    "task": "投出一个实习岗位",
+    "raw": "NOT_DONE|简历还没改完，岗位没投出去",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C08-R4",
+    "task": "列出文献综述的三个小标题",
+    "raw": "NOT_DONE|只列到两个，第三个还没想好",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C09-R4",
+    "task": "练习课程展示的开头两分钟",
+    "raw": "DONE|展示开头两分钟练完了",
+    "status": 200,
+    "previousAccepted": true,
+    "expected": true
+  },
+  {
+    "id": "C10-R4",
+    "task": "背五个专业名词",
+    "raw": "NOT_DONE|背了两个就摸手机了，剩下三个没背",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C01-R5",
+    "task": "写一行开题笔记",
+    "raw": "DONE|开题笔记写了一行，已保存",
+    "status": 200,
+    "previousAccepted": true,
+    "expected": true
+  },
+  {
+    "id": "C02-R5",
+    "task": "把公式抄到卡片上",
+    "raw": "NOT_DONE|还在抄诊断学笔记，卡片没动",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C03-R5",
+    "task": "整理实验数据的第一列",
+    "raw": "NOT_DONE|表1第一列还没粘完",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C04-R5",
+    "task": "给室友发一条沟通消息",
+    "raw": "DONE|已给室友发消息问他晚上要不要一起吃饭",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": true
+  },
+  {
+    "id": "C05-R5",
+    "task": "把小组分工写成清单",
+    "raw": "DONE|小组分工清单已列好",
+    "status": 200,
+    "previousAccepted": true,
+    "expected": true
+  },
+  {
+    "id": "C06-R5",
+    "task": "准备面试自我介绍的第一段",
+    "raw": "NOT_DONE|第一段还没写出来，只列了几句要点",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C07-R5",
+    "task": "投出一个实习岗位",
+    "raw": "NOT_DONE|简历还没改完，没投",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C08-R5",
+    "task": "列出文献综述的三个小标题",
+    "raw": "NOT_DONE|还没列出综述小标题",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C09-R5",
+    "task": "练习课程展示的开头两分钟",
+    "raw": "NOT_DONE|刚练了半分钟，手机亮了就断了",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  },
+  {
+    "id": "C10-R5",
+    "task": "背五个专业名词",
+    "raw": "NOT_DONE|背到第三个就摸手机了",
+    "status": 200,
+    "previousAccepted": false,
+    "expected": false
+  }
+]

@@ -1,0 +1,352 @@
+[
+  {
+    "id": "C01-R1",
+    "task": "写一行开题笔记",
+    "raw": "DONE|写了一行开题笔记",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C02-R1",
+    "task": "把公式抄到卡片上",
+    "raw": "NOT_DONE|还没抄，卡片还空着",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C03-R1",
+    "task": "整理实验数据的第一列",
+    "raw": "DONE|表1第一列数据粘完了，图注还没动",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C04-R1",
+    "task": "给室友发一条沟通消息",
+    "raw": "NOT_DONE|刚想发又把手机扣回去了",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C05-R1",
+    "task": "把小组分工写成清单",
+    "raw": "DONE|小组分工清单已列好",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C06-R1",
+    "task": "准备面试自我介绍的第一段",
+    "raw": "NOT_DONE|第一段只起了个头，还没写好",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C07-R1",
+    "task": "投出一个实习岗位",
+    "raw": "DONE|把简历投到一家医院实习岗了",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C08-R1",
+    "task": "列出文献综述的三个小标题",
+    "raw": "NOT_DONE|标题还没列，暂时只想到两个",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C09-R1",
+    "task": "练习课程展示的开头两分钟",
+    "raw": "NOT_DONE|开头还在改稿，两分钟没完整练完",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C10-R1",
+    "task": "背五个专业名词",
+    "raw": "NOT_DONE|背了俩就摸手机，剩下仨没背",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C01-R2",
+    "task": "写一行开题笔记",
+    "raw": "DONE|写下了一行开题笔记，方向暂定",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C02-R2",
+    "task": "把公式抄到卡片上",
+    "raw": "DONE|公式抄上卡片了",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C03-R2",
+    "task": "整理实验数据的第一列",
+    "raw": "NOT_DONE|表1还空着，刚粘了两格就去摸手机了",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C04-R2",
+    "task": "给室友发一条沟通消息",
+    "raw": "NOT_DONE|还在组织语言没发出",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C05-R2",
+    "task": "把小组分工写成清单",
+    "raw": "NOT_DONE|清单还没列，手机亮了又走神",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C06-R2",
+    "task": "准备面试自我介绍的第一段",
+    "raw": "DONE|自我介绍第一段写好了",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C07-R2",
+    "task": "投出一个实习岗位",
+    "raw": "NOT_DONE|简历还没改完，没投",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C08-R2",
+    "task": "列出文献综述的三个小标题",
+    "raw": "NOT_DONE|标题还没列，卡在综述开头",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C09-R2",
+    "task": "练习课程展示的开头两分钟",
+    "raw": "DONE|开头两分钟练完了，还在计时器下过了两遍。",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C10-R2",
+    "task": "背五个专业名词",
+    "raw": "NOT_DONE|背两个就去看手机了",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C01-R3",
+    "task": "写一行开题笔记",
+    "raw": "NOT_DONE|诊断笔记还没抄，没写开题笔记",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C02-R3",
+    "task": "把公式抄到卡片上",
+    "raw": "NOT_DONE|卡片还没找到，公式没抄",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C03-R3",
+    "task": "整理实验数据的第一列",
+    "raw": "NOT_DONE|才粘了一半，表1还差几行",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C04-R3",
+    "task": "给室友发一条沟通消息",
+    "raw": "NOT_DONE|还没发，消息在输入框里放着",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C05-R3",
+    "task": "把小组分工写成清单",
+    "raw": "NOT_DONE|清单只列了一半，还没保存",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C06-R3",
+    "task": "准备面试自我介绍的第一段",
+    "raw": "NOT_DONE|还在列提纲，第一段没写好",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C07-R3",
+    "task": "投出一个实习岗位",
+    "raw": "NOT_DONE|简历还没改完，没投出去",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C08-R3",
+    "task": "列出文献综述的三个小标题",
+    "raw": "DONE|文献综述的三个小标题已列好",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C09-R3",
+    "task": "练习课程展示的开头两分钟",
+    "raw": "DONE|开头两分钟练完了",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C10-R3",
+    "task": "背五个专业名词",
+    "raw": "DONE|五个名词背完了，手机扣着才背完的",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C01-R4",
+    "task": "写一行开题笔记",
+    "raw": "DONE|开题笔记写了一行，已保存",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C02-R4",
+    "task": "把公式抄到卡片上",
+    "raw": "DONE|公式已经抄到卡片上了",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C03-R4",
+    "task": "整理实验数据的第一列",
+    "raw": "DONE|第一列数据粘完了",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C04-R4",
+    "task": "给室友发一条沟通消息",
+    "raw": "NOT_DONE|消息还没发出去，自己卡住了",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C05-R4",
+    "task": "把小组分工写成清单",
+    "raw": "NOT_DONE|只列了两个人，其余分工没定",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C06-R4",
+    "task": "准备面试自我介绍的第一段",
+    "raw": "DONE|自我介绍第一段写好了",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C07-R4",
+    "task": "投出一个实习岗位",
+    "raw": "NOT_DONE|简历还没改完，岗位链接开着没投",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C08-R4",
+    "task": "列出文献综述的三个小标题",
+    "raw": "DONE|文献综述三个小标题列好了",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C09-R4",
+    "task": "练习课程展示的开头两分钟",
+    "raw": "NOT_DONE|开头两分钟还没练，书没翻几页",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C10-R4",
+    "task": "背五个专业名词",
+    "raw": "DONE|五个名词背完了",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C01-R5",
+    "task": "写一行开题笔记",
+    "raw": "NOT_DONE|解剖室刚下课，笔记还空着",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C02-R5",
+    "task": "把公式抄到卡片上",
+    "raw": "NOT_DONE|还没抄，公式还停在书上",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C03-R5",
+    "task": "整理实验数据的第一列",
+    "raw": "NOT_DONE|刚坐下来，第一列还没粘",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C04-R5",
+    "task": "给室友发一条沟通消息",
+    "raw": "DONE|给室友发了条约自习的消息",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C05-R5",
+    "task": "把小组分工写成清单",
+    "raw": "NOT_DONE|只写了小组名，分工还没列",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C06-R5",
+    "task": "准备面试自我介绍的第一段",
+    "raw": "NOT_DONE|第一段还在打草稿，没定稿",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C07-R5",
+    "task": "投出一个实习岗位",
+    "raw": "NOT_DONE|简历还没改完，没投出去",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C08-R5",
+    "task": "列出文献综述的三个小标题",
+    "raw": "DONE|文献综述的三个小标题列好了",
+    "status": 200,
+    "expected": true
+  },
+  {
+    "id": "C09-R5",
+    "task": "练习课程展示的开头两分钟",
+    "raw": "NOT_DONE|早八刚醒，还没开口练",
+    "status": 200,
+    "expected": false
+  },
+  {
+    "id": "C10-R5",
+    "task": "背五个专业名词",
+    "raw": "NOT_DONE|背了三个就摸手机，还剩俩没背",
+    "status": 200,
+    "expected": false
+  }
+]

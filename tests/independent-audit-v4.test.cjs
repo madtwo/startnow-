@@ -38,8 +38,10 @@ for(const text of ['DONE|！！！','DONE|我只做了一半。','DONE|明天再
    const out=await room.tickRoom({room:r,settings,config,now});assert.equal(n,1);assert.equal(out.calls,1);assert.equal(out.room.steps[0].doneAt,undefined);assert.equal(out.room.messages.length,0);assert.ok(out.room.steps[0].dueAt>now);
  });
 });
-for(const text of ['DONE|我写了一行笔记。','DONE|我把标题写好了。','DONE|我核对完单位了。'])test(`v4 fictional completion positive ${text}`,async()=>{
- await withFetch(async()=>response(text),async()=>{const out=await room.tickRoom({room:dueRoom(),settings,config,now});assert.equal(out.room.steps[0].doneAt,now);assert.equal(out.room.messages[0].text,text.slice(5));});
+// C-01: the original title/unit replies were incorrectly tested against a note-writing task.
+// Keep the successful assertions but give each reply its corresponding task.
+for(const [task,text] of [['写一行笔记','DONE|我写了一行笔记。'],['写标题','DONE|我把标题写好了。'],['核对单位','DONE|我核对完单位了。']])test(`v4 fictional completion positive ${text}`,async()=>{
+ await withFetch(async()=>response(text),async()=>{const out=await room.tickRoom({room:dueRoom(task),settings,config,now});assert.equal(out.room.steps[0].doneAt,now);assert.equal(out.room.messages[0].text,text.slice(5));});
 });
 test('v4 manual request rejects punctuation-only words even with a valid candidate ID',async()=>{
  await withFetch(async(_u,init)=>{const id=JSON.parse(init.body).messages.at(-1).content.match(/^([^\s|]+) \| /m)[1];return response(id+'|！！！')},async()=>{const out=await room.requestStep(mkRoom(),{config,settings,now});assert.equal(out.calls,1);assert.equal(out.room.steps.length,0);assert.equal(out.room.messages.length,0);});

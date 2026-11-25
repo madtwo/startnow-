@@ -13,6 +13,7 @@ import { isMock } from '../config/providers';
 import { captureModelFence } from './modelFence';
 import { auditTone, BASELINE } from './baseline';
 import { unsafeForumRaw } from './forumReplyPolicy';
+import { personaCompletionExample, validatePersonaCompletion } from './personaCompletion';
 import { findCrisis, isHeavyShare } from './safety';
 import { ensureMind, mindAfterPeer, mindAfterReply, mindAfterStep } from './mind';
 import { recordReplyMemory } from './memory';
@@ -381,26 +382,6 @@ const meaningfulResult = (line: string) => /[\p{L}\p{N}\p{Extended_Pictographic}
 const hasCrisisHistory = (messages: readonly Message[]) => messages.some(m => findCrisis(m.text));
 const recentCrisis = (room: Room) => hasCrisisHistory(room.messages.filter(m => m.kind === 'chat').slice(-8));
 
-// A DONE prefix alone is not sufficient: require a short affirmative result,
-// reject incomplete/future/uncertain wording and never truncate its meaning.
-// This is a conservative fictional-result protocol, not proof of real work.
-function confirmedPersonaResult(raw: string): string | null {
-  const match = /^DONE[ \t]*\|([^|\r\n\u2028\u2029]+)$/u.exec(raw.trim());
-  if (!match || /[\p{Cc}\u2028\u2029]/u.test(match[1].trim()) || unsafeForumRaw(raw)) return null;
-  const result = match[1].trim();
-  if ([...result].length > 40 || !safeRoomLine(result) || !meaningfulResult(result)) return null;
-  const normalized = visibleRoomText(result);
-  const negative = /(?:没(?:有)?(?:做|写|弄|完成|成功|试|开始|搞|检查|看|整理|核对|打开)|未(?:能|曾|完成|做|写|开始|结束)|尚未|还没|还差|还(?:要|需|得|剩|有.{0,4}没)|失败|不(?:能|算|敢|想|确定|知道)完成|做不完|做不到|没成功|没有完成|没完成|(?:没(?:有)?|并未|并非|并不|不会|不再|无法|不能|尚未).{0,8}(?:完成|做完|写完|做好|写好)|(?:做|写|完成|弄|整理|检查)了?(?:一半|半截|一部分)|只.{0,8}(?:一半|一部分|半截)|差一点|打算|准备(?:去|做|写|开始)|(?:明天|待会|等会|稍后|以后).{0,8}(?:做|写|完成|开始|检查)|(?:maybe|notdone|notfinished|unfinished|failed|incomplete|willdo))/iu;
-  const affirmative = /(?:完成了?|做完了?|写完了?|弄完了?|检查完了?|核对完了?|整理完了?|看完了?|试过了?|做好了?|写好了?|弄好了?|(?:写|做|看|查|检查|核对|整理|打开|读|记|试|改|收|找|列|放|拿|喝|走|发|确认|练|划|标|填|删|保存|处理)(?:了|好|完)|搞定了?|done|finished|completed)/iu;
-  const uncertain = /(?:可能|也许|或许|好像|似乎|大概|估计|不一定|说不准|差不多|基本上|大致|大体|一小部分|只.{0,8}(?:一点|部分)|(?:maybe|probably|perhaps|almost|partly))/iu;
-  // "写了两句又全删了" is not completion even though it contains an
-  // affirmative verb. Work removed or discarded must stay pending.
-  const discarded = /(?:删(?:了|掉|除)|清空|重写|重新写|全没了|白写|又全删|没保存|未保存|空白文档|开了?个?文档|写了?标题|起了?个头|半页|半张|一半|只.{0,8}(?:标题|开头|一句|一行|半))/u;
-  // Natural completion verbs that do not use the generic 做完/写好 suffix.
-  const concrete = /(?:抄(?:到|在|上).{0,6}了?|抄(?:完|好)了?|写(?:出|完|好).{0,4}了?|列(?:出|好|完|在|到).{0,4}了?|投(?:出|完|好).{0,4}了?|发(?:出|完|好).{0,4}了?|粘(?:完|好|上|到).{0,4}了?|背.{0,8}完了?)/u;
-  return !negative.test(normalized) && !uncertain.test(normalized) && !discarded.test(normalized) &&
-    (affirmative.test(normalized) || concrete.test(normalized)) ? result : null;
-}
 // Real calls count attempted POSTs (including failure, retry and fallback).
 // Demo mode retains its visible-message counter; no POST is made.
 const spendVisible = (room: Room, ctx: Ctx, now: number) => isMock(ctx.config) ? spend(room, now) : room;
@@ -907,32 +888,32 @@ const tickPersonaSteps = async (
       ctx.logs.push('历史步骤需要先处理危机支持');
       continue;
     }
-    // Only demo mode may synthesize a fictional completion locally. A real
-    // request must explicitly produce a safe completion before changing state.
+    // Only demo mode may synthesize a fictional completion locally. In real
+    // mode the original task, not the model, selects the evidence contract.
     let text: string | null = null;
+    let failure = '这次未能确认完成，稍后再试';
     if (isMock(ctx.config)) {
       text = mockLine(persona, 'step');
     } else {
-      try {
+      const evidence = personaCompletionExample(step);
+      if (!evidence) {
+        // Unknown legacy/imported tasks must not spend quota every tick on
+        // results that cannot be verified. Keep the step, not a fake success.
+        failure = '这件小事暂不支持自动完成校验，已保留待办';
+      } else try {
         const raw = await streamChat({
           config: ctx.config,
           storagePermit: ctx.storagePermit,
           messages: [
             { role: 'system', content: systemForRoom(persona, next.cast) },
-            { role: 'user', content: `这是一个只输出状态行的格式任务，不是聊天。请在心里模拟这件虚构小事：${step.text}
+            { role: 'user', content: `这是一个只输出状态行的格式任务，不是聊天。请先在心里模拟这件虚构小事：${step.text}
 
-只输出下面两种格式之一，并且只输出一行：
-DONE|一句结果
-NOT_DONE|一句原因
-
+只输出一行 DONE|一句结果 或 NOT_DONE|一句原因。
 必须遵守：
-1. 必须以 DONE| 或 NOT_DONE| 开头，后面只跟一句短句；
-2. 不要加名字、过程、解释、引号、代码块、第二行；
-3. 完成才用 DONE，未完成用 NOT_DONE；
-4. 结果或原因不超过20字，不要夸大效果。
-示例：
-DONE|笔记写了一行
-NOT_DONE|卡在格式上，没写完` },
+1. 只有任务要求的动作、对象、数量和范围全部达到，且结果仍然有效，才可以用 DONE。
+2. 这件任务的完成证据口径是「${evidence}」。这只是校验口径，不表示已经完成；不要为了套格式虚构成功。
+3. 未完成、不确定、只完成一部分、结果已撤销或未保存，一律用 NOT_DONE，并简短说明原因。允许模拟这次没有做成。
+4. 不要加名字、过程、解释、引号、代码块、第二行。结果或原因尽量不超过20字。不要夸大效果，不要换成别的任务。` },
           ],
           signal: roomSignal(ctx),
           onRequestAttempt: () => roomAttempt(ctx),
@@ -940,9 +921,13 @@ NOT_DONE|卡在格式上，没写完` },
           maxTokens: 90,
           lowEffort: true,
         });
-        text = confirmedPersonaResult(raw);
+        const checked = validatePersonaCompletion(step, raw);
+        if (checked.kind === 'done') text = checked.text;
+        else if (checked.kind === 'not_done') failure = '这次小事还没完成，稍后再试';
+        else failure = '小事结果未通过校验，已保留待办';
       } catch {
-        // Failed real generation never falls back to a success claim.
+        // Failed real generation never falls back to a success claim. Do not
+        // expose provider errors, raw model text or credentials in the toast.
       }
     }
     if (ctx.signal?.aborted) break;
@@ -950,7 +935,7 @@ NOT_DONE|卡在格式上，没写完` },
       // Keep the step pending and defer the next try, otherwise the 4s pump
       // could spend today's quota on the same failed persona step.
       next = { ...next, steps: next.steps.map(s => s.id === step.id ? { ...s, dueAt: now + 5 * MIN } : s) };
-      ctx.logs.push(`${persona.name} 的小事尚未确认完成`);
+      ctx.logs.push(`${persona.name}：${failure}`);
       continue;
     }
     next = {
@@ -1228,9 +1213,9 @@ export async function requestStep(
   const text = recent.filter((m) => m.authorKind === 'player').slice(-1)[0]?.text ?? recent.slice(-1)[0]?.text ?? '';
   if (findCrisis(text) || recentCrisis(room)) return { room, calls: 0, logs: ['当前内容需先处理危机支持'] };
   const trouble = inferTrouble(text, 'self');
-  const options = pickActions(new Date(now).getHours(), 3, trouble);
+  const options = pickActions(new Date(now).getHours(), 3, trouble, text);
   let action = options[0];
-  if (!action) return { room, calls: 0, logs: ['暂时没有贴合的动作'] };
+  if (!action) return { room, calls: 0, logs: ['其实我也不是很知道……要不换个说法，或者自己加一件小事？'] };
   const persona = pickSpeaker(room, text, now);
   if (!persona) return { room, calls: 0, logs: ['群里暂时没人'] };
 
