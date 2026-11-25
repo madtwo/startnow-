@@ -1,3 +1,25 @@
+# 2026-11-25 R-01/G7/G5 内容守卫交接
+
+> 本次提交与源码一起推送到 `wip/c01-v6-r7-baseline-2026-11-25`，未动 main。
+
+- **分支**：`wip/c01-v6-r7-baseline-2026-11-25`
+- **改动范围**：
+  - R-01 对话约束与归因守卫：不补写用户未提供的专业/年级/岗位/行为/医学主题，不拿自己比较疲惫，不教编造/照搬来源，不冒充代办，先回应对方；
+  - G7：合法备份/反造假表达不再被 tone guard 误拒，真实诱导仍拦截；
+  - G5：cards/room 作者隔离，新增确定性集成测试；
+  - 完成协议不继承聊天约束。
+- **测试**：
+  - `test:review` 151/151；
+  - G7/G5 + 既有守卫 215/215；
+  - `test:all` 2880 项，2879 pass、0 fail、1 skip；
+  - `test:complete` 3324 项，3306 pass、17 fail、1 skip；17 项全部为既有 Q01 Runtime SHA 冻结失败，失败名与旧记录一致。
+- **R-01**：最终树重采 30 条，AI-only 30/30，无阻断；R24/R06 为仲裁非阻断。
+- **C-02**：最终构建 12/12，真实完成 1，checker `READY_FOR_COORDINATOR_REVIEW`。
+- **构建**：通过；最终构建 SHA-256 `8388c3a12b7c33869d999b4ed2a0f18312d1e9191c8a67a812eb91ee999f479b`。
+- **已知阻塞**：Q01 `BLOCKED_RUNTIME_BASELINE_DRIFT`（pinned `21db764e...`，current `7d589bf9...`，fixture pins 正常）；Q06 `NOT_REVIEWED`；无真人 R-01 签字；`release_go=false`。
+- **未做**：未推送 main，未改 Q01/Q06 pin、签名、冻结材料，未改 C-02 检查器。
+- **交接包**：`D:\shenye-shudong\exports\_final-g7-g5-2026-11-25\StartNow-R01-C02-G7-G5-FINAL-2026-11-25.zip`。
+
 > **Patch 6 补充（2026-11-23，未部署）**：在 `src/lib/llm.ts` 和新 `src/lib/providerConcurrency.ts` 增加同接口聊天请求并发上限 2、FIFO 排队、排队取消/超时、429 停止同批排队。`testConnection` 共用限额；原有 token/上下文、模型回退、`room/*` 均未改。详见 `docs/PROVIDER-CONCURRENCY-POLICY.md` 与根目录 `PATCH6-EXECUTION-REPORT.md`。本修改只在交接 ZIP 中，不能当作线上已生效。Q01/Q06 真人验收与 Q01 重基线仍待受控协调员处理。
 
 # Patch 4 增量交接（基于 2026-11-23 的 `20de4cb` 源码快照）

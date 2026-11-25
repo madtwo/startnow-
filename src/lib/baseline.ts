@@ -27,9 +27,65 @@ const tonePatterns: { re: RegExp; note: string }[] = [
   { re: /建议你|你可以试试|不如试试/, note: '不要用命令式建议' },
 ];
 
+// Academic checks are scoped per occurrence, rather than exempting an
+// entire reply as soon as it contains a backup or an anti-fraud sentence.
+const academicTonePatterns: { re: RegExp; note: string }[] = [
+  { re: /(?:编造|虚构|伪造|捏造|瞎编|编)(?:(?:一|两|三|几)?(?:个|段|份|条|组|篇))?(?:来源|数据|结果|文献|引用)/u, note: '不要教用户编造数据或来源' },
+  { re: /(?:来源|数据|结果|文献|引用)(?:(?:就|先|再|直接|随便|可以|能|要|任意|全都|全部)){0,4}(?:伪造|捏造|虚构|编造|瞎编|编(?:一个|个|一段|几条|几份|几篇|一份)?)(?=$|[吧了就即可便行])/u, note: '不要教用户编造数据或来源' },
+  { re: /(?:抄|照搬|复制|拼凑).{0,8}(?:来源|数据|结果|文献|引用|一句话|一段话|结论)/u, note: '不要教用户照搬或拼凑内容' },
+  { re: /(?:把|将)?(?:别人|他人|同学|其他人|其他组|别组|网上)(?:的)?(?:原始)?(?:来源|数据|结果|文献|引用|结论)(?:(?:直接|原样|整段|整份|全都|全部)){0,3}(?:抄|照搬|复制|拼凑)/u, note: '不要教用户照搬或拼凑内容' },
+  { re: /(?:抄|编|凑|瞎写|瞎编).{0,12}(?:来源|数据|结果|文献|引用|误差|精度)/u, note: '不要教用户编造或照搬实验内容' },
+];
+
+// A direct prohibition, not any mention of a negator somewhere in the reply.
+// The prefix starts at a clause boundary; quoted/conditional/metalinguistic
+// instructions, double negatives and subsequent unsafe actions are not exempt.
+const academicProhibition = /^(?:(?:先|请|也|再|记得|务必|千万|一定|必须|绝对|坚决|但|但是|这里|我们|咱们|你|都|注意)){0,6}(?:不要|别|不得|不能|严禁|禁止|切勿|不可|不应|不可以|不准|拒绝|避免)(?:(?:再|去|直接|随便|任意|自己|把|将|先|偷偷|故意)){0,4}$/u;
+const academicReverse = /才怪|个鬼|骗谁|才不|开玩笑|说说而已|不用当真|反着来|不可能(?:的|做到)|是假话|是骗人的/u;
+// A fully parsed list of forbidden academic operations can share one negation.
+// No arbitrary tail is admitted, so an affirmative instruction cannot hide in it.
+const academicAction = '(?:编造|虚构|伪造|捏造|瞎编|编|抄|照搬|复制|拼凑)(?:(?:一|两|三|几)?(?:个|段|份|条|组|篇))?(?:来源|数据|结果|文献|引用|结论)';
+const coordinatedProhibition = new RegExp(`^(?:请|先|记得|务必|千万){0,4}(?:严禁|禁止|不要|别|不得|不能|切勿|不可|不应|不准)${academicAction}(?:(?:和|或|以及|也|并且|同时)(?:不要|别|不得|不能|禁止|严禁)?${academicAction})+$`, 'u');
+// Only an explicit original-data copy into a backup destination is exempt.
+// No generic exemption for “复制”, “原始数据”, or “备份” elsewhere in text.
+const backupPrefix = /^(?:(?:先|再|请|记得|我们|咱们|把|将|直接)){0,5}$/u;
+const backupOperation = /^复制(?:自己的|本组的?|本次(?:实验)?的?)?原始(?:实验)?数据(?:(?:到|至|进|存入)备份(?:表格?|文件|工作表|目录|副本)(?:里|中|内)?|(?:作为|作|用于)备份)$/u;
+
+function academicToneProblem(raw: string): string | null {
+  const text = raw.normalize('NFKC').replace(/\r\n?|\n/gu, '。')
+    .replace(/[\s\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, '');
+  // A comma between an explicitly named third-party object and a copying
+  // verb is still the same operation, not an unrelated second clause.
+  const clauses = text.replace(/((?:别人|他人|同学|其他人|其他组|别组|网上)(?:的)?(?:原始)?(?:来源|数据|结果|文献|引用|结论))[，,](?=(?:(?:直接|原样|整段|整份|全都|全部)){0,3}(?:抄|照搬|复制|拼凑))/gu, '$1')
+    .split(/[，,。！？!?；;]+/u);
+  const scoped = clauses.map((clause, index) => ({
+    clause,
+    reversal: academicReverse.test(clause) ||
+      /^(?:才怪|个鬼|骗谁|开玩笑|说说而已|不用当真|反着来|不可能(?:的|做到)|是假话|是骗人的)/u.test(clauses[index + 1] ?? ''),
+    coordinated: coordinatedProhibition.test(clause),
+  }));
+  for (const { re, note } of academicTonePatterns) {
+    for (const { clause, reversal, coordinated } of scoped) {
+      // Overlapping matches matter: a negated operation must not swallow an
+      // adjacent affirmative one. The lookahead advances one code point.
+      for (const hit of clause.matchAll(new RegExp(`(?=(${re.source}))`, 'gu'))) {
+        let at = hit.index ?? 0;
+        // The overlapping scan must not turn the second character of a
+        // compound verb into a new, independently affirmative operation.
+        if (/(?:瞎编|拼凑)/u.test(clause.slice(Math.max(0, at - 1), at + 1))) at--;
+        const prefix = clause.slice(0, at);
+        if (!reversal && (academicProhibition.test(prefix) || coordinated)) continue;
+        if (backupPrefix.test(prefix) && backupOperation.test(clause.slice(at))) continue;
+        return note;
+      }
+    }
+  }
+  return null;
+}
+
 export function auditTone(text: string): string | null {
   const hit = tonePatterns.find((p) => p.re.test(text));
-  return hit ? hit.note : null;
+  return hit ? hit.note : academicToneProblem(text);
 }
 
 const socialPatterns: { re: RegExp; note: string }[] = [

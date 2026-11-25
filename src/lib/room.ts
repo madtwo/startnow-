@@ -21,11 +21,13 @@ import { buildPersonaPrompt, pickCast } from './personas';
 import { refreshSituations } from './castGen';
 import { emotionalSignal, isGreeting, type Tone } from './tone';
 import { LlmError, streamChat } from './llm';
+import { replyAttributionProblem, replyContextForAuthor } from './replyAttribution';
 import { defaultRoomSettings } from './roomSettingsDefaults';
 import { actionLabel, actionMinutes, inferTrouble, pickActions, smallerAction } from './actions';
 import {
   cleanLine,
   PUBLIC_RULES,
+  REPLY_CONSTRAINTS,
   ROOM_RULES,
   ROOM_STYLE,
   roomPrompt,
@@ -441,10 +443,11 @@ const interestBlock = (persona: Persona): string => {
   return parts.join('\n');
 };
 
-export const systemForRoom = (persona: Persona, cast: Persona[]): string =>
+export const systemForRoom = (persona: Persona, cast: Persona[], conversational = true): string =>
   [
     BASELINE,
     PUBLIC_RULES,
+    conversational ? REPLY_CONSTRAINTS : '',
     ROOM_RULES,
     ROOM_STYLE,
     buildPersonaPrompt(persona),
@@ -533,45 +536,68 @@ const generateLine = async (
     return fallbackLine(persona, mode, extra);
   }
   if (ctx.signal?.aborted || ctx.calls >= ctx.maxAttempts) return null;
+  // An explicit reference that no longer resolves is not a room-wide reply.
+  // Do not silently borrow the latest speaker's facts for a dangling target.
+  if (replyTo !== undefined && (!replyMessage || replyMessage.kind !== 'chat')) {
+    ctx.logs.push(`${persona.name} 的回复目标已失效，未生成回复`);
+    return null;
+  }
   const replyName = replyMessage?.authorName;
   const topic = room.messages.filter((m) => m.kind === 'chat').slice(-1)[0]?.text;
+  const recentChat = room.messages.filter((m) => m.kind === 'chat').slice(-6);
+  const replyContext = replyContextForAuthor(replyMessage ?? recentChat[recentChat.length - 1], recentChat);
+  const requestLine = (retry: boolean) => streamChat({
+    config: ctx.config,
+    storagePermit: ctx.storagePermit,
+    messages: [
+      {
+        role: 'system',
+        content: systemForRoom(persona, room.cast) + (retry
+          ? '\n【本次追加校验】上一条未通过：只回应群里对方刚说的具体状态，不要出现「我」「我也」「我的」，不要讲自己的睡眠、手机、课表或经历；不得补写群里没出现过的用户专业、方向、岗位、做法或经历，不要用「建议你」「你应该」这类命令式口气。不知道就用中性问句。'
+          : ''),
+      },
+      {
+        role: 'user',
+        content: withUntrustedHistory(
+          roomPrompt(room.cast, recentLines(room), {
+            mode,
+            replyName,
+            topic,
+            // 玩家这条是在关心你时，先回应你自己，不要顺势给建议
+            selfName: persona.name,
+            replyText: replyMessage?.text,
+            replyIsPlayer: replyMessage?.authorKind === 'player',
+            advice:
+              mode === 'advise' && extra.adviceLabel
+                ? { label: extra.adviceLabel, minutes: extra.adviceMinutes ?? 5 }
+                : undefined,
+            alreadySaid: extra.alreadySaid,
+          }) + (retry ? '\n上一条没有通过：这次只回应对方刚说的状态，不要出现「我」「我也」「我的」，不要讲自己的睡眠、手机、课表或经历；不要补写用户未提供的专业、岗位或做法，不要比较谁更累，也不要用命令式建议。请重写一句。' : ''),
+          persona,
+          now,
+        ),
+      },
+    ],
+    signal: roomSignal(ctx),
+    onRequestAttempt: () => roomAttempt(ctx),
+    sessionId: `ses_r_${Math.random().toString(36).slice(2, 10)}`,
+    onDelta: () => {},
+    maxTokens: 110,
+    lowEffort: true,
+  });
   try {
-    const text = await streamChat({
-      config: ctx.config,
-      storagePermit: ctx.storagePermit,
-      messages: [
-        { role: 'system', content: systemForRoom(persona, room.cast) },
-        {
-          role: 'user',
-          content: withUntrustedHistory(
-            roomPrompt(room.cast, recentLines(room), {
-              mode,
-              replyName,
-              topic,
-              // 玩家这条是在关心你时，先回应你自己，不要顺势给建议
-              selfName: persona.name,
-              replyText: replyMessage?.text,
-              replyIsPlayer: replyMessage?.authorKind === 'player',
-              advice:
-                mode === 'advise' && extra.adviceLabel
-                  ? { label: extra.adviceLabel, minutes: extra.adviceMinutes ?? 5 }
-                  : undefined,
-              alreadySaid: extra.alreadySaid,
-            }),
-            persona,
-            now,
-          ),
-        },
-      ],
-      signal: roomSignal(ctx),
-      onRequestAttempt: () => roomAttempt(ctx),
-      sessionId: `ses_r_${Math.random().toString(36).slice(2, 10)}`,
-      onDelta: () => {},
-      maxTokens: 110,
-      lowEffort: true,
-    });
+    const text = await requestLine(false);
     const line = polishLine(cleanLine(text, 100));
-    if (!unsafeForumRaw(text) && safeRoomLine(line)) return line;
+    const unsafe = unsafeForumRaw(text);
+    const attribution = replyAttributionProblem(line, replyContext);
+    if (!unsafe && safeRoomLine(line) && !attribution) return line;
+    if (!unsafe && ctx.calls < ctx.maxAttempts) {
+      ctx.logs.push(`${persona.name} 那句未通过内容校验，重试一次`);
+      const retryText = await requestLine(true);
+      const retryLine = polishLine(cleanLine(retryText, 100));
+      if (!unsafeForumRaw(retryText) && safeRoomLine(retryLine) &&
+          !replyAttributionProblem(retryLine, replyContext)) return retryLine;
+    }
     ctx.logs.push(`${persona.name} 那句未通过安全或内容校验，未发布`);
   } catch {
     ctx.logs.push(`${persona.name} 这次没说出来`);
@@ -908,7 +934,7 @@ const tickPersonaSteps = async (
           config: ctx.config,
           storagePermit: ctx.storagePermit,
           messages: [
-            { role: 'system', content: systemForRoom(persona, next.cast) },
+            { role: 'system', content: systemForRoom(persona, next.cast, false) },
             { role: 'user', content: `这是一个只输出状态行的格式任务，不是聊天。请先在心里模拟这件虚构小事：${step.text}
 
 只输出一行 DONE|一句结果 或 NOT_DONE|一句原因。

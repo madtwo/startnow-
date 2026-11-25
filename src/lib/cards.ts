@@ -29,6 +29,7 @@ import type { ChatTelemetry } from './llm';
 import { SHORT_TASK_TOKEN_BUDGETS } from './shortTaskBudgets';
 import { adviceContextText } from './adviceContext';
 import { forumAcknowledgement, forumAdviceContext, forumDependencySignal, distinctForumFallback, distinctForumShortAck, forumReplyModeProblem, unsafeForumRaw } from './forumReplyPolicy';
+import { replyAttributionProblem, replyContextForAuthor } from './replyAttribution';
 import { completedActionAnchor, fallbackCompletionReaction, isGroundedCompletionReaction, unsafeCompletionReaction } from './completionReaction';
 import { diagnosticExcerpt } from './completionDiagnostics';
 import type { RejectedCompletionDiagnostic } from './completionDiagnostics';
@@ -1200,10 +1201,17 @@ async function generateComment(
         line = safe;
       }
     }
+    // Ground claims in the addressed author, not the card and all speakers mixed together.
+    const attributionTarget = incoming
+      ? [...card.comments].reverse().find((c) => c.authorKind === 'player' && c.text === incoming) ??
+        (card.authorKind === 'player' && card.text === incoming ? card : undefined)
+      : card;
+    const attributionProblem = replyAttributionProblem(line,
+      replyContextForAuthor(attributionTarget, [card, ...card.comments]));
     const modeProblem = forumReplyModeProblem(card, line, shortContact);
     const repeated = existingReplies.has(line.replace(/\s+/gu, ''));
-    if (modeProblem || repeated) {
-      ctx.logs.push(`forum_reply_fallback=${modeProblem ?? 'duplicate_text'} persona=${persona.id}`);
+    if (attributionProblem || modeProblem || repeated) {
+      ctx.logs.push(`forum_reply_fallback=${attributionProblem ?? modeProblem ?? 'duplicate_text'} persona=${persona.id}`);
       return {kind:'reply',text:forumAcknowledgement(incoming) ? distinctForumShortAck(existingReplies) : shortContact
         ? mockSocialReply(persona,inferSocialIntent(incoming)) ?? uniqueFallback(careFocus)
         : uniqueFallback(careFocus),origin:'curated'};
