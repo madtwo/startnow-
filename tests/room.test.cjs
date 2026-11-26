@@ -170,7 +170,7 @@ test('每个人有自己喜欢的事，刚认识时不吐苦水', () => {
   const system = room.systemForRoom(cast[0], cast);
   assert.ok(system.includes(cast[0].interests[0]), '系统提示要带上他的兴趣');
   assert.ok(system.includes('不会一上来就吐苦水'), '刚认识阶段要禁止吐苦水');
-  assert.ok(system.includes('喜欢什么'), '刚认识时可以用来找话题');
+  assert.ok(system.includes('可以先问一句大家都喜欢什么'), '话题开了以后才允许问喜好');
 });
 
 test('文风清洗：破折号、分号、AI 套话会被清掉', () => {
@@ -245,6 +245,92 @@ test('打招呼时要求先回招呼、报自己是谁', () => {
   assert.ok(reply.includes('先把他这句话接住'), '回复要先接住对方那句');
   const welcome = roomPrompt(cast, [], { mode: 'welcome' });
   assert.ok(welcome.includes('名字、专业、年级'), '开场要自报家门');
+});
+
+test('开场之外不再自报家门，除非有人问起你是谁', () => {
+  const cast = generateCast(2, NOW);
+  const spoken = roomPrompt(cast, [], { mode: 'room', alreadyIntroduced: true });
+  assert.ok(spoken.includes('不要再自我介绍'), '这个群说过话就不该再报名字专业');
+  const asked = roomPrompt(cast, [], {
+    mode: 'reply',
+    replyName: '我',
+    replyText: '对了你是谁啊，哪个专业的？',
+    alreadyIntroduced: true,
+  });
+  assert.ok(asked.includes('有人在问你是谁'), '被问到时要正常介绍自己');
+  assert.ok(!asked.includes('不要再自我介绍'), '被问到就不该被禁止介绍');
+  const firstTime = roomPrompt(cast, [], { mode: 'room' });
+  assert.ok(!firstTime.includes('不要再自我介绍'), '本群第一次开口不该被禁止报名字');
+});
+
+test('刚认识时语气腼腆含蓄，但不许冷到不回话', () => {
+  const cast = generateCast(4, NOW);
+  const system = room.systemForRoom(cast[0], cast);
+  assert.ok(system.includes('腼腆'), '初期要给腼腆的语气指引');
+  assert.ok(system.includes('不是冷淡'), '腼腆不等于冷漠');
+  assert.ok(system.includes('别人递过来的话要接一句'), '不许用沉默冒充不熟');
+  assert.ok(system.includes('别一直端着'), '熟起来之后要回到正常语气');
+});
+
+test('每个人在群里的第一句只报身份，不问人也不吐苦水', () => {
+  const cast = generateCast(4, NOW);
+  const first = roomPrompt(cast, [], { mode: 'room', firstLine: true });
+  assert.ok(first.includes('说清你是谁'), '第一句要报身份');
+  assert.ok(first.includes('不要问别人爱好和近况'), '第一句不许问别人');
+  assert.ok(first.includes('不要说自己卡住的事'), '第一句不许吐苦水');
+  const welcome = roomPrompt(cast, [], { mode: 'welcome' });
+  assert.ok(welcome.includes('一句说完就停'), '开场就是报完身份就停');
+  assert.ok(!welcome.includes('委婉问一句'), '开场不许再问大家喜欢什么');
+  const locked = roomPrompt(cast, [], { mode: 'ambient', topicsOpen: false });
+  assert.ok(locked.includes('这个话题还没开'), '话题没开时要显式挡住');
+});
+
+test('话题要有人先开：系统说明不算，玩家吐苦水或说到交友才算', () => {
+  const base = freshRoom();
+  assert.equal(room.roomTopicsOpen(base), false, '刚建好的群不该默认可以倾诉');
+  const seeded = { ...base, messages: room.newRoom(generateCast(4, NOW), NOW).messages };
+  assert.equal(room.roomTopicsOpen(seeded), false, '系统那句群说明不算有人开口');
+  const vent = {
+    ...base,
+    messages: [{ id: 'p1', kind: 'chat', authorKind: 'player', authorId: 'me', authorName: '我', at: NOW, text: '我这周好累，报告写不完' }],
+  };
+  assert.equal(room.roomTopicsOpen(vent), true, '玩家自己先说了难处，就算开了');
+  const frame = {
+    ...base,
+    messages: [{ id: 'p2', kind: 'chat', authorKind: 'persona', authorId: 'x', authorName: '甲', at: NOW, text: '这里是可以互相倾诉的地方吗' }],
+  };
+  assert.equal(room.roomTopicsOpen(frame), true, '有人说这里是干嘛的，也算开了');
+});
+
+test('话题没开时，系统提示不把难处摆在脸上，也不拿兴趣当话头', () => {
+  const cast = generateCast(4, NOW);
+  const locked = room.systemForRoom(cast[0], cast, true, false);
+  assert.ok(!locked.includes('最近卡在'), '没开话题就别把自己的难处摆进提示');
+  assert.ok(locked.includes('先收着'), '兴趣先收着，不当开场话头');
+  assert.ok(locked.includes('别问别人喜欢什么'), '锁定时不许拿爱好当话头');
+  const open = room.systemForRoom(cast[0], cast, true);
+  assert.ok(open.includes('最近卡在'), '开了话题就正常带着自己的处境');
+});
+
+test('演示模式：话题没开的头几轮，没有人提自己的难处', async () => {
+  let current = room.postPlayerMessage(freshRoom(), '大家好', ME, [], undefined, NOW, 0.9);
+  let cursor = NOW;
+  for (let i = 0; i < 10 && current.scheduled.length > 0; i++) {
+    cursor += 8_000;
+    current = (await room.tickRoom({ room: current, settings: SETTINGS, config: MOCK, now: cursor })).room;
+  }
+  const spoken = current.messages.filter((m) => m.authorKind === 'persona');
+  assert.ok(spoken.length >= 2, `该有人开口，实际 ${spoken.length} 条`);
+  for (const m of spoken) {
+    assert.ok(
+      !/(ddl|截止|写不完|背不完|没写完|挂科|焦虑|压力|没钱|吵架)/.test(m.text),
+      `${m.authorName} 上来就吐苦水：${m.text}`,
+    );
+    assert.ok(
+      !/(喜欢什么|爱好|平时玩|你最近|你在忙)/.test(m.text),
+      `${m.authorName} 上来就问别人：${m.text}`,
+    );
+  }
 });
 
 test('接完玩家的招呼之后，不再立刻冒出 AI 互聊', async () => {

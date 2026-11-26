@@ -32,6 +32,9 @@ const dayLabel = (ts: number) => {
   return same ? '' : `${d.getMonth() + 1}/${d.getDate()} `;
 };
 
+/** 离底部这么近就算「贴着最新一条」，避免最后一行高度差把跟随关掉。 */
+const FOLLOW_GAP = 48;
+
 interface Row {
   message: Message;
   first: boolean;
@@ -63,6 +66,8 @@ export default function ChatRoom({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const listRef = useRef<HTMLDivElement | null>(null);
+  const lastTopRef = useRef(0);
+  const [followBottom, setFollowBottom] = useState(true);
 
   const byId = useMemo(() => {
     const map = new Map<string, Message>();
@@ -98,11 +103,31 @@ export default function ChatRoom({
     });
   }, [room.messages]);
 
-  useEffect(() => {
+  const scrollToBottom = () => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  const handleScroll = () => {
     const el = listRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [room.messages.length, typingName]);
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // 只有用户自己往上翻才断开跟随；程序滚到底时也会派发 scroll 事件，
+    // 那一瞬间末尾内容还没撑开，不能据此判定成「用户在翻历史」。
+    const scrolledUp = el.scrollTop < lastTopRef.current - 2;
+    lastTopRef.current = el.scrollTop;
+    if (gap <= FOLLOW_GAP) setFollowBottom(true);
+    else if (scrolledUp) setFollowBottom(false);
+  };
+
+  const jumpToBottom = () => {
+    setFollowBottom(true);
+    scrollToBottom();
+  };
+
+  useEffect(() => {
+    if (followBottom) scrollToBottom();
+  }, [room.messages.length, typingName, followBottom]);
 
   const pending = byId.get(replyTo);
   const send = () => {
@@ -113,6 +138,8 @@ export default function ChatRoom({
     setReplyTo('');
     setMentions([]);
     setMentionOpen(false);
+    // 自己刚说的话一定要看得见，哪怕用户正在翻上面的历史
+    jumpToBottom();
   };
 
   const pickMention = (id: string) => {
@@ -181,7 +208,7 @@ export default function ChatRoom({
         </div>
       </header>
 
-      <div className="room-list" ref={listRef}>
+      <div className="room-list" ref={listRef} onScroll={handleScroll}>
         {rows.map(({ message, first, last, quoted }) => {
           if (message.kind === 'system') {
             return (
@@ -281,6 +308,15 @@ export default function ChatRoom({
       </div>
 
       <div className="room-compose">
+        {!followBottom && (
+          <button type="button" className="room-jump" onClick={jumpToBottom}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 4v15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              <path d="m5.5 13 6.5 6.5L18.5 13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            回到底部
+          </button>
+        )}
         {(pending || mentions.length > 0) && (
           <div className="compose-chips">
             {pending && (

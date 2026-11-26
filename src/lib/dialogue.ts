@@ -35,11 +35,24 @@ export function inferSocialIntent(text: string): SocialIntent {
   return 'normal';
 }
 
+const RELATIONSHIP_TIERS = [
+  { below: 22, label: 'stranger', phrase: '陌生网友' },
+  { below: 45, label: 'seen_before', phrase: '见过几次，还不熟' },
+  { below: 70, label: 'acquaintance', phrase: '熟人' },
+];
+const CLOSE_RELATIONSHIP = { label: 'close_friend', phrase: '关系不错' };
+
+const relationshipTier = (intimacy: number) =>
+  RELATIONSHIP_TIERS.find((tier) => intimacy < tier.below) ?? CLOSE_RELATIONSHIP;
+
 export function relationshipLabel(intimacy: number): string {
-  if (intimacy < 22) return 'stranger（陌生网友）';
-  if (intimacy < 45) return 'seen_before（见过几次，还不熟）';
-  if (intimacy < 70) return 'acquaintance（熟人）';
-  return 'close_friend（关系不错）';
+  const tier = relationshipTier(intimacy);
+  return `${tier.label}（${tier.phrase}）`;
+}
+
+/** 提示词要的是语气不是字段：数字和英文标签会被模型当数据读，带不出熟度的口吻。 */
+export function relationshipPhrase(intimacy: number): string {
+  return relationshipTier(intimacy).phrase;
 }
 
 const SOCIAL_REPLIES: Record<string, Partial<Record<SocialIntent, string[]>>> = {

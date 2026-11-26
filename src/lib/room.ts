@@ -293,7 +293,7 @@ export const newRoom = (cast: Persona[], now = Date.now(), playerName = '我'): 
     title: defaultRoomTitle(playerName, people),
     createdAt: now,
     messages: [
-      systemMessage('几个大学生凑的群。卡住了就说一句，不用讲清前因后果。', now),
+      systemMessage('几个大学生凑的群。先说说是谁，处熟了再讲卡住的事。', now),
       systemMessage('想要一个能现在动手的小步，去右下角「下一步」。', now + 1),
     ],
     scheduled: [],
@@ -354,8 +354,53 @@ const LINES: Record<
 
 type MockMode = 'reply' | 'peer' | 'ambient' | 'react' | 'step' | 'comfort';
 
-const mockLine = (persona: Persona, mode: MockMode): string =>
-  pick(LINES[persona.archetype ?? 'quiet'][mode]);
+/** 话题没开之前的本地台词：只应一声、只说眼前，不带自己的难处，也不问别人。 */
+const STRANGER_LINES: Record<Archetype, string[]> = {
+  quiet: [
+    '嗯，我在。',
+    '刚坐下。',
+    '这边挺安静的。',
+    '先冒个泡。',
+    '我在，刚看到。',
+    '今天人不少。',
+  ],
+  shy: [
+    '那个……我在。',
+    '嗯，看到消息了。',
+    '我刚进来，先看一会儿。',
+    '大家好。',
+    '嗯嗯，我在的。',
+    '先打个卡。',
+  ],
+  rational: [
+    '先眼熟一下。',
+    '我这会儿在自习。',
+    '嗯，收到。',
+    '刚进来看了眼。',
+    '我在，晚上有点事。',
+    '报到。',
+  ],
+  warm: [
+    '来了。',
+    '哈哈人还挺多。',
+    '我刚吃完饭回来。',
+    '你好呀。',
+    '这边挺热闹。',
+    '在的在的。',
+  ],
+};
+
+/** 同一句连着冒两次最像机器人，先把最近说过的排掉。 */
+const pickFresh = (pool: string[], avoid: string[]): string => {
+  const fresh = pool.filter((line) => !avoid.includes(line));
+  return pick(fresh.length ? fresh : pool);
+};
+
+const recentTexts = (room: Room, n = 6): string[] =>
+  room.messages.filter((m) => m.kind === 'chat').slice(-n).map((m) => m.text);
+
+const mockLine = (persona: Persona, mode: MockMode, avoid: string[] = []): string =>
+  pickFresh(LINES[persona.archetype ?? 'quiet'][mode], avoid);
 
 /* ------------------------------------------------------------------ *
  * 生成
@@ -399,41 +444,59 @@ const recentLines = (room: Room, n = 8): RoomLine[] =>
     .slice(-n)
     .map((m) => ({ name: m.authorName, text: m.text }));
 
+/** 谁先把这里说成「能交朋友、能讲烦心事」的地方，难处话题才算开。系统提示不算人说话。 */
+const TOPIC_FRAME =
+  /(交朋友|交个朋友|认识一下|认识认识|倾诉|聊聊|聊一下|聊聊天|互相|互助|这(个)?(网站|软件|群|里)|是干嘛|干什么用|能说说|说说自己|心事|烦心事|最近怎么样|你最近|有什么卡住|卡住的事)/;
+
+/** 玩家自己先吐了苦水，也算把这里当成可以说事的地方。 */
+const PLAYER_VENT =
+  /(好累|太累|烦死|压力|焦虑|难受|崩了|搞不定|写不完|背不完|来不及|睡不着|难过|撑不住|卡住|吵架|闹翻|委屈|孤单|没人理|被孤立|emo)/;
+
+export const roomTopicsOpen = (room: Room): boolean =>
+  room.messages.some(
+    (m) =>
+      m.kind === 'chat' &&
+      (TOPIC_FRAME.test(m.text) || (m.authorKind === 'player' && PLAYER_VENT.test(m.text))),
+  );
+
 /** 你自己此刻的生活。不主动全倒出来，但影响你怎么接话。 */
-const situationBlock = (persona: Persona): string => {
+const situationBlock = (persona: Persona, topicsOpen = true): string => {
   const s = persona.situation;
   if (!s) return '';
   return `【你此刻的处境】（这是你自己的生活，不主动全倒出来）
 ${persona.school}${persona.major}${persona.cohort}，${persona.age} 岁。
 现在：${s.agenda}
-最近卡在：${s.worry}
-你确实懂的：${s.knows.join('、')}（不懂的就说不懂，不要硬答）
+${topicsOpen ? `最近卡在：${s.worry}\n` : ''}你确实懂的：${s.knows.join('、')}（不懂的就说不懂，不要硬答）
 今天的节奏：${s.busyLabel}`;
 };
 
 /** 你和群里每个人的熟悉度。刚开始都是 0，别装熟。 */
-const relationBlock = (persona: Persona, cast: Persona[]): string => {
+const relationBlock = (persona: Persona, cast: Persona[], topicsOpen = true): string => {
   const rows = cast
     .filter((p) => p.id !== persona.id)
     .map((p) => `${p.name}：${relationLabel(relOf(persona, p.id))}`);
   const toPlayer = relOf(persona, 'me');
   const strangerNote =
     toPlayer < 10
-      ? '可以报名字、专业、年级；不要问隐私、不开玩笑式亲昵、不说「我懂你」「抱抱」「我也理解你」。刚认识的人不会一上来就吐苦水：可以先问一句大家都喜欢什么（比如你自己喜欢的运动或游戏），也可以说一句轻的自己的事（起晚了、食堂排队、天气），但先别碰压力、ddl、考试这种重话题。'
+      ? topicsOpen
+        ? '现在这个语气是腼腆、收着，但不是冷淡：句子短一点，没想好就说「我也说不好」「这个我没想过」，别硬表态。腼腆不等于不回——别人递过来的话要接一句，不要只丢一个字，也不要装作没看见。第一次开口可以报名字、专业、年级，说过就别再报；不要问隐私、不开玩笑式亲昵、不说「我懂你」「抱抱」「我也理解你」。刚认识的人不会一上来就吐苦水：可以先问一句大家都喜欢什么（比如你自己喜欢的运动或游戏），也可以说一句轻的自己的事（起晚了、食堂排队、天气），但先别碰压力、ddl、考试这种重话题。'
+        : '现在这个语气是腼腆、收着，但不是冷淡：句子短一点，没想好就说「我也说不好」「这个我没想过」，别硬表态。腼腆不等于不回——别人递过来的话要接一句，不要只丢一个字，也不要装作没看见。第一次开口只报名字、专业、年级，说过就别再报。真人刚认识不会一上来就问爱好、也不会一上来就吐苦水：在有人把这句话说出来之前，别问别人喜欢什么、别问近况，也别说自己卡住的事（作业、考试、钱、家里、感情都算），只应别人说过的话，或者说一句眼前最轻的小事。'
       : toPlayer < 25
         ? '可以说课程、宿舍、最近在忙什么，也可以讲讲自己的事和兴趣。'
         : '可以提起之前聊过的事，语气可以随意一点。想约着一起做点什么，也只能约线上能做的（一起看直播、开黑、云自习），不要约定线下见面。';
-  return `【你和这群人熟到什么程度】（数字小的时候别装熟：不叫昵称、不说「你上次」、不假装懂对方）
+  return `【你和这群人熟到什么程度】（数字小的时候别装熟：不叫昵称、不说「你上次」、不假装懂对方；熟起来之后语气自然就松了，别一直端着）
 群里那个新来的人：${relationLabel(toPlayer)}——${strangerNote}
 ${rows.join('\n')}`;
 };
 
-const interestBlock = (persona: Persona): string => {
+const interestBlock = (persona: Persona, topicsOpen = true): string => {
   const parts: string[] = [];
   const list = persona.interests ?? [];
   if (list.length) {
     parts.push(
-      `【你自己喜欢的事】${list.join('、')}（刚认识时用来找话题，别一上来就约；熟了才可能约着一起做，而且只能是线上能一起做的）`,
+      topicsOpen
+        ? `【你自己喜欢的事】${list.join('、')}（刚认识时用来找话题，别一上来就约；熟了才可能约着一起做，而且只能是线上能一起做的）`
+        : `【你自己喜欢的事】${list.join('、')}（先收着，别拿去开话题，也别拿去问别人；等有人说到这里是能交朋友、讲烦心事的地方再说）`,
     );
   }
   const habits = persona.speechHabit ?? [];
@@ -443,7 +506,7 @@ const interestBlock = (persona: Persona): string => {
   return parts.join('\n');
 };
 
-export const systemForRoom = (persona: Persona, cast: Persona[], conversational = true): string =>
+export const systemForRoom = (persona: Persona, cast: Persona[], conversational = true, topicsOpen = true): string =>
   [
     BASELINE,
     PUBLIC_RULES,
@@ -451,9 +514,9 @@ export const systemForRoom = (persona: Persona, cast: Persona[], conversational 
     ROOM_RULES,
     ROOM_STYLE,
     buildPersonaPrompt(persona),
-    situationBlock(persona),
-    interestBlock(persona),
-    relationBlock(persona, cast),
+    situationBlock(persona, topicsOpen),
+    interestBlock(persona, topicsOpen),
+    relationBlock(persona, cast, topicsOpen),
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -496,7 +559,7 @@ export const polishLine = (text: string): string =>
     .trim();
 
 /** 模型不可用时的兜底：建议一定要落在被分配的那个动作上。 */
-const fallbackLine = (persona: Persona, mode: Mode, extra: LineExtra): string => {
+const fallbackLine = (persona: Persona, mode: Mode, extra: LineExtra, avoid: string[] = []): string => {
   if (mode === 'advise') {
     const templates = extra.adviceLabel
       ? [
@@ -507,10 +570,10 @@ const fallbackLine = (persona: Persona, mode: Mode, extra: LineExtra): string =>
       : ['我卡住的时候会先做一件五分钟的小事，别的先不管。'];
     return templates[(extra.adviceVariant ?? 0) % templates.length];
   }
-  if (mode === 'comfort') return mockLine(persona, 'comfort');
+  if (mode === 'comfort') return mockLine(persona, 'comfort', avoid);
   if (mode === 'welcome') return `你好，我是${persona.name}，${persona.major}${persona.cohort}。`;
-  if (mode === 'room') return mockLine(persona, 'reply');
-  return mockLine(persona, mode);
+  if (mode === 'room') return mockLine(persona, 'reply', avoid);
+  return mockLine(persona, mode, avoid);
 };
 
 const generateLine = async (
@@ -525,15 +588,33 @@ const generateLine = async (
   const replyMessage = findMessage(room, replyTo);
   if (recentCrisis(room) || (replyMessage && findCrisis(replyMessage.text)) ||
       extra.alreadySaid?.some(findCrisis)) return null;
+  const introduced =
+    room.messages.some((m) => m.authorKind === 'persona' && m.authorId === persona.id);
+  const topicsOpen = roomTopicsOpen(room);
+  // 闲聊类的一句才管「第一句只报身份」；安慰、接话、给建议是在回应玩家，不该先自报家门
+  const chatty = mode === 'welcome' || mode === 'room' || mode === 'ambient' ||
+    mode === 'reply' || mode === 'peer';
+  const firstLine = chatty && mode !== 'welcome' && !introduced;
   if (isMock(ctx.config)) {
     // 演示模式也要能接住招呼，否则「大家好」会换来一句心事
-    if (mode === 'reply' && replyMessage && isGreeting(replyMessage.text)) {
-      return pick([
-        `你好，我是${persona.name}，${persona.major}${persona.cohort}。`,
-        `${persona.name}，${persona.major}${persona.cohort}。你好。`,
-      ]);
+    if (firstLine || mode === 'welcome') {
+      // 每个人第一句只有身份，别在同一句里塞问题或自己的事
+      const said = recentTexts(room);
+      return pickFresh(
+        [
+          `你好，我是${persona.name}，${persona.major}${persona.cohort}。`,
+          `${persona.name}，${persona.major}${persona.cohort}。你好。`,
+          `${persona.name}，${persona.major}${persona.cohort}，先打个照面。`,
+        ],
+        said,
+      );
     }
-    return fallbackLine(persona, mode, extra);
+    if (mode === 'reply' && replyMessage && isGreeting(replyMessage.text)) {
+      return mockLine(persona, 'reply');
+    }
+    // 话题没开之前，本地台词也不能自己把难处说出来
+    if (chatty && !topicsOpen) return pickFresh(STRANGER_LINES[persona.archetype ?? 'quiet'], recentTexts(room));
+    return fallbackLine(persona, mode, extra, recentTexts(room));
   }
   if (ctx.signal?.aborted || ctx.calls >= ctx.maxAttempts) return null;
   // An explicit reference that no longer resolves is not a room-wide reply.
@@ -552,7 +633,7 @@ const generateLine = async (
     messages: [
       {
         role: 'system',
-        content: systemForRoom(persona, room.cast) + (retry
+        content: systemForRoom(persona, room.cast, true, topicsOpen) + (retry
           ? '\n【本次追加校验】上一条未通过：只回应群里对方刚说的具体状态，不要出现「我」「我也」「我的」，不要讲自己的睡眠、手机、课表或经历；不得补写群里没出现过的用户专业、方向、岗位、做法或经历，不要用「建议你」「你应该」这类命令式口气。不知道就用中性问句。'
           : ''),
       },
@@ -572,6 +653,10 @@ const generateLine = async (
                 ? { label: extra.adviceLabel, minutes: extra.adviceMinutes ?? 5 }
                 : undefined,
             alreadySaid: extra.alreadySaid,
+            // 这个人在本群已经开过口，名字就不用再报一遍了
+            alreadyIntroduced: mode !== 'welcome' && introduced,
+            firstLine,
+            topicsOpen,
           }) + (retry ? '\n上一条没有通过：这次只回应对方刚说的状态，不要出现「我」「我也」「我的」，不要讲自己的睡眠、手机、课表或经历；不要补写用户未提供的专业、岗位或做法，不要比较谁更累，也不要用命令式建议。请重写一句。' : ''),
           persona,
           now,

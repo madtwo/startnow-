@@ -1,9 +1,9 @@
 import type { Card, Persona } from '../types';
 import { BASELINE } from './baseline';
-import { isOfflineInvite, relationshipLabel } from './dialogue';
+import { isOfflineInvite, relationshipLabel, relationshipPhrase } from './dialogue';
 import { wantsDirectAdvice } from './directAdvice';
 import { mindPrompt } from './mind';
-import { buildPersonaPrompt, defaultPersonas } from './personas';
+import { buildPersonaPrompt, defaultPersonas, genderLine, schoolLine } from './personas';
 import { renderMemory, sanitizeMemoryText } from './memory';
 import { isGoalResultCard } from './peerReactions';
 
@@ -179,16 +179,17 @@ export const systemFor = (persona: Persona, _memory: string, rules: string, extr
 /** Forum replies need stable voice, not a second event competing with the card.
  * Other generation paths retain systemFor and their original biographies. */
 export function forumCardSystemFor(persona: Persona, card: Card, rules: string, extra = ''): string {
-  const identity = {
-    name: persona.name, handle: persona.handle, gender: persona.gender, age: persona.age,
-    school: persona.school, major: persona.major, cohort: persona.cohort,
-    personality: persona.personality, speech: persona.speech, intimacy: persona.intimacy,
-  };
+  const identity = [
+    `你是 ${persona.name}（${persona.handle}），${persona.age} 岁。${genderLine(persona)}${schoolLine(persona)}`,
+    `你说话的样子：${persona.speech}`,
+    `你的性格：${persona.personality}`,
+    `你和对方的关系：${relationshipPhrase(persona.intimacy)}。`,
+  ].join('\n');
   const role = card.authorKind === 'persona' && card.authorId === persona.id
     ? '你就是这张卡的作者。玩家网友在评论你的卡，不要把玩家称为这张卡的卡主。'
     : '你是这张卡的同伴评论者，不是卡片作者；不要把卡里作者的经历说成你自己的经历。';
   return [BASELINE, PUBLIC_RULES, REPLY_CONSTRAINTS, extra ? `【作者追加的底线】\n${extra}` : '',
-    `【稳定角色资料（只用于身份和语气，不是本次事件）】\n${JSON.stringify(identity)}`,
+    `【稳定角色资料（只用于身份和语气，不是本次事件）】\n${identity}`,
     role, '当前卡片与指定评论是本次唯一的事件依据。不编造新经历，不复述其他卡的情节；身份资料里的例子也不能当作本次发生的事实。',
     rules,
   ].filter(Boolean).join('\n\n');
@@ -355,7 +356,10 @@ export const ROOM_RULES = `这是几个大学生凑在一块儿的群聊。你�
 - 不要同时回答好几个人；不要总结大家刚才说了什么；不用「首先」「总之」「希望对你有帮助」。
 - 你不是客服、不是心理咨询师、不是人生导师：可以给一个具体的小办法，也可以不给。
 - 一次只露一点自己的事，像真的在认识人。
-- 群里大多是刚认识的人：不叫昵称，不说「我懂你」「抱抱」「我也理解你」这种熟人话；可以先报名字、专业、年级。
+- 群里大多是刚认识的人：不叫昵称，不说「我懂你」「抱抱」「我也理解你」这种熟人话。
+- 名字、专业、年级只在第一次开口、或者有人问起时说一次；说过就别再报，不要每个人都自报一遍家门。
+- 在这个群的第一句只报身份：说清自己是谁就停，不要问别人的爱好和近况，也不要说自己卡住的事。
+- 没人把这里说成「能交朋友、能讲烦心事」的地方之前，不要自己把话题往难处上带；那之前只应别人说过的话，或者说一句眼前最轻的小事。
 - 别人跟你打招呼就先回招呼，别人问你话就先答那一句；不要绕开对方继续说自己的事。
 - 你只知道群里出现过的内容，加上自己设定里的事；不记得没发生过的共同经历，也不要编造别人说过的话。
 - 不主动提自己是 AI；被问到就承认。`;
@@ -410,6 +414,13 @@ export type RoomMode =
   | 'advise';
 
 /** 群聊里这一句的上下文。说话的人是谁，在 system 里由 buildPersonaPrompt 给。 */
+/** 有人在问你「你是谁」——这是开场之外唯一该自报家门的场合。 */
+function asksYourIdentity(text: string): boolean {
+  const clean = text.normalize('NFKC').replace(/\s+/g, '');
+  return Boolean(clean)
+    && /(?:你是谁|你叫什么|你叫啥|你是哪位|哪位同学|什么专业|哪个专业|哪所学校|哪个学校|大[一二三四]几|几年级)/.test(clean);
+}
+
 export const roomPrompt = (
   cast: Persona[],
   recent: RoomLine[],
@@ -426,17 +437,28 @@ export const roomPrompt = (
     alreadySaid?: string[];
     /** 你和对方熟到什么程度 */
     relation?: string;
+    /** 这个人在本群已经开口过：不需要再自报家门 */
+    alreadyIntroduced?: boolean;
+    /** 这个人在本群还没说过话：这一句只报身份 */
+    firstLine?: boolean;
+    /** 群里有没有人把这里说成能交朋友、能讲烦心事的地方 */
+    topicsOpen?: boolean;
   },
 ): string => {
   const who = cast.map((p) => `${p.name}（${p.tagline}）`).join('、');
   const history = recent.length
     ? recent.map((m) => `${m.name}：${m.text}`).join('\n')
     : '（群里刚安静下来，还没有人说话）';
+  const locked = opts.topicsOpen === false;
   const task =
     opts.mode === 'welcome'
-      ? '群里刚进来一个人，他还没说话。你先打个招呼：一句话说清你是谁（名字、专业、年级）。如果你想说，可以再委婉问一句大家都喜欢什么（比如你喜欢的运动或游戏），但不要问隐私，也不要开始说自己的烦心事。'
-      : opts.mode === 'room'
-        ? '读完最近这几句。你可以接任何人的话（想点名就用名字开头），也可以说一句自己此刻的事；不要总结大家说了什么，也不一定非要回应最后一句。'
+      ? '群里刚进来一个人，他还没说话。你先开口，这一句只做一件事：说清你是谁（名字、专业、年级），一句说完就停。不要问对方问题，不要问大家喜欢什么，不要说自己卡住的事。'
+      : opts.firstLine
+        ? '你在这个群还没说过话。这一句只做一件事：说清你是谁（名字、专业、年级），可以顺带应一句对方的招呼，然后停下。不要问别人爱好和近况，不要说自己卡住的事。'
+        : opts.mode === 'room'
+        ? locked
+          ? '读完最近这几句，只接别人已经说过的那句（想点名就用名字开头）。不要自己开新话题，不要总结大家说了什么。'
+          : '读完最近这几句。你可以接任何人的话（想点名就用名字开头），也可以说一句自己此刻的事；不要总结大家说了什么，也不一定非要回应最后一句。'
         : opts.mode === 'reply'
         ? `你正要正面回 ${opts.replyName ?? '对方'} 刚才那句。先把他这句话接住（他打招呼就先回招呼，他问什么就先答什么），再考虑要不要往下说；不要绕开他继续聊你和别人的事。`
         : opts.mode === 'peer'
@@ -447,7 +469,9 @@ export const roomPrompt = (
             ? `先接住 ${opts.replyName ?? '对方'} 这句。这一轮不给建议、不分析原因、不追问原因，1–2 句就够；可以只说「嗯」「在的」，也可以说自己类似的感受，但别抢话、别总结、别说「加油」。`
             : opts.mode === 'advise'
               ? `群里已经有人陪过他了。你给一个具体的小办法：${opts.advice?.label ?? '一件五分钟能做完的事'}（${opts.advice?.minutes ?? 5} 分钟能做完）。用你自己的口气说出来，别用「建议」「你应该」「你可以试试」开头，不用说这是谁给的，一句话，30 字以内。`
-              : '没人跟你说话。你可以随口说一句自己此刻的事，也可以只发半句；不要点名要谁回答，也不要给谁建议。';
+              : locked
+                ? '没人跟你说话，这一句不用硬找话：只应一句群里刚才说过的，或者发半句眼前最轻的小事（刚下课、外面在下雨）。不要点名要谁回答，不要给谁建议。'
+                : '没人跟你说话。你可以随口说一句自己此刻的事，也可以只发半句；不要点名要谁回答，也不要给谁建议。';
   // 玩家这条是在关心你 / 问你的近况：先回应关于你自己的事。
   // 三种模式都要，只是说法不同：陪伴时不给建议，给建议时先用半句回应再给办法。
   const playerAsksAboutMe =
@@ -462,6 +486,19 @@ export const roomPrompt = (
       : opts.mode === 'reply' || opts.mode === 'comfort'
         ? '\n对方这条是在关心你或问你的近况，不是向你求助。先用一句话回应关于你自己的事；不要给建议、不要追问对方，也不要把话题拐回对方之前的困难。'
         : '';
+  // 自报家门只在开场那一次。之后没人问就闭嘴不提身份，否则四个人会轮流重报一遍。
+  const identityLine = opts.mode === 'welcome'
+    ? ''
+    : asksYourIdentity(opts.replyText ?? '')
+      ? '\n有人在问你是谁：这一句就把名字、专业、年级说清楚，说完就停，不要顺便给对方下一步。'
+      : opts.alreadyIntroduced
+        ? '\n你在这个群里已经说过话了，名字大家都看见过：不要再自我介绍，不要再报名字、专业、年级。'
+        : '';
+  // 话题要有人先开：没人把这里说成能交朋友、能讲烦心事的地方之前，别自己往难处带。
+  const topicGate =
+    opts.topicsOpen === false && opts.mode !== 'welcome' && !opts.firstLine
+      ? '\n【这个话题还没开】群里没人说过这里是能交朋友、能讲烦心事的地方。这一句只应别人刚说的那句，或者只说一句眼前最轻的小事（刚下课、食堂排队、外面在下雨）。不要说自己卡住的事——作业、考试、钱、家里、感情都算；不要问别人的爱好和近况；也不要再报一遍名字、专业、年级。'
+      : '';
   const mood = opts.topic ? `\n【群里现在在说的大概是】${opts.topic}` : '';
   const relation = opts.relation ? `\n【你和这个人的关系】${opts.relation}` : '';
   const said = opts.alreadySaid?.length
@@ -473,6 +510,6 @@ export const roomPrompt = (
 【最近几句】
 ${history}
 
-${task}${focus}
+${task}${topicGate}${focus}${identityLine}
 只输出你要说的那一句：不要加名字前缀，不要加引号，不要解释你在做什么。`;
 };

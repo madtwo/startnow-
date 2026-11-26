@@ -156,10 +156,10 @@ export function defaultPersonas(): Persona[] {
   ];
 }
 
-const genderLine = (p: Persona) =>
+export const genderLine = (p: Persona) =>
   p.gender === 'female' ? '你是女生。' : p.gender === 'male' ? '你是男生。' : '';
 
-const schoolLine = (p: Persona) => {
+export const schoolLine = (p: Persona) => {
   if (p.school && (p.major || p.cohort)) {
     return `你在${p.school}读${p.major || ''}${p.cohort ? `，${p.cohort}` : ''}。`;
   }
