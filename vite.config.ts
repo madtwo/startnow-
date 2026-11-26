@@ -219,6 +219,10 @@ const soakSinkPlugin = (): Plugin => ({
 
 export default defineConfig({
   plugins: [react(), proxyPlugin(), soakSinkPlugin()],
+  // Opt-in local gateway; empty keeps every existing direct-provider path untouched.
+  define: {
+    __STARTNOW_GATEWAY_URL__: JSON.stringify(process.env.VITE_GATEWAY_URL ?? ''),
+  },
   build: {
     rollupOptions: {
       input: {

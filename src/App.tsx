@@ -31,7 +31,8 @@ import CrisisCard from './components/CrisisCard';
 import { defaultConfig, isMock, isReady } from './config/providers';
 import { HOTLINE, HOTLINE_SCOPE } from './lib/crisis';
 import { withBackgroundTickLock } from './lib/backgroundLock';
-import { LlmError, modelRateLimitRemainingMs, streamChat } from './lib/llm';
+import { LlmError, abortAllModelRequests, modelRateLimitRemainingMs, streamChat } from './lib/llm';
+import { resetGatewaySessions } from './lib/gatewayClient';
 import { auditCriticalContent, auditSocial, auditTone } from './lib/baseline';
 import { containsCrisis, hasCrisisInArchive } from './lib/submissionGuard';
 import { createOperationGate } from './lib/operationGate';
@@ -1660,6 +1661,8 @@ export default function App() {
     summaryGenerating.current = false;
     setSummaryBusy(false);
     // Clearing user data explicitly cancels any task tied to the old account.
+    abortAllModelRequests();
+    resetGatewaySessions();
     invalidateDecompose();
     lastCrisisAt.current=0;
     materialInFlight.current.forEach(controller=>controller.abort());
